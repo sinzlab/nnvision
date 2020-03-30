@@ -1,0 +1,2 @@
+from .monkey_loaders import monkey_static_loader
+from .mouse_loaders import mouse_static_loaders
