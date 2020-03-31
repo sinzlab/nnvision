@@ -132,7 +132,6 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
-                         image_file,
                          image_cache_path,
                          batch_size=64,
                          seed=None,
@@ -140,7 +139,8 @@ def monkey_static_loader(dataset,
                          subsample=1,
                          crop=96,
                          time_bins_sum=12,
-                         avg=False):
+                         avg=False,
+                         image_file=None):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -186,9 +186,15 @@ def monkey_static_loader(dataset,
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
 
-    if image_file:
+    if image_file is not None:
         with open(image_file, "rb") as pkl:
             images = pickle.load(pkl)
+    else:
+        image_paths = os.listdir(image_cache_path)
+        images = []
+        for image in image_paths:
+            images.append(np.load(os.path.join(image_cache_path, image)))
+        images = np.stack(images)
 
     images = images[:, :, :, None]
     _, h, w = images.shape[:3]
