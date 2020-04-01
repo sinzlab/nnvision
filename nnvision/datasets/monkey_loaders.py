@@ -40,6 +40,7 @@ class ImageCache:
         return key in self.cache
 
     def __getitem__(self, item):
+        item = item.tolist() if isinstance(item, Iterable) else item
         return [self[i] for i in item] if isinstance(item, Iterable) else self.update(item)
 
     def update(self, key):
@@ -123,12 +124,13 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
     image_ids = torch.tensor(image_ids.astype(np.int32))
     responses = torch.tensor(responses).to(torch.float)
     dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
-    sampler = RepeatsBatchSampler(torch.tensor(repeat_condition.astype(np.int32))) if repeat_condition is not None else None
+    sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
-    return utils.DataLoader(dataset,
-                            batch_size=batch_size,
-                            shuffle=shuffle,
-                            batch_sampler=sampler)
+    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
+                                                                                                            batch_size=batch_size,
+                                                                                                            shuffle=shuffle,
+                                                                                                            )
+    return dataloader
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
@@ -256,7 +258,7 @@ def monkey_static_loader(dataset,
 
         train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
         val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids, responses_test, batch_size=1, shuffle=False,
+        test_loader = get_cached_loader(testing_image_ids, responses_test, batch_size=None, shuffle=None,
                                                 image_cache=cache, repeat_condition=testing_image_ids)
 
         dataloaders["train"][data_key] = train_loader
