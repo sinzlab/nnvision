@@ -76,7 +76,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     model.train()
 
     criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
-    stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, avg=True, as_dict=False)
+    stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
 
@@ -90,8 +90,8 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     optim_step_count = len(dataloaders["train"].keys()) if loss_accum_batch_n is None else loss_accum_batch_n
 
     if track_training:
-        tracker_dict = dict(correlation=partial(get_correlations(), model, dataloaders["validation"], device=device, avg=True),
-                            poisson_loss=partial(get_poisson_loss(), model, dataloaders["validation"], device=device, avg=True))
+        tracker_dict = dict(correlation=partial(get_correlations(), model, dataloaders["validation"], device=device, per_neuron=False),
+                            poisson_loss=partial(get_poisson_loss(), model, dataloaders["validation"], device=device, per_neuron=False, avg=False))
         if hasattr(model, 'tracked_values'):
             tracker_dict.update(model.tracked_values)
         tracker = MultipleObjectiveTracker(**tracker_dict)
@@ -130,8 +130,8 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     tracker.finalize() if track_training else None
 
     # Compute avg validation and test correlation
-    validation_correlation = get_correlations(model, dataloaders["validation"], device=device, as_dict=False, avg=False)
-    test_correlation = get_correlations(model, dataloaders["test"], device=device, as_dict=False, avg=False)
+    validation_correlation = get_correlations(model, dataloaders["validation"], device=device, as_dict=False, per_neuron=False)
+    test_correlation = get_correlations(model, dataloaders["test"], device=device, as_dict=False, per_neuron=False)
 
     # return the whole tracker output as a dict
     output = {k: v for k, v in tracker.log.items()} if track_training else {}
