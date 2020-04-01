@@ -13,7 +13,7 @@ from mlutils.data.samplers import SubsetSequentialSampler
 from nnfabrik.utility.nn_helpers import set_random_seed
 
 
-def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
+def mouse_static_loader(path, batch_size, seed=None, areas=None, layers=None,
                         tier=None, neuron_ids=None, get_key=False, cuda=True, normalize=True, include_behavior=False,
                         exclude=None, select_input_channel=None, toy_data=False, file_tree=False, **kwargs):
     """
@@ -23,8 +23,8 @@ def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
         path (list): list of path(s) for the dataset(s)
         batch_size (int): batch size.
         seed (int, optional): random seed for images. Defaults to None.
-        area (str, optional): the visual area. Defaults to 'V1'.
-        layer (str, optional): the layer from visual area. Defaults to 'L2/3'.
+        areas (list, optional): the visual area.
+        layers (list, optional): the layer from visual area.
         tier (str, optional): tier is a placeholder to specify which set of images to pick for train, val, and test loader. Defaults to None.
         neuron_ids (list, optional): select neurons by their ids. neuron_ids and path should be of same length. Defaults to None.
         get_key (bool, optional): whether to retun the data key, along with the dataloaders. Defaults to False.
@@ -52,14 +52,18 @@ def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
     else:
         # specify condition(s) for sampling neurons. If you want to sample specific neurons define conditions that would effect idx
         neuron_ids = neuron_ids if neuron_ids else dat.neurons.unit_ids
-        conds = ((dat.neurons.area == area) &
-                 (dat.neurons.layer == layer) &
-                 (np.isin(dat.neurons.unit_ids, neuron_ids)))
+        conds = np.ones(len(dat.neurons.area), dtype=bool)
+        if areas is not None:
+            conds &= (np.isin(dat.neurons.area, areas))
+        if layers is not None:
+            conds &= (np.isin(dat.neurons.layer, layers))
+        if neuron_ids is not None:
+            conds &= (np.isin(dat.neurons.unit_ids, neuron_ids))
 
         idx = np.where(conds)[0]
         dat.transforms = [Subsample(idx), ToTensor(cuda)]
         if normalize:
-            dat.transforms.insert(1, NeuroNormalizer(dat, exclude=exclude))
+            dat.transforms.insert(0, NeuroNormalizer(dat, exclude=exclude))
 
         if include_behavior:
             dat.transforms.insert(0, AddBehaviorAsChannels())
@@ -87,7 +91,7 @@ def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
     return (data_key, dataloaders) if get_key else dataloaders
 
 
-def mouse_static_loaders(paths, batch_size, seed=None, area='V1', layer='L2/3', tier=None,
+def mouse_static_loaders(paths, batch_size, seed=None, areas=None, layers=None, tier=None,
                          neuron_ids=None, cuda=True, normalize=False, include_behavior=False,
                          exclude=None, select_input_channel=None, toy_data=False, file_tree=False, **kwargs):
     """
@@ -97,8 +101,8 @@ def mouse_static_loaders(paths, batch_size, seed=None, area='V1', layer='L2/3', 
         paths (list): list of path(s) for the dataset(s)
         batch_size (int): batch size.
         seed (int, optional): random seed for images. Defaults to None.
-        area (str, optional): the visual area. Defaults to 'V1'.
-        layer (str, optional): the layer from visual area. Defaults to 'L2/3'.
+        areas (str, optional): the visual area. Defaults to 'V1'.
+        layers (str, optional): the layer from visual area. Defaults to 'L2/3'.
         tier (str, optional): tier is a placeholder to specify which set of images to pick for train, val, and test loader. Defaults to None.
         neuron_ids ([type], optional): select neurons by their ids. Defaults to None.
         cuda (bool, optional): whether to place the data on gpu or not. Defaults to True.
@@ -108,7 +112,8 @@ def mouse_static_loaders(paths, batch_size, seed=None, area='V1', layer='L2/3', 
     """
 
     neuron_ids = neuron_ids if neuron_ids is not None else []
-
+    layers = layers if layers is not None else ('L2/3',)
+    areas = areas if areas is not None else ('V1',)
     dls = OrderedDict({})
     keys = [tier] if tier else ['train', 'validation', 'test']
     for key in keys:
@@ -116,7 +121,7 @@ def mouse_static_loaders(paths, batch_size, seed=None, area='V1', layer='L2/3', 
 
     for path, neuron_id in zip_longest(paths, neuron_ids, fillvalue=None):
         data_key, loaders = mouse_static_loader(path, batch_size, seed=seed,
-                                                area=area, layer=layer, cuda=cuda,
+                                                areas=areas, layers=layers, cuda=cuda,
                                                 tier=tier, get_key=True, neuron_ids=neuron_id,
                                                 normalize=normalize, include_behavior=include_behavior,
                                                 exclude=exclude, select_input_channel=select_input_channel,
