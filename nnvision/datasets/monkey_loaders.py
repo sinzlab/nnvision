@@ -128,7 +128,7 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
     return utils.DataLoader(dataset,
                             batch_size=batch_size,
                             shuffle=shuffle,
-                            sampler=sampler)
+                            batch_sampler=sampler)
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
