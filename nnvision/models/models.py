@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.readouts import PointPooled2d, Gaussian2d, Cortex2Gaussian2d, NonIsotropicGaussian2d
+from mlutils.layers.readouts import PointPooled2d, Gaussian2d, CortexNonIsotropicGaussian2d, NonIsotropicGaussian2d
 from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
@@ -60,6 +60,7 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
 
+
 class MultipleNonIsotropicGaussian2d(torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout):
         # super init to get the _module attribute
@@ -85,22 +86,26 @@ class MultipleNonIsotropicGaussian2d(torch.nn.ModuleDict):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
 
 
-
-class MultipleCortex2Gaussian2d(torch.nn.ModuleDict):
+class MultipleCortexNonIsotropicGaussian2d(torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict,
-                 init_mu_range, init_sigma_range, bias, gamma_readout):
+                 init_mu_range, init_sigma_range, bias, gamma_readout,
+                 final_tanh, hidden_layers, hidden_features):
         # super init to get the _module attribute
         super().__init__()
         for k in n_neurons_dict:
             in_shape = get_module_output(core, in_shape_dict[k])[1:]
             n_neurons = n_neurons_dict[k]
-            self.add_module(k, Cortex2Gaussian2d(
+            self.add_module(k, CortexNonIsotropicGaussian2d(
                 in_shape=in_shape,
                 outdims=n_neurons,
                 cortex_coordinates=coordinates_dict[k],
                 init_mu_range=init_mu_range,
                 init_sigma_range=init_sigma_range,
-                bias=bias)
+                bias=bias,
+                final_tanh=final_tanh,
+                hidden_layers=hidden_layers,
+                hidden_features=hidden_features
+            )
                             )
         self.gamma_readout = gamma_readout
 
@@ -191,11 +196,11 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                     linear=linear)
     readout_class = MultipleNonIsotropicGaussian2d if nonisotropic else MultipleGaussian2d
     readout = readout_class(core, in_shape_dict=in_shapes_dict,
-                                 n_neurons_dict=n_neurons_dict,
-                                 init_mu_range=init_mu_range,
-                                 bias=readout_bias,
-                                 init_sigma_range=init_sigma_range,
-                                 gamma_readout=gamma_readout)
+                            n_neurons_dict=n_neurons_dict,
+                            init_mu_range=init_mu_range,
+                            bias=readout_bias,
+                            init_sigma_range=init_sigma_range,
+                            gamma_readout=gamma_readout)
 
     # initializing readout bias to mean response
     if readout_bias:
@@ -209,14 +214,15 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
 
 def se_core_cortex2gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
-                          hidden_kern=3, layers=3, gamma_input=15.5,
-                          skip=0, final_nonlinearity=True, momentum=0.9,
-                          pad_input=False, batch_norm=True, hidden_dilation=1,
-                          laplace_padding=None, input_regularizer='LaplaceL2norm',
-                          init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
-                          gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False, cortex_coordinate_dimensions=2
-                          ):
+                                 hidden_kern=3, layers=3, gamma_input=15.5,
+                                 skip=0, final_nonlinearity=True, momentum=0.9,
+                                 pad_input=False, batch_norm=True, hidden_dilation=1,
+                                 laplace_padding=None, input_regularizer='LaplaceL2norm',
+                                 init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
+                                 gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
+                                 depth_separable=False, linear=False, cortex_coordinate_dimensions=2,
+                                 final_tanh=False, hidden_layers=0, hidden_features=20
+                                 ):
     """
     Model class of a stacked2dCore (from mlutils) and a Gaussian readout with cortical to monitor transformation
 
@@ -241,7 +247,8 @@ def se_core_cortex2gauss_readout(dataloaders, seed, hidden_channels=32, input_ke
 
     session_shape_dict = get_dims_for_loader_dict(dataloaders)
     n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    coordinates_dict = {k: v.dataset.neurons.cell_motor_coordinates[:, :cortex_coordinate_dimensions] for k, v in dataloaders.items()}
+    coordinates_dict = {k: v.dataset.neurons.cell_motor_coordinates[:, :cortex_coordinate_dimensions] for k, v in
+                        dataloaders.items()}
     in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
     input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
@@ -287,13 +294,16 @@ def se_core_cortex2gauss_readout(dataloaders, seed, hidden_channels=32, input_ke
                     depth_separable=depth_separable,
                     linear=linear)
 
-    readout = MultipleCortex2Gaussian2d(core, in_shape_dict=in_shapes_dict,
-                                        n_neurons_dict=n_neurons_dict,
-                                        coordinates_dict=coordinates_dict,
-                                        init_mu_range=init_mu_range,
-                                        bias=readout_bias,
-                                        init_sigma_range=init_sigma_range,
-                                        gamma_readout=gamma_readout)
+    readout = MultipleCortexNonIsotropicGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                                   n_neurons_dict=n_neurons_dict,
+                                                   coordinates_dict=coordinates_dict,
+                                                   init_mu_range=init_mu_range,
+                                                   bias=readout_bias,
+                                                   init_sigma_range=init_sigma_range,
+                                                   gamma_readout=gamma_readout,
+                                                   final_tanh=final_tanh,
+                                                   hidden_layers=hidden_layers,
+                                                   hidden_features=hidden_features)
 
     # initializing readout bias to mean response
     if readout_bias:
