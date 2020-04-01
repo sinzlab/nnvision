@@ -13,9 +13,22 @@ from mlutils.data.samplers import SubsetSequentialSampler
 from nnfabrik.utility.nn_helpers import set_random_seed
 
 
-def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
-                        tier=None, neuron_ids=None, get_key=False, cuda=True, normalize=True, include_behavior=False,
-                        exclude=None, select_input_channel=None, toy_data=False, file_tree=False, **kwargs):
+def mouse_static_loader(path,
+                        batch_size,
+                        seed=None,
+                        area='V1',
+                        layer='L2/3',
+                        tier=None,
+                        neuron_ids=None,
+                        get_key=False,
+                        cuda=True,
+                        normalize=True,
+                        include_behavior=False,
+                        exclude=None,
+                        select_input_channel=None,
+                        toy_data=False,
+                        file_tree=False,
+                        **kwargs):
     """
     returns a single data
 
@@ -79,7 +92,6 @@ def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
         # sample images
         subset_idx = np.where(dat.trial_info.tiers == tier)[0] if file_tree else np.where(dat.tiers == tier)[0]
         sampler = SubsetRandomSampler(subset_idx) if tier == 'train' else SubsetSequentialSampler(subset_idx)
-
         dataloaders[tier] = DataLoader(dat, sampler=sampler, batch_size=batch_size)
 
     # create the data_key for a specific data path
@@ -87,9 +99,21 @@ def mouse_static_loader(path, batch_size, seed=None, area='V1', layer='L2/3',
     return (data_key, dataloaders) if get_key else dataloaders
 
 
-def mouse_static_loaders(paths, batch_size, seed=None, area='V1', layer='L2/3', tier=None,
-                         neuron_ids=None, cuda=True, normalize=False, include_behavior=False,
-                         exclude=None, select_input_channel=None, toy_data=False, file_tree=False, **kwargs):
+def mouse_static_loaders(paths,
+                         batch_size,
+                         seed=None,
+                         area='V1',
+                         layer='L2/3',
+                         tier=None,
+                         neuron_ids=None,
+                         cuda=True,
+                         normalize=False,
+                         include_behavior=False,
+                         exclude=None,
+                         select_input_channel=None,
+                         toy_data=False,
+                         file_tree=False,
+                         **kwargs):
     """
     Returns a dictionary of dataloaders (i.e., trainloaders, valloaders, and testloaders) for >= 1 dataset(s).
 

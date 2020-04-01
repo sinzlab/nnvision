@@ -48,5 +48,5 @@ def get_oracle_dataloader(paths=None, seed=None, area='V1', layer='L2/3',
 
     if toy_data:
         condition_hashes = dat.info.condition_hash
-    dataloader = DataLoader(dat, sampler=RepeatsBatchSampler(condition_hashes))
+    dataloader = DataLoader(dat, batch_sampler=RepeatsBatchSampler(condition_hashes))
     return dataloader
