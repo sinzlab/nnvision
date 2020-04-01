@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.readouts import PointPooled2d, Gaussian2d, Cortex2Gaussian2d
+from mlutils.layers.readouts import PointPooled2d, Gaussian2d, Cortex2Gaussian2d, NonIsotropicGaussian2d
 from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
@@ -60,6 +60,31 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
 
+class MultipleNonIsotropicGaussian2d(torch.nn.ModuleDict):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout):
+        # super init to get the _module attribute
+        super().__init__()
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(k, NonIsotropicGaussian2d(
+                in_shape=in_shape,
+                outdims=n_neurons,
+                init_mu_range=init_mu_range,
+                init_sigma_range=init_sigma_range,
+                bias=bias)
+                            )
+        self.gamma_readout = gamma_readout
+
+    def forward(self, *args, data_key=None, **kwargs):
+        if data_key is None and len(self) == 1:
+            data_key = list(self.keys())[0]
+        return self[data_key](*args, **kwargs)
+
+    def regularizer(self, data_key):
+        return self[data_key].feature_l1(average=False) * self.gamma_readout
+
+
 
 class MultipleCortex2Gaussian2d(torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict,
@@ -95,7 +120,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False,
+                          depth_separable=False, linear=False, nonisotropic=False
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -164,8 +189,8 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                     n_se_blocks=n_se_blocks,
                     depth_separable=depth_separable,
                     linear=linear)
-
-    readout = MultipleGaussian2d(core, in_shape_dict=in_shapes_dict,
+    readout_class = MultipleNonIsotropicGaussian2d if nonisotropic else MultipleGaussian2d
+    readout = readout_class(core, in_shape_dict=in_shapes_dict,
                                  n_neurons_dict=n_neurons_dict,
                                  init_mu_range=init_mu_range,
                                  bias=readout_bias,
