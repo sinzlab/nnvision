@@ -43,13 +43,16 @@ def get_correlations(model, dataloaders, device='cpu', as_dict=False, avg=False)
     return correlations
 
 
-def get_poisson_loss(dataloaders, model, avg=True, device='cpu', eps=1e-12):
+def get_poisson_loss(model, dataloaders, device='cpu', as_dict=False, avg=True, eps=1e-12):
     poisson_loss = {}
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(loader=v, model=model, data_key=k, device=device)
             poisson_loss[k] = output - target * np.log(output + eps)
-    return np.mean(np.hstack([v for v in poisson_loss.values()])) if avg else np.hstack([v for v in poisson_loss.values()])
+    if not as_dict:
+        return np.mean(np.hstack([v for v in poisson_loss.values()])) if avg else np.hstack([v for v in poisson_loss.values()])
+    else:
+        return poisson_loss
 
 
 def get_repeats(dataloader, min_repeats=2):
@@ -57,8 +60,12 @@ def get_repeats(dataloader, min_repeats=2):
     repeated_inputs = []
     repeated_outputs = []
     for inputs, outputs in dataloader:
-        inputs = np.squeeze(inputs.cpu().numpy(), axis=0)
-        outputs = np.squeeze(outputs.cpu().numpy(), axis=0)
+        if len(inputs.shape) == 5:
+            inputs = np.squeeze(inputs.cpu().numpy(), axis=0)
+            outputs = np.squeeze(outputs.cpu().numpy(), axis=0)
+        else:
+            inputs = inputs.cpu().numpy()
+            outputs = outputs.cpu().numpy()
         r, n = outputs.shape  # number of frame repeats, number of neurons
         if r < min_repeats:  # minimum number of frame repeats to be considered for oracle, free choice
             continue
