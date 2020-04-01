@@ -57,8 +57,12 @@ def get_repeats(dataloader, min_repeats=2):
     repeated_inputs = []
     repeated_outputs = []
     for inputs, outputs in dataloader:
-        inputs = np.squeeze(inputs.cpu().numpy(), axis=0)
-        outputs = np.squeeze(outputs.cpu().numpy(), axis=0)
+        if len(inputs.shape) == 5:
+            inputs = np.squeeze(inputs.cpu().numpy(), axis=0)
+            outputs = np.squeeze(outputs.cpu().numpy(), axis=0)
+        else:
+            inputs = inputs.cpu().numpy()
+            outputs = outputs.cpu().numpy()
         r, n = outputs.shape  # number of frame repeats, number of neurons
         if r < min_repeats:  # minimum number of frame repeats to be considered for oracle, free choice
             continue
