@@ -156,7 +156,19 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
             in the format {'data_key': dataloader object, .. }
         seed: random seed
         elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
-
+        isotropic: whether the Gaussian readout should use isotropic Gaussians or not
+        grid_mean_predictor: if not None, needs to be a dictionary of the form
+            {
+            'type': 'cortex',
+            'input_dimensions': 2,
+            'hidden_layers':0,
+            'hidden_features':20,
+            'final_tanh': False,
+            }
+            In that case the datasets need to have the property `neurons.cell_motor_coordinates`
+        share_features: whether to share features between readouts. This requires that the datasets
+            have the properties `neurons.multi_match_id` which are used for matching. Every dataset
+            has to have all these ids and cannot have any more.
         all other args: See Documentation of Stacked2dCore in mlutils.layers.cores and
             PointPooled2D in mlutils.layers.readouts
 
