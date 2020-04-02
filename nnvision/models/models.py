@@ -67,7 +67,7 @@ class MultipleGaussian2d(Readout, torch.nn.ModuleDict):
                     'shared_features': None if i == 0 else self[k0].shared_features
                 }
             else:
-                share_features = None
+                shared_features = None
 
             self.add_module(k, Gaussian2d(
                 in_shape=in_shape,
@@ -185,6 +185,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
 
     source_grids = None
+    grid_mean_predictor_type = None
     if grid_mean_predictor is not None:
         grid_mean_predictor_type = grid_mean_predictor.pop('type')
         if grid_mean_predictor_type == 'cortex':
