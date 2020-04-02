@@ -1,8 +1,8 @@
 import numpy as np
 import torch
 from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.readouts import (PointPooled2d, Gaussian2d, CortexGaussian2d,
-                                     SharedCortexGaussian2d)
+from mlutils.layers.readouts import (PointPooled2d, Gaussian2d)
+
 from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
@@ -42,19 +42,43 @@ class MultiplePointPooled2d(Readout, torch.nn.ModuleDict):
 
 class MultipleGaussian2d(Readout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout,
-                 isotropic):
+                 isotropic, grid_mean_predictor, grid_mean_predictor_type, source_grids,
+                 share_features, shared_match_ids):
         # super init to get the _module attribute
         super().__init__()
-        for k in n_neurons_dict:
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
             in_shape = get_module_output(core, in_shape_dict[k])[1:]
             n_neurons = n_neurons_dict[k]
+            if grid_mean_predictor is not None:
+                if grid_mean_predictor_type == 'cortex':
+                    source_grid = source_grids[k]
+                elif grid_mean_predictor_type == 'shared':
+                    raise NotImplementedError('Not yet implemented')
+                else:
+                    raise KeyError('grid mean predictor {} does not exist'.format(grid_mean_predictor_type))
+            else:
+                source_grid = None
+
+            if share_features:
+                shared_features = {
+                    'match_ids':shared_match_ids[k],
+                    'shared_features': None if i == 0 else self[k0].shared_features
+                }
+            else:
+                share_features = None
+
             self.add_module(k, Gaussian2d(
                 in_shape=in_shape,
                 outdims=n_neurons,
                 init_mu_range=init_mu_range,
                 init_sigma_range=init_sigma_range,
                 bias=bias,
-                isotropic=isotropic
+                isotropic=isotropic,
+                grid_mean_predictor=grid_mean_predictor,
+                shared_features=shared_features,
+                source_grid=source_grid
             )
                             )
         self.gamma_readout = gamma_readout
@@ -121,7 +145,8 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False, isotropic=True
+                          depth_separable=False, linear=False, isotropic=True,
+                          grid_mean_predictor=None, share_features=False
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -146,6 +171,25 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
     session_shape_dict = get_dims_for_loader_dict(dataloaders)
     n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+
+    source_grids = None
+    if grid_mean_predictor is not None:
+        grid_mean_predictor_type = grid_mean_predictor.pop('type')
+        if grid_mean_predictor_type == 'cortex':
+            input_dim = grid_mean_predictor.pop('input_dimensions', 2)
+            source_grids = {k: v.dataset.neurons.cell_motor_coordinates[:, :input_dim] for k, v in dataloaders.items()}
+        elif grid_mean_predictor_type == 'shared':
+            pass
+
+    shared_match_ids = None
+    if share_features:
+        shared_match_ids = {k: v.dataset.neurons.multi_match_id for k, v in dataloaders.items()}
+        all_multi_unit_ids = set(np.hstack(shared_match_ids.values()))
+
+        for mu in shared_match_ids.values():
+            assert len(set(mu) & all_multi_unit_ids) == len(all_multi_unit_ids), \
+                'All multi unit IDs must be present in all datasets'
+
     in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
     input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
@@ -197,226 +241,13 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                                  bias=readout_bias,
                                  init_sigma_range=init_sigma_range,
                                  gamma_readout=gamma_readout,
-                                 isotropic=isotropic
-                                 )
-
-    # initializing readout bias to mean response
-    if readout_bias:
-        for key, value in dataloaders.items():
-            _, targets = next(iter(value))
-            readout[key].bias.data = targets.mean(0)
-
-    model = Encoder(core, readout, elu_offset)
-
-    return model
-
-
-def se_core_cortex2gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
-                                 hidden_kern=3, layers=3, gamma_input=15.5,
-                                 skip=0, final_nonlinearity=True, momentum=0.9,
-                                 pad_input=False, batch_norm=True, hidden_dilation=1,
-                                 laplace_padding=None, input_regularizer='LaplaceL2norm',
-                                 init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
-                                 gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                                 depth_separable=False, linear=False, cortex_coordinate_dimensions=2,
-                                 final_tanh=False, hidden_layers=0, hidden_features=20, isotropic=False
-                                 ):
-    """
-    Model class of a stacked2dCore (from mlutils) and a Gaussian readout with cortical to monitor transformation
-
-    Args:
-        dataloaders: a dictionary of dataloaders, one loader per session
-            in the format {'data_key': dataloader object, .. }
-        seed: random seed
-        elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
-        cortex_coordinate_dimensions: number of cortical coordinates to include (2 means x,y only, 3 means z as well)
-
-        all other args: See Documentation of Stacked2dCore in mlutils.layers.cores and
-            PointPooled2D in mlutils.layers.readouts
-
-    Returns: An initialized model which consists of model.core and model.readout
-    """
-
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
-
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
-
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    coordinates_dict = {k: v.dataset.neurons.cell_motor_coordinates[:, :cortex_coordinate_dimensions] for k, v in
-                        dataloaders.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
-
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
-
-    set_random_seed(seed)
-
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
-                    hidden_channels=hidden_channels,
-                    input_kern=input_kern,
-                    hidden_kern=hidden_kern,
-                    layers=layers,
-                    gamma_input=gamma_input,
-                    skip=skip,
-                    final_nonlinearity=final_nonlinearity,
-                    bias=False,
-                    momentum=momentum,
-                    pad_input=pad_input,
-                    batch_norm=batch_norm,
-                    hidden_dilation=hidden_dilation,
-                    laplace_padding=laplace_padding,
-                    input_regularizer=input_regularizer,
-                    stack=stack,
-                    se_reduction=se_reduction,
-                    n_se_blocks=n_se_blocks,
-                    depth_separable=depth_separable,
-                    linear=linear)
-
-    readout = MultipleCortexGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                       n_neurons_dict=n_neurons_dict,
-                                       coordinates_dict=coordinates_dict,
-                                       init_mu_range=init_mu_range,
-                                       bias=readout_bias,
-                                       init_sigma_range=init_sigma_range,
-                                       gamma_readout=gamma_readout,
-                                       final_tanh=final_tanh,
-                                       hidden_layers=hidden_layers,
-                                       hidden_features=hidden_features,
-                                       isotropic=isotropic
-                                       )
-
-    # initializing readout bias to mean response
-    if readout_bias:
-        for key, value in dataloaders.items():
-            _, targets = next(iter(value))
-            readout[key].bias.data = targets.mean(0)
-
-    model = Encoder(core, readout, elu_offset)
-
-    return model
-
-
-def se_core_cortex2gauss_readout_shared(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
-                                        hidden_kern=3, layers=3, gamma_input=15.5,
-                                        skip=0, final_nonlinearity=True, momentum=0.9,
-                                        pad_input=False, batch_norm=True, hidden_dilation=1,
-                                        laplace_padding=None, input_regularizer='LaplaceL2norm',
-                                        init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
-                                        gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                                        depth_separable=False, linear=False, cortex_coordinate_dimensions=2,
-                                        final_tanh=False, hidden_layers=0, hidden_features=20, isotropic=False
-                                        ):
-    """
-    Model class of a stacked2dCore (from mlutils) and a Gaussian readout with cortical to monitor transformation
-
-    Args:
-        dataloaders: a dictionary of dataloaders, one loader per session
-            in the format {'data_key': dataloader object, .. }
-        seed: random seed
-        elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
-        cortex_coordinate_dimensions: number of cortical coordinates to include (2 means x,y only, 3 means z as well)
-
-        all other args: See Documentation of Stacked2dCore in mlutils.layers.cores and
-            PointPooled2D in mlutils.layers.readouts
-
-    Returns: An initialized model which consists of model.core and model.readout
-    """
-
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
-
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
-
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    coordinates_dict = {k: v.dataset.neurons.cell_motor_coordinates[:, :cortex_coordinate_dimensions] for k, v in
-                        dataloaders.items()}
-    multi_unit_dict = {k: v.dataset.neurons.multi_match_id for k, v in dataloaders.items()}
-    all_multi_unit_ids = set(np.hstack(multi_unit_dict.values()))
-
-    for mu in multi_unit_dict.values():
-        assert len(set(mu) & all_multi_unit_ids) == len(all_multi_unit_ids), \
-            'All multi unit IDs must be present in all datasets'
-
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
-
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
-
-    set_random_seed(seed)
-
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
-                    hidden_channels=hidden_channels,
-                    input_kern=input_kern,
-                    hidden_kern=hidden_kern,
-                    layers=layers,
-                    gamma_input=gamma_input,
-                    skip=skip,
-                    final_nonlinearity=final_nonlinearity,
-                    bias=False,
-                    momentum=momentum,
-                    pad_input=pad_input,
-                    batch_norm=batch_norm,
-                    hidden_dilation=hidden_dilation,
-                    laplace_padding=laplace_padding,
-                    input_regularizer=input_regularizer,
-                    stack=stack,
-                    se_reduction=se_reduction,
-                    n_se_blocks=n_se_blocks,
-                    depth_separable=depth_separable,
-                    linear=linear)
-
-    readout = MultipleCortexGaussian2dShared(core, in_shape_dict=in_shapes_dict,
-                                             n_neurons_dict=n_neurons_dict,
-                                             coordinates_dict=coordinates_dict,
-                                             multi_unit_dict=multi_unit_dict,
-                                             init_mu_range=init_mu_range,
-                                             bias=readout_bias,
-                                             init_sigma_range=init_sigma_range,
-                                             gamma_readout=gamma_readout,
-                                             final_tanh=final_tanh,
-                                             hidden_layers=hidden_layers,
-                                             hidden_features=hidden_features,
-                                             isotropic=isotropic
-                                             )
+                                 isotropic=isotropic,
+                                 grid_mean_predictor=grid_mean_predictor,
+                                 grid_mean_predictor_type=grid_mean_predictor_type,
+                                 source_grids=source_grids,
+                                 share_features = share_features,
+                                 shared_match_ids=shared_match_ids
+    )
 
     # initializing readout bias to mean response
     if readout_bias:
