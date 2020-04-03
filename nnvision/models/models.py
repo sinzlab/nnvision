@@ -43,7 +43,7 @@ class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
 class MultipleGaussian2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout,
                  isotropic, grid_mean_predictor, grid_mean_predictor_type, source_grids,
-                 share_features, shared_match_ids):
+                 share_features, share_grid, shared_match_ids):
         # super init to get the _module attribute
         super().__init__()
         k0 = None
@@ -51,16 +51,19 @@ class MultipleGaussian2d(MultiReadout, torch.nn.ModuleDict):
             k0 = k0 or k
             in_shape = get_module_output(core, in_shape_dict[k])[1:]
             n_neurons = n_neurons_dict[k]
+
+            source_grid = None
+            shared_grid = None
             if grid_mean_predictor is not None:
                 if grid_mean_predictor_type == 'cortex':
                     source_grid = source_grids[k]
-                elif grid_mean_predictor_type == 'shared':
-                    raise NotImplementedError('Not yet implemented')
                 else:
                     raise KeyError('grid mean predictor {} does not exist'.format(grid_mean_predictor_type))
-            else:
-                source_grid = None
-
+            elif share_grid is not None:
+                shared_grid = {
+                    'match_ids': shared_match_ids[k],
+                    'shared_grid': None if i == 0 else self[k0].shared_grid
+                }
             if share_features:
                 shared_features = {
                     'match_ids':shared_match_ids[k],
@@ -78,64 +81,13 @@ class MultipleGaussian2d(MultiReadout, torch.nn.ModuleDict):
                 isotropic=isotropic,
                 grid_mean_predictor=grid_mean_predictor,
                 shared_features=shared_features,
+                shared_grid=shared_grid,
                 source_grid=source_grid
             )
                             )
         self.gamma_readout = gamma_readout
 
 
-class MultipleCortexGaussian2d(MultiReadout, torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict,
-                 init_mu_range, init_sigma_range, bias, gamma_readout,
-                 final_tanh, hidden_layers, hidden_features, isotropic):
-        # super init to get the _module attribute
-        super().__init__()
-        for k in n_neurons_dict:
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-            self.add_module(k, CortexGaussian2d(
-                in_shape=in_shape,
-                outdims=n_neurons,
-                cortex_coordinates=coordinates_dict[k],
-                init_mu_range=init_mu_range,
-                init_sigma_range=init_sigma_range,
-                bias=bias,
-                final_tanh=final_tanh,
-                hidden_layers=hidden_layers,
-                hidden_features=hidden_features,
-                isotropic=isotropic
-            )
-                            )
-        self.gamma_readout = gamma_readout
-
-
-class MultipleCortexGaussian2dShared(MultiReadout, torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict, multi_unit_dict,
-                 init_mu_range, init_sigma_range, bias, gamma_readout,
-                 final_tanh, hidden_layers, hidden_features, isotropic):
-        # super init to get the _module attribute
-        super().__init__()
-        k0 = None
-        for i, k in enumerate(n_neurons_dict):
-            k0 = k0 or k
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-            self.add_module(k, SharedCortexGaussian2d(
-                in_shape=in_shape,
-                outdims=n_neurons,
-                cortex_coordinates=coordinates_dict[k],
-                multi_unit_ids=multi_unit_dict[k],
-                init_mu_range=init_mu_range,
-                init_sigma_range=init_sigma_range,
-                bias=bias,
-                final_tanh=final_tanh,
-                hidden_layers=hidden_layers,
-                hidden_features=hidden_features,
-                shared_features=None if i == 0 else self[k0].shared_features,
-                isotropic=isotropic
-            )
-                            )
-        self.gamma_readout = gamma_readout
 
 
 def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
@@ -146,7 +98,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
                           depth_separable=False, linear=False, isotropic=True,
-                          grid_mean_predictor=None, share_features=False
+                          grid_mean_predictor=None, share_features=False, share_grid=False
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -195,13 +147,14 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
             pass
 
     shared_match_ids = None
-    if share_features:
+    if share_features or share_grid:
         shared_match_ids = {k: v.dataset.neurons.multi_match_id for k, v in dataloaders.items()}
         all_multi_unit_ids = set(np.hstack(shared_match_ids.values()))
 
-        for mu in shared_match_ids.values():
-            assert len(set(mu) & all_multi_unit_ids) == len(all_multi_unit_ids), \
+        for match_id in shared_match_ids.values():
+            assert len(set(match_id) & all_multi_unit_ids) == len(all_multi_unit_ids), \
                 'All multi unit IDs must be present in all datasets'
+
 
     in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
     input_channels = [v[in_name][1] for v in session_shape_dict.values()]
@@ -259,6 +212,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                                  grid_mean_predictor_type=grid_mean_predictor_type,
                                  source_grids=source_grids,
                                  share_features = share_features,
+                                 share_grid=share_grid,
                                  shared_match_ids=shared_match_ids
     )
 
