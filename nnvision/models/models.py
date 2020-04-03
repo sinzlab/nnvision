@@ -11,7 +11,7 @@ from torch.nn import functional as F
 from .cores import SE2dCore
 
 
-class Readout:
+class MultiReadout:
 
     def forward(self, *args, data_key=None, **kwargs):
         if data_key is None and len(self) == 1:
@@ -22,7 +22,7 @@ class Readout:
         return self[data_key].feature_l1(average=False) * self.gamma_readout
 
 
-class MultiplePointPooled2d(Readout, torch.nn.ModuleDict):
+class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
         # super init to get the _module attribute
         super(MultiplePointPooled2d, self).__init__()
@@ -40,7 +40,7 @@ class MultiplePointPooled2d(Readout, torch.nn.ModuleDict):
         self.gamma_readout = gamma_readout
 
 
-class MultipleGaussian2d(Readout, torch.nn.ModuleDict):
+class MultipleGaussian2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout,
                  isotropic, grid_mean_predictor, grid_mean_predictor_type, source_grids,
                  share_features, shared_match_ids):
@@ -84,7 +84,7 @@ class MultipleGaussian2d(Readout, torch.nn.ModuleDict):
         self.gamma_readout = gamma_readout
 
 
-class MultipleCortexGaussian2d(Readout, torch.nn.ModuleDict):
+class MultipleCortexGaussian2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict,
                  init_mu_range, init_sigma_range, bias, gamma_readout,
                  final_tanh, hidden_layers, hidden_features, isotropic):
@@ -109,7 +109,7 @@ class MultipleCortexGaussian2d(Readout, torch.nn.ModuleDict):
         self.gamma_readout = gamma_readout
 
 
-class MultipleCortexGaussian2dShared(Readout, torch.nn.ModuleDict):
+class MultipleCortexGaussian2dShared(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, coordinates_dict, multi_unit_dict,
                  init_mu_range, init_sigma_range, bias, gamma_readout,
                  final_tanh, hidden_layers, hidden_features, isotropic):
