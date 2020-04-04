@@ -27,6 +27,63 @@ def model_predictions(dataloader, model, data_key, device='cpu'):
     return target.numpy(), output.numpy()
 
 
+def model_predictions_test_data(dataloader, model, device='cpu', data_key=None):
+    """
+    Computes model predictions for test set dataloader and a model. testloader must
+    yield inputs with repeated values along the first axis. Unique inputs will be forwarded only once through the model
+    Returns:
+        target: ground truth, i.e. neuronal firing rates of the neurons as a list: [num_images][num_reaps, num_neurons]
+        output: responses as predicted by the network for the unique images: [num_images, num_neurons]
+    """
+    
+    output = torch.empty(0)
+    target = []
+    
+    # Get unique images and concatenated targets:
+    unique_images = torch.empty(0)
+    for images, responses in dataloader:
+        if len(images.shape) == 5:
+            images = images.squeeze(dim=0)
+            responses = responses.squeeze(dim=0)
+        
+        unique_images = torch.cat((unique_images, images[0:1, ]), dim=0) # Assumes all images in batch are equal
+        target.append(responses.detach().cpu().numpy())
+    
+    # Forward unique images once:
+    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+        original_device = 'cuda' if next(model.parameters()).is_cuda else 'cpu'
+        model.to(device)
+        output = model(unique_images.to(device), data_key=data_key).detach().cpu()
+        model.to(original_device)
+        
+    return target, output.numpy()   
+
+def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
+    """
+    Returns correlation between model outputs and average responses over repeated trials
+    
+    """
+    if 'test' in dataloaders:
+        dataloaders = dataloaders['test']
+    
+    correlations = {}
+    for k, loader in dataloaders.items():
+
+        # Compute correlation with average targets
+        target, output = model_predictions_test_data(dataloader=loader, model=model, data_key=k, device=device)
+        target_mean = np.array([t.mean(axis=0) for t in target])
+        correlations[k] = corr(target_mean, output, axis=0)
+        
+        # Check for nans
+        if np.any(np.isnan(correlations[k])):
+            warnings.warn('{}% NaNs , NaNs will be set to Zero.'.format(np.isnan(correlations[k]).mean() * 100))
+        correlations[k][np.isnan(correlations[k])] = 0
+
+    if not as_dict:
+        correlations = np.hstack([v for v in correlations.values()]) if per_neuron else np.mean(np.hstack([v for v in correlations.values()]))
+    return correlations
+
+
 def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     correlations = {}
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
