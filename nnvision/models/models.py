@@ -59,11 +59,13 @@ class MultipleGaussian2d(MultiReadout, torch.nn.ModuleDict):
                     source_grid = source_grids[k]
                 else:
                     raise KeyError('grid mean predictor {} does not exist'.format(grid_mean_predictor_type))
-            elif share_grid is not None:
+            elif share_grid:
                 shared_grid = {
                     'match_ids': shared_match_ids[k],
                     'shared_grid': None if i == 0 else self[k0].shared_grid
                 }
+
+
             if share_features:
                 shared_features = {
                     'match_ids':shared_match_ids[k],
