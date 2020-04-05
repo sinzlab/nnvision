@@ -46,7 +46,8 @@ def model_predictions_test_data(dataloader, model, device='cpu', data_key=None):
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
         
-        unique_images = torch.cat((unique_images, images[0:1, ]), dim=0) # Assumes all images in batch are equal
+        assert torch.all(torch.eq(images[-1,], images[0,],)), "All images in the batch should be equal"
+        unique_images = torch.cat((unique_images, images[0:1, ]), dim=0)
         target.append(responses.detach().cpu().numpy())
     
     # Forward unique images once:
