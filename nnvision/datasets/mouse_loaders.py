@@ -7,11 +7,11 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
-from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels
+from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels, SelectInputChannel
 from mlutils.data.samplers import SubsetSequentialSampler
 
 from nnfabrik.utility.nn_helpers import set_random_seed
-
+from .utility import get_oracle_dataloader
 
 def mouse_static_loader(path,
                         batch_size,
@@ -28,6 +28,7 @@ def mouse_static_loader(path,
                         select_input_channel=None,
                         toy_data=False,
                         file_tree=False,
+                        return_test_sampler=False,
                         **kwargs):
     """
     returns a single data
@@ -83,6 +84,10 @@ def mouse_static_loader(path,
 
         if select_input_channel is not None:
             dat.transforms.insert(0, SelectInputChannel(select_input_channel))
+
+    if return_test_sampler:
+        dataloader = get_oracle_dataloader(dat)
+        return dataloader
 
     # subsample images
     dataloaders = {}
