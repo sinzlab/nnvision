@@ -1,1 +1,1 @@
-from .models import (se_core_point_readout, se_core_gauss_readout)
+from .models import (se_core_point_readout, se_core_noniso_gauss_readout, se_core_gauss_readout)
