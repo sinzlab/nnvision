@@ -11,7 +11,7 @@ from torch.nn import ModuleDict
 from mlutils.constraints import positive
 from mlutils.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
 from mlutils import regularizers
-from mlutils.layers.readouts import PointPooled2d, Gaussian2d
+from mlutils.layers.readouts import PointPooled2d, NonIsoGaussian2d
 
 
 class MultiplePointPooled2d(torch.nn.ModuleDict):
