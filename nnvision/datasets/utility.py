@@ -34,6 +34,6 @@ def get_oracle_dataloader(dat,
     sampling_condition = np.where(dat.tiers == 'test')[0] if oracle_condition is None else \
         np.where((dat.tiers == 'test') & (class_idx == oracle_condition))[0]
     if oracle_condition is not None:
-        print("Created Testloader for image class {}".format(classes[0]))
+        print("Created Testloader for image class {}".format(classes[oracle_condition]))
     sampler = RepeatsBatchSampler(identifiers, sampling_condition)
     return DataLoader(dat, sampler=sampler)
