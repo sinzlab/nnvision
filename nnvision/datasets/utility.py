@@ -7,7 +7,7 @@ from mlutils.data.samplers import RepeatsBatchSampler
 def get_oracle_dataloader(dat,
                           toy_data=False,
                           oracle_condition=None,
-                          ):
+                          verbose=False):
 
     if toy_data:
         condition_hashes = dat.info.condition_hash
@@ -33,7 +33,8 @@ def get_oracle_dataloader(dat,
 
     sampling_condition = np.where(dat.tiers == 'test')[0] if oracle_condition is None else \
         np.where((dat.tiers == 'test') & (class_idx == oracle_condition))[0]
-    if oracle_condition is not None:
+    if (oracle_condition is not None) and verbose:
         print("Created Testloader for image class {}".format(classes[oracle_condition]))
+
     sampler = RepeatsBatchSampler(identifiers, sampling_condition)
     return DataLoader(dat, sampler=sampler)
