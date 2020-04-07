@@ -13,8 +13,8 @@ from mlutils.data.samplers import SubsetSequentialSampler
 from nnfabrik.utility.nn_helpers import set_random_seed
 from .utility import get_oracle_dataloader
 
-def mouse_static_loader(path,
-                        batch_size,
+def mouse_static_loader(path=None,
+                        batch_size=None,
                         seed=None,
                         areas=None,
                         layers=None,
@@ -49,6 +49,10 @@ def mouse_static_loader(path,
         if get_key is True it also the data_key (as the first output) followed by the dalaoder dictionary.
 
     """
+    if ("paths" in kwargs) and (path is None):
+        paths = kwargs["paths"]
+        path = paths[0] if len(paths) == 1 else None
+
     if file_tree:
         dat = FileTreeDataset(path, 'images', 'responses', 'behavior') if include_behavior else FileTreeDataset(path,
                                                                                                           'images',

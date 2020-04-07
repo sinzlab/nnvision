@@ -10,11 +10,6 @@ def get_oracle_dataloader(dat,
                           oracle_condition=None,
                           ):
 
-    max_idx = dat.info.image_id.max() + 1
-    u, class_idx = np.unique(dat.info.image_class, return_inverse=True)
-    identifiers = dat.info.image_id + class_idx * max_idx
-    sampler = RepeatsBatchSampler(identifiers, np.where(dat.tiers == 'test')[0])
-
     if toy_data:
         condition_hashes = dat.info.condition_hash
     else:
