@@ -129,8 +129,8 @@ class MonkeyExperiment(dj.Computed):
         key["experiment_name"] = experiment_name
         key["n_sessions"] = len(session_dict)
         key["total_n_neurons"] = int(np.sum([v["n_neurons"] for v in session_dict.values()]))
-        key["avg_oracle"] = np.mean(np.hstack([v["unit_oracles"] for v in session_dict.values()]))
-        key["avg_explainable_var"] = np.mean(np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
+        key["avg_oracle"] = np.nanmean(np.hstack([v["unit_oracles"] for v in session_dict.values()]))
+        key["avg_explainable_var"] = np.nanmean(np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
 
         self.insert1(key, ignore_extra_fields=True)
 
@@ -147,11 +147,11 @@ class MonkeyExperiment(dj.Computed):
                 self.Units().insert1(key, ignore_extra_fields=True)
 
                 key['unit_avg_firing'] = session_dict[k]['avg_firing'][i]
-                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i]
+                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i] if not np.isnan(session_dict[k]['fano_factor'][i]) else 0
                 self.UnitStatistics().insert1(key, ignore_extra_fields=True)
 
-                key['unit_oracle'] = session_dict[k]['unit_oracles'][i]
-                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i]
+                key['unit_oracle'] = session_dict[k]['unit_oracles'][i] if not np.isnan(session_dict[k]['unit_oracles'][i]) else 0
+                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i] if not np.isnan(session_dict[k]['unit_explainable_variance'][i]) else 0
                 self.UnitMeasures().insert1(key, ignore_extra_fields=True)
 
                 key['electrode'] = session_dict[k]['electrode'][i]
