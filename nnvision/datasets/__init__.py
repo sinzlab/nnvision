@@ -1,2 +1,2 @@
 from .monkey_loaders import monkey_static_loader
-from .mouse_loaders import mouse_static_loaders
+from .mouse_loaders import mouse_static_loaders, mouse_shared_static_loaders
