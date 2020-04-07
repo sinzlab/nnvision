@@ -29,6 +29,7 @@ def mouse_static_loader(path=None,
                         toy_data=False,
                         file_tree=False,
                         return_test_sampler=False,
+                        oracle_condition=None,
                         **kwargs):
     """
     returns a single data
@@ -90,7 +91,7 @@ def mouse_static_loader(path=None,
             dat.transforms.insert(0, SelectInputChannel(select_input_channel))
 
     if return_test_sampler:
-        dataloader = get_oracle_dataloader(dat)
+        dataloader = get_oracle_dataloader(dat, toy_data=toy_data, oracle_condition=oracle_condition)
         return dataloader
 
     # subsample images

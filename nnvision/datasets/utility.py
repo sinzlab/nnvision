@@ -6,7 +6,6 @@ from mlutils.data.samplers import RepeatsBatchSampler
 
 def get_oracle_dataloader(dat,
                           toy_data=False,
-                          file_tree_dataset=False,
                           oracle_condition=None,
                           ):
 
@@ -28,11 +27,13 @@ def get_oracle_dataloader(dat,
                              "in order to load get the oracle repeats.")
 
     max_idx = condition_hashes.max() + 1
-    _, class_idx = np.unique(image_class, return_inverse=True)
+    classes, class_idx = np.unique(image_class, return_inverse=True)
     identifiers = condition_hashes + class_idx * max_idx
+
 
     sampling_condition = np.where(dat.tiers == 'test')[0] if oracle_condition is None else \
         np.where((dat.tiers == 'test') & (class_idx == oracle_condition))[0]
-
+    if oracle_condition is not None:
+        print("Created Testloader for image class {}".format(classes[0]))
     sampler = RepeatsBatchSampler(identifiers, sampling_condition)
     return DataLoader(dat, sampler=sampler)
