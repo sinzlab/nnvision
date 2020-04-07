@@ -8,8 +8,7 @@ from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_
 from torch import nn
 from torch.nn import functional as F
 
-from .cores import SE2dCore
-
+from .cores import SE2dCore, TransferLearningCore
 
 class MultiReadout:
 
