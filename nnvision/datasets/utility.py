@@ -16,15 +16,17 @@ def get_oracle_dataloader(dat,
 
         if 'image_id' in dir(dat.info):
             condition_hashes = dat.info.image_id
+            image_class =  dat.info.image_class
         elif 'colorframeprojector_image_id' in dir(dat.info):
             condition_hashes = dat.info.colorframeprojector_image_id
+            image_class = dat.info.colorframeprojector_image_class
         elif 'frame_image_id' in dir(dat.info):
             condition_hashes = dat.info.frame_image_id
+            image_class = dat.info.frame_image_class
         else:
             raise ValueError("'image_id' 'colorframeprojector_image_id', or 'frame_image_id' have to present in the dataset under dat.info "
                              "in order to load get the oracle repeats.")
 
-    image_class = dat.info.image_class if "image_class" in dir(dat.info) else dat.info.frame_image_class
     max_idx = condition_hashes.max() + 1
     _, class_idx = np.unique(image_class, return_inverse=True)
     identifiers = condition_hashes + class_idx * max_idx
