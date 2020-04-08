@@ -1,25 +1,15 @@
 import numpy as np
 import torch
 from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.readouts import (PointPooled2d, NonIsoGaussian2d)
+from mlutils.layers.readouts import PointPooled2d
 from mlutils.layers.legacy import Gaussian2d
 from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
 from torch.nn import functional as F
 
+from .readouts import MultipleFullGaussian2d, MultiReadout
 from .cores import SE2dCore, TransferLearningCore
-
-class MultiReadout:
-
-    def forward(self, *args, data_key=None, **kwargs):
-        if data_key is None and len(self) == 1:
-            data_key = list(self.keys())[0]
-        return self[data_key](*args, **kwargs)
-
-    def regularizer(self, data_key):
-        return self[data_key].feature_l1(average=False) * self.gamma_readout
-
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
@@ -62,55 +52,6 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
 
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
-
-
-class MultipleNonIsoGaussian2d(MultiReadout, torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout,
-                 isotropic, grid_mean_predictor, grid_mean_predictor_type, source_grids,
-                 share_features, share_grid, shared_match_ids):
-        # super init to get the _module attribute
-        super().__init__()
-        k0 = None
-        for i, k in enumerate(n_neurons_dict):
-            k0 = k0 or k
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-
-            source_grid = None
-            shared_grid = None
-            if grid_mean_predictor is not None:
-                if grid_mean_predictor_type == 'cortex':
-                    source_grid = source_grids[k]
-                else:
-                    raise KeyError('grid mean predictor {} does not exist'.format(grid_mean_predictor_type))
-            elif share_grid:
-                shared_grid = {
-                    'match_ids': shared_match_ids[k],
-                    'shared_grid': None if i == 0 else self[k0].shared_grid
-                }
-
-            if share_features:
-                shared_features = {
-                    'match_ids': shared_match_ids[k],
-                    'shared_features': None if i == 0 else self[k0].shared_features
-                }
-            else:
-                shared_features = None
-
-            self.add_module(k, NonIsoGaussian2d(
-                in_shape=in_shape,
-                outdims=n_neurons,
-                init_mu_range=init_mu_range,
-                init_sigma_range=init_sigma_range,
-                bias=bias,
-                isotropic=isotropic,
-                grid_mean_predictor=grid_mean_predictor,
-                shared_features=shared_features,
-                shared_grid=shared_grid,
-                source_grid=source_grid
-            )
-                            )
-        self.gamma_readout = gamma_readout
 
 
 def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
@@ -208,16 +149,16 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     return model
 
 
-def se_core_noniso_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
-                                 hidden_kern=3, layers=3, gamma_input=15.5,
-                                 skip=0, final_nonlinearity=True, momentum=0.9,
-                                 pad_input=False, batch_norm=True, hidden_dilation=1,
-                                 laplace_padding=None, input_regularizer='LaplaceL2norm',
-                                 init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
-                                 gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                                 depth_separable=False, linear=False, isotropic=False,
-                                 grid_mean_predictor=None, share_features=False, share_grid=False
-                                 ):
+def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
+                               hidden_kern=3, layers=3, gamma_input=15.5,
+                               skip=0, final_nonlinearity=True, momentum=0.9,
+                               pad_input=False, batch_norm=True, hidden_dilation=1,
+                               laplace_padding=None, input_regularizer='LaplaceL2norm',
+                               init_mu_range=0.2, init_sigma=1., readout_bias=True,  # readout args,
+                               gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
+                               depth_separable=False, linear=False, gauss_type='full',
+                               grid_mean_predictor=None, share_features=False, share_grid=False
+                               ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
 
@@ -318,20 +259,20 @@ def se_core_noniso_gauss_readout(dataloaders, seed, hidden_channels=32, input_ke
                     depth_separable=depth_separable,
                     linear=linear)
 
-    readout = MultipleNonIsoGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                       n_neurons_dict=n_neurons_dict,
-                                       init_mu_range=init_mu_range,
-                                       bias=readout_bias,
-                                       init_sigma_range=init_sigma_range,
-                                       gamma_readout=gamma_readout,
-                                       isotropic=isotropic,
-                                       grid_mean_predictor=grid_mean_predictor,
-                                       grid_mean_predictor_type=grid_mean_predictor_type,
-                                       source_grids=source_grids,
-                                       share_features=share_features,
-                                       share_grid=share_grid,
-                                       shared_match_ids=shared_match_ids
-                                       )
+    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                     n_neurons_dict=n_neurons_dict,
+                                     init_mu_range=init_mu_range,
+                                     bias=readout_bias,
+                                     init_sigma=init_sigma,
+                                     gamma_readout=gamma_readout,
+                                     gauss_type=gauss_type,
+                                     grid_mean_predictor=grid_mean_predictor,
+                                     grid_mean_predictor_type=grid_mean_predictor_type,
+                                     source_grids=source_grids,
+                                     share_features=share_features,
+                                     share_grid=share_grid,
+                                     shared_match_ids=shared_match_ids
+                                     )
 
     # initializing readout bias to mean response
     if readout_bias:
@@ -510,14 +451,14 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                          input_regularizer=input_regularizer,
                          stack=stack)
 
-    readout = MultipleNonIsoGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                       n_neurons_dict=n_neurons_dict,
-                                       init_mu_range=init_mu_range,
-                                       init_sigma_range=init_sigma_range,
-                                       bias=readout_bias,
-                                       gamma_readout=gamma_readout,
-                                       isotropic=isotropic
-                                       )
+    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                     n_neurons_dict=n_neurons_dict,
+                                     init_mu_range=init_mu_range,
+                                     init_sigma=init_sigma_range,
+                                     bias=readout_bias,
+                                     gamma_readout=gamma_readout,
+                                     gauss_type=isotropic
+                                     )
 
     if readout_bias:
         for key, value in dataloaders.items():
@@ -592,13 +533,13 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                 final_nonlinearity=final_nonlinearity,
                                 bias=bias)
 
-    readout = MultipleNonIsoGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                       n_neurons_dict=n_neurons_dict,
-                                       init_mu_range=init_mu_range,
-                                       bias=readout_bias,
-                                       init_sigma_range=init_sigma_range,
-                                       gamma_readout=gamma_readout,
-                                       isotropic=isotropic)
+    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                     n_neurons_dict=n_neurons_dict,
+                                     init_mu_range=init_mu_range,
+                                     bias=readout_bias,
+                                     init_sigma=init_sigma_range,
+                                     gamma_readout=gamma_readout,
+                                     gauss_type=isotropic)
 
     if readout_bias:
         for key, value in dataloaders.items():
