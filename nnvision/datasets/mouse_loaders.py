@@ -1,17 +1,14 @@
 from collections import OrderedDict
 from itertools import zip_longest
+
 import numpy as np
-
-import torch
-from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
-
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
 from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels, SelectInputChannel
 from mlutils.data.samplers import SubsetSequentialSampler
-
 from nnfabrik.utility.nn_helpers import set_random_seed
 from .utility import get_oracle_dataloader
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
 
 def mouse_static_loader(path=None,
                         batch_size=None,
@@ -56,12 +53,12 @@ def mouse_static_loader(path=None,
 
     if file_tree:
         dat = FileTreeDataset(path, 'images', 'responses', 'behavior') if include_behavior else FileTreeDataset(path,
-                                                                                                          'images',
-                                                                                                          'responses')
+                                                                                                                'images',
+                                                                                                                'responses')
     else:
         dat = StaticImageSet(path, 'images', 'responses', 'behavior') if include_behavior else StaticImageSet(path,
-                                                                                                          'images',
-                                                                                                          'responses')
+                                                                                                              'images',
+                                                                                                              'responses')
 
     assert (include_behavior and select_input_channel) is False, \
         "Selecting an Input Channel and Adding Behavior can not both be true"
@@ -69,8 +66,9 @@ def mouse_static_loader(path=None,
     if toy_data:
         dat.transforms = [ToTensor(cuda)]
     else:
+        # The permutation MUST be added first and the conditions below MUST NOT be based on the original order
+
         # specify condition(s) for sampling neurons. If you want to sample specific neurons define conditions that would effect idx
-        neuron_ids = neuron_ids if neuron_ids else dat.neurons.unit_ids
         conds = np.ones(len(dat.neurons.area), dtype=bool)
         if areas is not None:
             conds &= (np.isin(dat.neurons.area, areas))
@@ -80,15 +78,17 @@ def mouse_static_loader(path=None,
             conds &= (np.isin(dat.neurons.unit_ids, neuron_ids))
 
         idx = np.where(conds)[0]
-        dat.transforms = [Subsample(idx), ToTensor(cuda)]
+        more_transforms = [Subsample(idx), ToTensor(cuda)]
         if normalize:
-            dat.transforms.insert(0, NeuroNormalizer(dat, exclude=exclude))
+            more_transforms.insert(0, NeuroNormalizer(dat, exclude=exclude))
 
         if include_behavior:
-            dat.transforms.insert(0, AddBehaviorAsChannels())
+            more_transforms.insert(0, AddBehaviorAsChannels())
 
         if select_input_channel is not None:
-            dat.transforms.insert(0, SelectInputChannel(select_input_channel))
+            more_transforms.insert(0, SelectInputChannel(select_input_channel))
+
+    dat.transforms.extend(more_transforms)
 
     if return_test_sampler:
         dataloader = get_oracle_dataloader(dat, toy_data=toy_data, oracle_condition=oracle_condition)
@@ -160,6 +160,79 @@ def mouse_static_loaders(paths,
                                                 normalize=normalize, include_behavior=include_behavior,
                                                 exclude=exclude, select_input_channel=select_input_channel,
                                                 toy_data=toy_data, file_tree=file_tree)
+        for k in dls:
+            dls[k][data_key] = loaders[k]
+
+    return dls
+
+
+def mouse_shared_static_loaders(paths,
+                                batch_size,
+                                seed=None,
+                                areas=None,
+                                layers=None,
+                                tier=None,
+                                neuron_ids=None,
+                                cuda=True,
+                                normalize=False,
+                                include_behavior=False,
+                                exclude=None,
+                                select_input_channel=None,
+                                toy_data=False,
+                                **kwargs):
+    """
+    Returns a dictionary of dataloaders (i.e., trainloaders, valloaders, and testloaders) for >= 1 dataset(s).
+
+    Args:
+        paths (list): list of path(s) for the dataset(s)
+        batch_size (int): batch size.
+        seed (int, optional): random seed for images. Defaults to None.
+        areas (str, optional): the visual area. Defaults to 'V1'.
+        layers (str, optional): the layer from visual area. Defaults to 'L2/3'.
+        tier (str, optional): tier is a placeholder to specify which set of images to pick for train, val, and test loader. Defaults to None.
+        neuron_ids ([type], optional): select neurons by their ids. Defaults to None.
+        cuda (bool, optional): whether to place the data on gpu or not. Defaults to True.
+
+    Returns:
+        dict: dictionary of dictionaries where the first level keys are 'train', 'validation', and 'test', and second level keys are data_keys.
+    """
+
+    # Collect overlapping multi matches
+    multi_unit_ids = []
+    per_data_set_ids = []
+    match_set = None
+    for path in paths:
+        dat = FileTreeDataset(path, 'responses')
+        multi_unit_ids.append(dat.neurons.multi_match_id)
+        per_data_set_ids.append(dat.neurons.unit_ids)
+        if match_set is None:
+            match_set = set(multi_unit_ids[-1])
+        else:
+            match_set &= set(multi_unit_ids[-1])
+    match_set -= {-1}  # remove the unmatched neurons
+    match_set = np.array(list(match_set))
+
+    # get unit_ids of intersecting multi-unit ids
+    all_set_neurons = [pdsi[np.isin(munit_ids, match_set)] for munit_ids, pdsi in zip(multi_unit_ids, per_data_set_ids)]
+
+    if neuron_ids is None:
+        neuron_ids = all_set_neurons
+    else:
+        neuron_ids = [list(set(unit_ids) & set(ni)) for unit_ids, ni in zip(all_set_neurons, neuron_ids)]
+
+    # generate single dataloaders
+    dls = OrderedDict({})
+    keys = [tier] if tier else ['train', 'validation', 'test']
+    for key in keys:
+        dls[key] = OrderedDict({})
+
+    for path, neuron_id in zip(paths, neuron_ids):
+        data_key, loaders = mouse_static_loader(path, batch_size, seed=seed,
+                                                areas=areas, layers=layers, cuda=cuda,
+                                                tier=tier, get_key=True, neuron_ids=neuron_id,
+                                                normalize=normalize, include_behavior=include_behavior,
+                                                exclude=exclude, select_input_channel=select_input_channel,
+                                                toy_data=toy_data, file_tree=True)
         for k in dls:
             dls[k][data_key] = loaders[k]
 
