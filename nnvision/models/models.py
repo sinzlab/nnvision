@@ -1,15 +1,16 @@
 import numpy as np
 import torch
 from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.readouts import PointPooled2d
 from mlutils.layers.legacy import Gaussian2d
+from mlutils.layers.readouts import PointPooled2d
 from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
 from torch.nn import functional as F
 
-from .readouts import MultipleFullGaussian2d, MultiReadout
 from .cores import SE2dCore, TransferLearningCore
+from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
+
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
@@ -541,6 +542,93 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                      gamma_readout=gamma_readout,
                                      gauss_type=isotropic)
 
+    if readout_bias:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core, readout, elu_offset)
+
+    return model
+
+
+def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
+                                    hidden_kern=3, layers=3, gamma_input=15.5,
+                                    skip=0, final_nonlinearity=True, momentum=0.9,
+                                    pad_input=False, batch_norm=True, hidden_dilation=1,
+                                    laplace_padding=None, input_regularizer='LaplaceL2norm',
+                                    init_noise=1e-3, readout_bias=True,  # readout args,
+                                    gamma_readout=4, normalize=False, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
+                                    depth_separable=False, linear=False):
+    """
+    Model class of a stacked2dCore (from mlutils) and a spatialXfeature (factorized) readout
+
+    Args:
+
+    Returns: An initialized model which consists of model.core and model.readout
+    """
+
+    if "train" in dataloaders.keys():
+        dataloaders = dataloaders["train"]
+
+    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+
+    session_shape_dict = get_dims_for_loader_dict(dataloaders)
+    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    class Encoder(nn.Module):
+
+        def __init__(self, core, readout, elu_offset):
+            super().__init__()
+            self.core = core
+            self.readout = readout
+            self.offset = elu_offset
+
+        def forward(self, x, data_key=None, **kwargs):
+            x = self.core(x)
+
+            x = self.readout(x, data_key=data_key,)
+            return F.elu(x + self.offset) + 1
+
+        def regularizer(self, data_key):
+            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
+
+    set_random_seed(seed)
+
+    # get a stacked2D core from mlutils
+    core = SE2dCore(input_channels=input_channels[0],
+                    hidden_channels=hidden_channels,
+                    input_kern=input_kern,
+                    hidden_kern=hidden_kern,
+                    layers=layers,
+                    gamma_input=gamma_input,
+                    skip=skip,
+                    final_nonlinearity=final_nonlinearity,
+                    bias=False,
+                    momentum=momentum,
+                    pad_input=pad_input,
+                    batch_norm=batch_norm,
+                    hidden_dilation=hidden_dilation,
+                    laplace_padding=laplace_padding,
+                    input_regularizer=input_regularizer,
+                    stack=stack,
+                    se_reduction=se_reduction,
+                    n_se_blocks=n_se_blocks,
+                    depth_separable=depth_separable,
+                    linear=linear)
+
+    readout = MultipleSpatialXFeatureLinear(core, in_shape_dict=in_shapes_dict,
+                                            n_neurons_dict=n_neurons_dict,
+                                            init_noise=init_noise,
+                                            bias=readout_bias,
+                                            gamma_readout=gamma_readout,
+                                            normalize=normalize
+                                            )
+
+    # initializing readout bias to mean response
     if readout_bias:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
