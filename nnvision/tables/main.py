@@ -118,7 +118,7 @@ class MonkeyExperiment(dj.Computed):
             responses   = dataloaders["train"][data_key].dataset[:].targets
 
             avg_firing  = responses.mean(dim=0)
-            fano_factor = responses.var(dim=0) / responses.mean(dim=0)
+            fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
             session_dict[data_key]['avg_firing'] = avg_firing.numpy()
             session_dict[data_key]['fano_factor'] = fano_factor.numpy()
 
@@ -147,11 +147,11 @@ class MonkeyExperiment(dj.Computed):
                 self.Units().insert1(key, ignore_extra_fields=True)
 
                 key['unit_avg_firing'] = session_dict[k]['avg_firing'][i]
-                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i] if not np.isnan(session_dict[k]['fano_factor'][i]) else 0
+                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i]
                 self.UnitStatistics().insert1(key, ignore_extra_fields=True)
 
-                key['unit_oracle'] = session_dict[k]['unit_oracles'][i] if not np.isnan(session_dict[k]['unit_oracles'][i]) else 0
-                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i] if not np.isnan(session_dict[k]['unit_explainable_variance'][i]) else 0
+                key['unit_oracle'] = session_dict[k]['unit_oracles'][i]
+                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i]
                 self.UnitMeasures().insert1(key, ignore_extra_fields=True)
 
                 key['electrode'] = session_dict[k]['electrode'][i]
