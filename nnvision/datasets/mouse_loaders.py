@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from itertools import zip_longest
+import warnings
 
 import numpy as np
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
@@ -198,6 +199,15 @@ def mouse_shared_static_loaders(paths,
     """
 
     # Collect overlapping multi matches
+
+    if len(paths) > 1:
+        warnings.warn("Only one dataset was specified in 'paths'. When using the 'mouse_shared_loaders', more than one dataset"
+                      "has to be passed. Returning Dataloaders as if the function 'mouse_static_loaders' has been called.")
+        dls = mouse_static_loaders(paths=paths, batch_size=batch_size, seed=seed, areas=areas, layers=layers,
+                                   tier=tier, neuron_ids=neuron_ids, cuda=cuda, normalize=normalize, include_behavior=include_behavior,
+                                   exclude=exclude, select_input_channel=select_input_channel, toy_data=toy_data, **kwargs)
+        return dls
+
     multi_unit_ids = []
     per_data_set_ids = []
     match_set = None
