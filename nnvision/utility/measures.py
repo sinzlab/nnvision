@@ -178,14 +178,14 @@ def get_explainable_var(dataloaders, as_dict=False):
     return explainable_var if as_dict else np.hstack([v for v in explainable_var.values()])
 
 
-def compute_explainable_var(outputs):
+def compute_explainable_var(outputs, eps=1e-9):
     ImgVariance = []
     TotalVar = np.var(np.vstack(outputs), axis=0, ddof=1)
     for out in outputs:
         ImgVariance.append(np.var(out, axis=0, ddof=1))
     ImgVariance = np.vstack(ImgVariance)
     NoiseVar = np.mean(ImgVariance, axis=0)
-    explainable_var = (TotalVar - NoiseVar) / TotalVar
+    explainable_var = (TotalVar - NoiseVar) / (TotalVar + eps)
     return explainable_var
 
 
