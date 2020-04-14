@@ -36,7 +36,7 @@ class Correlations(dj.Computed):
 
         definition = """
         -> master
-        -> MonkeyExperiment
+        -> MonkeyExperiment.Units
         ---
         validation_corr:            float
         test_corr:                  float
@@ -114,6 +114,7 @@ class StrictOracles(dj.Computed):
 
         definition = """
         -> master
+        -> MonkeyExperiment.Units
         ---
         fraction_oracle:        float
         """
@@ -131,6 +132,8 @@ class StrictOracles(dj.Computed):
 
         key["fraction_oracle"] = fraction_oracle
         self.insert1(key, ignore_extra_fields=True)
+
+
 
 
 # legacy
