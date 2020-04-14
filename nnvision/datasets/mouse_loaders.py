@@ -200,7 +200,7 @@ def mouse_shared_static_loaders(paths,
 
     # Collect overlapping multi matches
 
-    if len(paths) > 1:
+    if len(paths) == 1:
         warnings.warn("Only one dataset was specified in 'paths'. When using the 'mouse_shared_loaders', more than one dataset"
                       "has to be passed. Returning Dataloaders as if the function 'mouse_static_loaders' has been called.")
         dls = mouse_static_loaders(paths=paths, batch_size=batch_size, seed=seed, areas=areas, layers=layers,
