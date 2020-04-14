@@ -73,7 +73,7 @@ class MonkeySelectorTemplate(dj.Computed):
     
     """
 
-    _key_source = Dataset & dict(dataset_fn="nnvision.datasets.monkey_static_loader")
+    #_key_source = Dataset & dict(dataset_fn="nnvision.datasets.monkey_static_loader")
 
     def make(self, key):
         dataset_config = (Dataset & key).fetch1("dataset_config")
