@@ -170,10 +170,10 @@ def compute_oracle_corr(repeated_outputs):
             # compute oracle predictor
             oracle = (mu - outputs / r) * r / (r - 1)
 
-            if np.any(np.isnan(oracles)):
+            if np.any(np.isnan(oracle)):
                 warnings.warn('{}% NaNs when calculating the oracle. NaNs will be set to Zero.'.format(
                     np.isnan(oracle).mean() * 100))
-                oracles[np.isnan(oracles)] = 0
+                oracle[np.isnan(oracle)] = 0
 
             oracles.append(oracle)
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
