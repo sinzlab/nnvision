@@ -33,7 +33,7 @@ def model_predictions_repeats(dataloader, model, data_key, device='cpu', broadca
     
     # Forward unique images once:
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
-        with device_state(model, device):
+        with device_state(model, device) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
             output = model(unique_images.to(device), data_key=data_key).detach().cpu()
     
     output = output.numpy()   
@@ -59,7 +59,7 @@ def model_predictions(dataloader, model, data_key, device='cpu'):
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
         with torch.no_grad():
-            with device_state(model, device):
+            with device_state(model, device) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
                 output = torch.cat((output, (model(images.to(device), data_key=data_key).detach().cpu())), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
 
