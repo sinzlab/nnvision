@@ -142,7 +142,8 @@ def monkey_static_loader(dataset,
                          crop=96,
                          time_bins_sum=12,
                          avg=False,
-                         image_file=None):
+                         image_file=None,
+                         return_data_info=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -218,15 +219,22 @@ def monkey_static_loader(dataset,
         _, h, w = images.shape[:3]
 
         images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
+
         img_mean = np.mean(images_cropped)
         img_std = np.std(images_cropped)
-        img_dimensions = images.shape[1:]
-        data_info = dict(image_dimensions=img_dimensions,
-                         image_mean=img_mean,
-                         image_std=img_std)
+        input_dimensions = images.shape[1:3]
+        input_channels = images.shape[3]
+
+        data_info = dict(input_dimensions=input_dimensions,
+                         input_channels=input_channels,
+                         input_mean=img_mean,
+                         input_std=img_std)
 
         with open(stats_path, "wb") as pkl:
              pickle.dump(data_info, pkl)
+
+    if return_data_info:
+        return data_info
 
     # set up parameters for the different dataset types
     if dataset == 'PlosCB19_V1':
