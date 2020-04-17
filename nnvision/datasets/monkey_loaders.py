@@ -225,7 +225,7 @@ def monkey_static_loader(dataset,
                          image_mean=img_mean,
                          image_std=img_std)
 
-        with open(stats_path, "bb") as pkl:
+        with open(stats_path, "wb") as pkl:
              pickle.dump(data_info, pkl)
 
     # set up parameters for the different dataset types
