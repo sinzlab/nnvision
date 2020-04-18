@@ -1,6 +1,10 @@
-import numpy as np
 from torch.utils.data import DataLoader
-from mlutils.data.datasets import StaticImageSet, FileTreeDataset
+import torch
+import torch.utils.data as utils
+import numpy as np
+#from retina.retina import warp_image
+from collections import namedtuple, Iterable
+import os
 from mlutils.data.samplers import RepeatsBatchSampler
 
 
@@ -58,3 +62,128 @@ def get_validation_split(n_images, train_frac, seed):
     assert not np.any(np.isin(train_idx, val_idx)), "train_set and val_set are overlapping sets"
 
     return train_idx, val_idx
+
+
+class ImageCache:
+    """
+    A simple cache which loads images into memory given a path to the directory where the images are stored.
+    Images need to be present as 2D .npy arrays
+    """
+
+    def __init__(self, path=None, subsample=1, crop=0, img_mean=None, img_std=None, filename_precision=6):
+        """
+
+        path: str - pointing to the directory, where the individual .npy files are present
+        subsample: int - amount of downsampling
+        crop:  the expected input is a list of tuples, the specify the exact cropping from all four sides
+                i.e. [(crop_left, crop_right), (crop_top, crop_down)]
+        img_mean: - mean luminance across all images
+        img_std: - std of the luminance across all images
+        leading_zeros: - amount leading zeros of the files in the specified folder
+        """
+        self.cache = {}
+        self.path = path
+        self.subsample = subsample
+        self.crop = crop
+        self.img_mean = img_mean
+        self.img_std = img_std
+        self.leading_zeros = filename_precision
+
+    def __len__(self):
+        return len([file for file in os.listdir(self.path) if file.endswith('.npy')])
+
+    def __contains__(self, key):
+        return key in self.cache
+
+    def __getitem__(self, item):
+        item = item.tolist() if isinstance(item, Iterable) else item
+        return [self[i] for i in item] if isinstance(item, Iterable) else self.update(item)
+
+    def update(self, key):
+        if key in self.cache:
+            return self.cache[key]
+        else:
+            filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
+            image = np.load(filename)
+            transformed_image = self.transform_image(image)
+            self.cache[key] = transformed_image
+            return transformed_image
+
+    def transform_image(self, image):
+        """
+        applies transformations to the image: downsampling and cropping, z-scoring, and dimension expansion.
+        """
+        h, w = image.shape
+        image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample, self.crop[1][0]:w - self.crop[1][1]:self.subsample]
+        image = (image - self.img_mean) / self.img_std
+        image = image[None,]
+        return torch.tensor(image).to(torch.float)
+
+    @property
+    def cache_size(self):
+        return len(self.cache)
+
+
+class CachedTensorDataset(utils.Dataset):
+    """
+    Dataset wrapping tensors.
+
+    Each sample will be retrieved by indexing tensors along the first dimension.
+
+    Arguments:
+        *tensors (Tensor): tensors that have the same size of the first dimension.
+    """
+
+    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None):
+        if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
+            raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
+        if not len(tensors) == len(names):
+            raise ValueError('Number of tensors and names provided have to match.  If there are more than two tensors,'
+                             'names have to be passed to the TensorDataset')
+        self.tensors = tensors
+        self.input_position = names.index("inputs")
+        self.DataPoint = namedtuple('DataPoint', names)
+        self.image_cache = image_cache
+
+    def __getitem__(self, index):
+        """
+        retrieves the inputs (= tensors[0]) from the image cache. If the image ID is not present in the cache,
+            the cache is updated to load the corresponding image into memory.
+        """
+        if type(index) == int:
+            key = self.tensors[0][index].item()
+        else:
+            key = self.tensors[0][index].numpy().astype(np.int32)
+
+        tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
+                            for pos, tensor in enumerate(self.tensors)]
+
+        return self.DataPoint(*tensors_expanded)
+
+    def __len__(self):
+        return self.tensors[0].size(0)
+
+
+def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cache=None, repeat_condition=None):
+    """
+
+    Args:
+        image_ids: an array of image IDs
+        responses: Numpy Array, Dimensions: N_images x Neurons
+        batch_size: int - batch size for the dataloader
+        shuffle: Boolean, shuffles image in the dataloader if True
+        image_cache: a cache object which stores the images
+
+    Returns: a PyTorch DataLoader object
+    """
+
+    image_ids = torch.tensor(image_ids.astype(np.int32))
+    responses = torch.tensor(responses).to(torch.float)
+    dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
+    sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
+
+    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
+                                                                                                            batch_size=batch_size,
+                                                                                                            shuffle=shuffle,
+                                                                                                            )
+    return dataloader
