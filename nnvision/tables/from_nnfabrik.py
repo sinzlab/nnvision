@@ -31,11 +31,7 @@ class DataInfo(DataInfoBase):
                 stats_path = os.path.join(path if path is not None else image_cache_path, 'statistics/', stats_file)
 
                 if not os.path.exists(stats_path):
-                    data_info = (self & restr).fetch1("input_dimensions",
-                                                      "input_channels",
-                                                      "input_mean",
-                                                      "input_std",
-                                                      as_dict=True)
+                    data_info = (self & restr).fetch1("data_info")
 
                     with open(stats_path, "wb") as pkl:
                         pickle.dump(data_info, pkl)
