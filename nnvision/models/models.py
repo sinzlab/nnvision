@@ -10,6 +10,7 @@ from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
+from .utility import unpack_data_info
 
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
@@ -79,16 +80,19 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     class Encoder(nn.Module):
 
