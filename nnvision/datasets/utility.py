@@ -34,7 +34,6 @@ def get_oracle_dataloader(dat,
     classes, class_idx = np.unique(image_class, return_inverse=True)
     identifiers = condition_hashes + class_idx * max_idx
 
-
     sampling_condition = np.where(dat.tiers == 'test')[0] if oracle_condition is None else \
         np.where((dat.tiers == 'test') & (class_idx == oracle_condition))[0]
     if (oracle_condition is not None) and verbose:
