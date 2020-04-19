@@ -534,14 +534,21 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                 final_nonlinearity=final_nonlinearity,
                                 bias=bias)
 
-    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                     n_neurons_dict=n_neurons_dict,
-                                     init_mu_range=init_mu_range,
-                                     bias=readout_bias,
-                                     init_sigma=init_sigma_range,
-                                     gamma_readout=gamma_readout,
-                                     gauss_type=isotropic)
+#     readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
+#                                      n_neurons_dict=n_neurons_dict,
+#                                      init_mu_range=init_mu_range,
+#                                      bias=readout_bias,
+#                                      init_sigma=init_sigma_range,
+#                                      gamma_readout=gamma_readout,
+#                                      gauss_type=isotropic)
 
+    readout = MultipleGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                 n_neurons_dict=n_neurons_dict,
+                                 init_mu_range=init_mu_range,
+                                 bias=readout_bias,
+                                 init_sigma_range=init_sigma_range,
+                                 gamma_readout=gamma_readout)
+    
     if readout_bias:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
