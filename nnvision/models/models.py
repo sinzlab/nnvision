@@ -62,7 +62,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False,
+                          depth_separable=False, linear=False, data_info=None,
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -158,7 +158,7 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
                                init_mu_range=0.2, init_sigma=1., readout_bias=True,  # readout args,
                                gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
                                depth_separable=False, linear=False, gauss_type='full',
-                               grid_mean_predictor=None, share_features=False, share_grid=False
+                               grid_mean_predictor=None, share_features=False, share_grid=False, data_info=None,
                                ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -293,7 +293,7 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           pool_steps=2, pool_kern=3, init_range=0.2, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False,
+                          depth_separable=False, linear=False, data_info=None,
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -387,7 +387,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                     pad_input=False, batch_norm=True, hidden_dilation=1,
                                     laplace_padding=None, input_regularizer='LaplaceL2norm',
                                     readout_bias=True, init_mu_range=0.2, init_sigma_range=0.5,  # readout args,
-                                    gamma_readout=0.1, elu_offset=0, stack=None, isotropic=True
+                                    gamma_readout=0.1, elu_offset=0, stack=None, gauss_type='uncorrelated', data_info=None,
                                     ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -458,7 +458,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                      init_sigma=init_sigma_range,
                                      bias=readout_bias,
                                      gamma_readout=gamma_readout,
-                                     gauss_type=isotropic
+                                     gauss_type=gauss_type,
                                      )
 
     if readout_bias:
@@ -476,7 +476,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
                            model_layer=11, momentum=0.1, final_batchnorm=True,
                            final_nonlinearity=True, bias=False,
                            init_mu_range=0.4, init_sigma_range=0.6, readout_bias=True,  # begin or readout args
-                           gamma_readout=0.002, elu_offset=-1, isotropic=True):
+                           gamma_readout=0.002, elu_offset=-1, gauss_type='uncorrelated'):
     """
     A Model class of a predefined core (using models from torchvision.models). Can be initialized pretrained or random.
     Can also be set to be trainable or not, independent of initialization.
@@ -540,7 +540,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                      bias=readout_bias,
                                      init_sigma=init_sigma_range,
                                      gamma_readout=gamma_readout,
-                                     gauss_type=isotropic)
+                                     gauss_type=gauss_type)
 
     if readout_bias:
         for key, value in dataloaders.items():
