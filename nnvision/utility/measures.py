@@ -157,6 +157,9 @@ def compute_oracle_corr(repeated_outputs):
     if len(repeated_outputs.shape) == 3:
         _, r, n = repeated_outputs.shape
         oracles = (repeated_outputs.mean(axis=1, keepdims=True) - repeated_outputs / r) * r / (r - 1)
+        if np.any(np.isnan(oracles)):
+            warnings.warn('{}% NaNs when calculating the oracle. NaNs will be set to Zero.'.format(np.isnan(oracles).mean() * 100))
+        oracles[np.isnan(oracles)] = 0
         return corr(oracles.reshape(-1, n), repeated_outputs.reshape(-1, n), axis=0)
     else:
         oracles = []
@@ -166,6 +169,12 @@ def compute_oracle_corr(repeated_outputs):
             mu = outputs.mean(axis=0, keepdims=True)
             # compute oracle predictor
             oracle = (mu - outputs / r) * r / (r - 1)
+
+            if np.any(np.isnan(oracle)):
+                warnings.warn('{}% NaNs when calculating the oracle. NaNs will be set to Zero.'.format(
+                    np.isnan(oracle).mean() * 100))
+                oracle[np.isnan(oracle)] = 0
+
             oracles.append(oracle)
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
 
@@ -178,14 +187,14 @@ def get_explainable_var(dataloaders, as_dict=False):
     return explainable_var if as_dict else np.hstack([v for v in explainable_var.values()])
 
 
-def compute_explainable_var(outputs):
+def compute_explainable_var(outputs, eps=1e-9):
     ImgVariance = []
     TotalVar = np.var(np.vstack(outputs), axis=0, ddof=1)
     for out in outputs:
         ImgVariance.append(np.var(out, axis=0, ddof=1))
     ImgVariance = np.vstack(ImgVariance)
     NoiseVar = np.mean(ImgVariance, axis=0)
-    explainable_var = (TotalVar - NoiseVar) / TotalVar
+    explainable_var = (TotalVar - NoiseVar) / (TotalVar + eps)
     return explainable_var
 
 

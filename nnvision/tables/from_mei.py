@@ -4,7 +4,7 @@ from nnfabrik.main import Dataset
 from .from_nnfabrik import TrainedModel
 from mlutils.data.datasets import StaticImageSet
 from featurevis import integration
-from ..mei.helpers import get_neuron_mappings_sessions, get_real_mappings
+from ..mei.helpers import get_neuron_mappings, get_real_mappings
 
 schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
 
@@ -67,16 +67,17 @@ class MonkeySelectorTemplate(dj.Computed):
     # the model. 
     -> self.dataset_table
     neuron_id       : int # unique neuron identifier
+    session_id      : varchar(13)       # unique session identifier
     ---
     neuron_position : int # integer position of the neuron in the model's output 
-    session_id      : varchar(13)       # unique session identifier
+    
     """
 
-    _key_source = Dataset & dict(dataset_fn="nnvision.datasets.monkey_static_loader")
+    #_key_source = Dataset & dict(dataset_fn="nnvision.datasets.monkey_static_loader")
 
     def make(self, key):
         dataset_config = (Dataset & key).fetch1("dataset_config")
-        mappings = get_neuron_mappings_sessions(dataset_config, key)
+        mappings = get_neuron_mappings(dataset_config, key)
         self.insert(mappings)
 
     def get_output_selected_model(self, model, key):

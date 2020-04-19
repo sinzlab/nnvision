@@ -1,17 +1,18 @@
 from collections import OrderedDict
 from itertools import zip_longest
+import warnings
 
 import numpy as np
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
+from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels, SelectInputChannel
 from mlutils.data.samplers import SubsetSequentialSampler
-from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels
 from nnfabrik.utility.nn_helpers import set_random_seed
+from .utility import get_oracle_dataloader
 from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 
-
-def mouse_static_loader(path,
-                        batch_size,
+def mouse_static_loader(path=None,
+                        batch_size=None,
                         seed=None,
                         areas=None,
                         layers=None,
@@ -25,6 +26,8 @@ def mouse_static_loader(path,
                         select_input_channel=None,
                         toy_data=False,
                         file_tree=False,
+                        return_test_sampler=False,
+                        oracle_condition=None,
                         **kwargs):
     """
     returns a single data
@@ -45,6 +48,10 @@ def mouse_static_loader(path,
         if get_key is True it also the data_key (as the first output) followed by the dalaoder dictionary.
 
     """
+    if ("paths" in kwargs) and (path is None):
+        paths = kwargs["paths"]
+        path = paths[0] if len(paths) == 1 else None
+
     if file_tree:
         dat = FileTreeDataset(path, 'images', 'responses', 'behavior') if include_behavior else FileTreeDataset(path,
                                                                                                                 'images',
@@ -83,6 +90,10 @@ def mouse_static_loader(path,
             more_transforms.insert(0, SelectInputChannel(select_input_channel))
 
     dat.transforms.extend(more_transforms)
+
+    if return_test_sampler:
+        dataloader = get_oracle_dataloader(dat, toy_data=toy_data, oracle_condition=oracle_condition)
+        return dataloader
 
     # subsample images
     dataloaders = {}
@@ -188,6 +199,15 @@ def mouse_shared_static_loaders(paths,
     """
 
     # Collect overlapping multi matches
+
+    if len(paths) == 1:
+        warnings.warn("Only one dataset was specified in 'paths'. When using the 'mouse_shared_loaders', more than one dataset"
+                      "has to be passed. Returning Dataloaders as if the function 'mouse_static_loaders' has been called.")
+        dls = mouse_static_loaders(paths=paths, batch_size=batch_size, seed=seed, areas=areas, layers=layers,
+                                   tier=tier, neuron_ids=neuron_ids, cuda=cuda, normalize=normalize, include_behavior=include_behavior,
+                                   exclude=exclude, select_input_channel=select_input_channel, toy_data=toy_data, **kwargs)
+        return dls
+
     multi_unit_ids = []
     per_data_set_ids = []
     match_set = None

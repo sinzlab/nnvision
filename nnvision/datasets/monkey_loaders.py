@@ -6,7 +6,7 @@ import pickle
 from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
-
+from .utility import get_validation_split
 
 class ImageCache:
     """
@@ -142,7 +142,8 @@ def monkey_static_loader(dataset,
                          crop=96,
                          time_bins_sum=12,
                          avg=False,
-                         image_file=None):
+                         image_file=None,
+                         return_data_info=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -188,25 +189,52 @@ def monkey_static_loader(dataset,
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
 
-    if image_file is not None and os.path.exists(image_file):
-        with open(image_file, "rb") as pkl:
-            images = pickle.load(pkl)
-    else:
-        image_paths = os.listdir(image_cache_path)
-        images = []
-        for image in image_paths:
-            images.append(np.load(os.path.join(image_cache_path, image)))
-        images = np.stack(images)
-
-    images = images[:, :, :, None]
-    _, h, w = images.shape[:3]
-
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
-    images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
-    img_mean = np.mean(images_cropped)
-    img_std = np.std(images_cropped)
+    # Load image statistics if present
+    stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
+    stats_path = os.path.join(image_cache_path, 'statistics/', stats_file)
+
+    if os.path.exists(stats_path):
+        with open(stats_path, "rb") as pkl:
+            data_info = pickle.load(pkl)
+        img_mean = data_info["image_mean"]
+        img_std = data_info["image_std"]
+
+    else:
+        if image_file is not None and os.path.exists(image_file):
+            with open(image_file, "rb") as pkl:
+                images = pickle.load(pkl)
+        else:
+            image_paths = os.listdir(image_cache_path)
+            images = []
+            for image in image_paths:
+                image_path = os.path.join(image_cache_path, image)
+                if not os.path.isdir(image_path):
+                    images.append(np.load(image_path))
+            images = np.stack(images)
+
+        images = images[:, :, :, None]
+        _, h, w = images.shape[:3]
+
+        images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
+
+        img_mean = np.mean(images_cropped)
+        img_std = np.std(images_cropped)
+        input_dimensions = images.shape[1:3]
+        input_channels = images.shape[3]
+
+        data_info = dict(input_dimensions=input_dimensions,
+                         input_channels=input_channels,
+                         input_mean=img_mean,
+                         input_std=img_std)
+
+        with open(stats_path, "wb") as pkl:
+             pickle.dump(data_info, pkl)
+
+    if return_data_info:
+        return data_info
 
     # set up parameters for the different dataset types
     if dataset == 'PlosCB19_V1':
@@ -222,7 +250,6 @@ def monkey_static_loader(dataset,
     all_train_ids, all_validation_ids = get_validation_split(n_images=images.shape[0] * train_test_split,
                                                              train_frac=train_frac,
                                                              seed=seed)
-
     # Initialize the Image Cache class
     cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, img_mean=img_mean, img_std=img_std)
 
@@ -267,22 +294,3 @@ def monkey_static_loader(dataset,
 
     return dataloaders
 
-
-def get_validation_split(n_images, train_frac, seed):
-    """
-    Splits the total number of images into train and test set.
-    This ensures that in every session, the same train and validation images are being used.
-
-    Args:
-        n_images: Total number of images. These will be plit into train and validation set
-        train_frac: fraction of images used for the training set
-        seed: random seed
-
-    Returns: Two arrays, containing image IDs of the whole imageset, split into train and validation
-
-    """
-    if seed: np.random.seed(seed)
-    train_idx, val_idx = np.split(np.random.permutation(int(n_images)), [int(n_images*train_frac)])
-    assert not np.any(np.isin(train_idx, val_idx)), "train_set and val_set are overlapping sets"
-
-    return train_idx, val_idx
