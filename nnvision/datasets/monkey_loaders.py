@@ -165,7 +165,7 @@ def monkey_static_loader(dataset,
         dataloaders["test"][data_key] = test_loader
 
     if not os.path.exists(stats_path):
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
