@@ -476,7 +476,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
                            model_layer=11, momentum=0.1, final_batchnorm=True,
                            final_nonlinearity=True, bias=False,
                            init_mu_range=0.4, init_sigma_range=0.6, readout_bias=True,  # begin or readout args
-                           gamma_readout=0.002, elu_offset=-1, isotropic=True):
+                           gamma_readout=0.002, elu_offset=-1, gauss_type='uncorrelated'):
     """
     A Model class of a predefined core (using models from torchvision.models). Can be initialized pretrained or random.
     Can also be set to be trainable or not, independent of initialization.
@@ -534,13 +534,6 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                 final_nonlinearity=final_nonlinearity,
                                 bias=bias)
 
-#     readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
-#                                      n_neurons_dict=n_neurons_dict,
-#                                      init_mu_range=init_mu_range,
-#                                      bias=readout_bias,
-#                                      init_sigma=init_sigma_range,
-#                                      gamma_readout=gamma_readout,
-#                                      gauss_type=isotropic)
 
     readout = MultipleGaussian2d(core, in_shape_dict=in_shapes_dict,
                                  n_neurons_dict=n_neurons_dict,
