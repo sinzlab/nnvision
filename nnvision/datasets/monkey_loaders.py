@@ -77,36 +77,39 @@ def monkey_static_loader(dataset,
     stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_file)
 
+
+
+
+    if image_file is not None and os.path.exists(image_file):
+        with open(image_file, "rb") as pkl:
+            images = pickle.load(pkl)
+    else:
+        image_paths = os.listdir(image_cache_path)
+
+        images = []
+        for image in image_paths:
+            image_path = os.path.join(image_cache_path, image)
+            if not os.path.isdir(image_path):
+                images.append(np.load(image_path))
+        images = np.stack(images)
+
+    images = images[:, :, :, None]
+    _, h, w = images.shape[:3]
+
+    images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
+
     if os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
         if return_data_info:
             return data_info
-        img_mean = list(data_info["img_mean"].values())[0]
-        img_std = list(data_info["img_std"].values())[0]
-
+        img_mean = list(data_info.values())[0]["img_mean"]
+        img_std = list(data_info.values())[0]["img_std"]
     else:
-        if image_file is not None and os.path.exists(image_file):
-            with open(image_file, "rb") as pkl:
-                images = pickle.load(pkl)
-        else:
-            image_paths = os.listdir(image_cache_path)
-
-            images = []
-            for image in image_paths:
-                image_path = os.path.join(image_cache_path, image)
-                if not os.path.isdir(image_path):
-                    images.append(np.load(image_path))
-            images = np.stack(images)
-
-        images = images[:, :, :, None]
-        _, h, w = images.shape[:3]
-
-        images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
-
         img_mean = np.mean(images_cropped)
         img_std = np.std(images_cropped)
-        data_info = {}
+
+    data_info = {}
 
     # set up parameters for the different dataset types
     if dataset == 'PlosCB19_V1':
