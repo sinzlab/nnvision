@@ -92,7 +92,7 @@ def mouse_static_loader(path=None,
     dat.transforms.extend(more_transforms)
 
     if return_test_sampler:
-        dataloader = get_oracle_dataloader(dat, toy_data=toy_data, oracle_condition=oracle_condition)
+        dataloader = get_oracle_dataloader(dat, toy_data=toy_data, oracle_condition=oracle_condition, file_tree=file_tree)
         return dataloader
 
     # subsample images
