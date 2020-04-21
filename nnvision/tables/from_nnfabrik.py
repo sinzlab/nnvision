@@ -14,7 +14,7 @@ schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
 class TrainedModel(TrainedModelBase):
     table_comment = "Trained models"
 
-
+@schema
 class DataInfo(DataInfoBase):
 
     def create_stats_files(self, key=None, path=None):

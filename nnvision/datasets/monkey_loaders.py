@@ -71,11 +71,13 @@ def monkey_static_loader(dataset,
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
+    # clean up image path because of legacy folder structure
+    image_cache_path = os.path.dirname(image_cache_path) if 'individual' in image_cache_path else image_cache_path
+
     # Load image statistics if present
     stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_file)
 
-    
     if image_file is not None and os.path.exists(image_file):
         with open(image_file, "rb") as pkl:
             images = pickle.load(pkl)
@@ -94,7 +96,7 @@ def monkey_static_loader(dataset,
 
     images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
 
-    
+
     if os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
@@ -105,8 +107,7 @@ def monkey_static_loader(dataset,
     else:
         img_mean = np.mean(images_cropped)
         img_std = np.std(images_cropped)
-    
-    
+
     data_info = {}
 
     # set up parameters for the different dataset types
@@ -170,10 +171,10 @@ def monkey_static_loader(dataset,
         dataloaders["test"][data_key] = test_loader
 
     if (store_data_info or return_data_info) and (not os.path.exists(stats_path)):
-                
+
         in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
-        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
