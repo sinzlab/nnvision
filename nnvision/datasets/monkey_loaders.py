@@ -8,6 +8,7 @@ import os
 from mlutils.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.dj_helpers import make_hash
 
 
 def monkey_static_loader(dataset,
@@ -62,6 +63,8 @@ def monkey_static_loader(dataset,
     Returns: nested dictionary of dataloaders
     """
 
+    dataset_config = locals()
+
     # initialize dataloaders as empty dict
     dataloaders = {'train': {}, 'validation': {}, 'test': {}}
 
@@ -75,8 +78,8 @@ def monkey_static_loader(dataset,
     image_cache_path = os.path.dirname(image_cache_path) if 'individual' in image_cache_path else image_cache_path
 
     # Load image statistics if present
-    stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_file)
+    stats_filename = make_hash(dataset_config)
+    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
 
     if image_file is not None and os.path.exists(image_file):
         with open(image_file, "rb") as pkl:
