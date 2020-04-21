@@ -21,7 +21,8 @@ def monkey_static_loader(dataset,
                          time_bins_sum=12,
                          avg=False,
                          image_file=None,
-                         return_data_info=False):
+                         return_data_info=False,
+                         store_data_info=True):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -76,9 +77,6 @@ def monkey_static_loader(dataset,
     # Load image statistics if present
     stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_file)
-
-
-
 
     if image_file is not None and os.path.exists(image_file):
         with open(image_file, "rb") as pkl:
@@ -171,7 +169,7 @@ def monkey_static_loader(dataset,
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
 
-    if not os.path.exists(stats_path):
+    if store_data_info and not os.path.exists(stats_path):
         in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
