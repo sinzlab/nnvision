@@ -9,11 +9,6 @@ import pickle
 
 schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
 
-
-@schema
-class TrainedModel(TrainedModelBase):
-    table_comment = "Trained models"
-
 @schema
 class DataInfo(DataInfoBase):
 
@@ -34,3 +29,9 @@ class DataInfo(DataInfoBase):
 
                     with open(stats_path, "wb") as pkl:
                         pickle.dump(data_info, pkl)
+
+
+@schema
+class TrainedModel(TrainedModelBase):
+    table_comment = "Trained models"
+    data_info_table = DataInfo
