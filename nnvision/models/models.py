@@ -94,6 +94,8 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
     class Encoder(nn.Module):
 
         def __init__(self, core, readout, elu_offset):
@@ -115,7 +117,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     set_random_seed(seed)
 
     # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
+    core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
                     hidden_kern=hidden_kern,
