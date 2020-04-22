@@ -10,7 +10,7 @@ from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
-
+from .utility import unpack_data_info
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
@@ -62,7 +62,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           init_mu_range=0.2, init_sigma_range=0.5, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False,
+                          depth_separable=False, linear=False, data_info=None,
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -79,16 +79,19 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     class Encoder(nn.Module):
 
@@ -158,7 +161,7 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
                                init_mu_range=0.2, init_sigma=1., readout_bias=True,  # readout args,
                                gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
                                depth_separable=False, linear=False, gauss_type='full',
-                               grid_mean_predictor=None, share_features=False, share_grid=False
+                               grid_mean_predictor=None, share_features=False, share_grid=False, data_info=None,
                                ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -293,7 +296,7 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                           laplace_padding=None, input_regularizer='LaplaceL2norm',
                           pool_steps=2, pool_kern=3, init_range=0.2, readout_bias=True,  # readout args,
                           gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                          depth_separable=False, linear=False,
+                          depth_separable=False, linear=False, data_info=None,
                           ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -310,16 +313,19 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     class Encoder(nn.Module):
 
@@ -387,7 +393,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                     pad_input=False, batch_norm=True, hidden_dilation=1,
                                     laplace_padding=None, input_regularizer='LaplaceL2norm',
                                     readout_bias=True, init_mu_range=0.2, init_sigma_range=0.5,  # readout args,
-                                    gamma_readout=0.1, elu_offset=0, stack=None, isotropic=True
+                                    gamma_readout=0.1, elu_offset=0, stack=None, isotropic=True, data_info=None,
                                     ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -404,15 +410,20 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        
     assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
 
     class Encoder(nn.Module):
@@ -476,7 +487,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
                            model_layer=11, momentum=0.1, final_batchnorm=True,
                            final_nonlinearity=True, bias=False,
                            init_mu_range=0.4, init_sigma_range=0.6, readout_bias=True,  # begin or readout args
-                           gamma_readout=0.002, elu_offset=-1, gauss_type='uncorrelated'):
+                           gamma_readout=0.002, elu_offset=-1, gauss_type='uncorrelated', data_info=None):
     """
     A Model class of a predefined core (using models from torchvision.models). Can be initialized pretrained or random.
     Can also be set to be trainable or not, independent of initialization.
@@ -494,15 +505,20 @@ def vgg_core_gauss_readout(dataloaders, seed,
     Returns:
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        
     assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
 
     class Encoder(nn.Module):
@@ -542,7 +558,8 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                  init_sigma_range=init_sigma_range,
                                  gamma_readout=gamma_readout)
     
-    if readout_bias:
+    
+    if readout_bias and (dataloaders is not None):
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -559,7 +576,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
                                     laplace_padding=None, input_regularizer='LaplaceL2norm',
                                     init_noise=1e-3, readout_bias=True,  # readout args,
                                     gamma_readout=4, normalize=False, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                                    depth_separable=False, linear=False):
+                                    depth_separable=False, linear=False, data_info=None):
     """
     Model class of a stacked2dCore (from mlutils) and a spatialXfeature (factorized) readout
 
@@ -568,16 +585,19 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     class Encoder(nn.Module):
 
