@@ -24,11 +24,10 @@ class DataInfo(DataInfoBase):
 
             for restr in key:
                 dataset_config = (self.dataset_table & restr).fetch1("dataset_config")
-                crop = dataset_config.get("crop", None)
-                subsample = dataset_config.get("subsample", None)
                 image_cache_path = dataset_config.get("image_cache_path", None)
-                stats_file = "crop_{}_subsample_{}.pickle".format(crop, subsample)
-                stats_path = os.path.join(path if path is not None else image_cache_path, 'statistics/', stats_file)
+                image_cache_path = os.path.dirname(image_cache_path) if 'individual' in image_cache_path else image_cache_path
+                stats_filename = make_hash(dataset_config)
+                stats_path = os.path.join(path if path is not None else image_cache_path, 'statistics/', stats_filename)
 
                 if not os.path.exists(stats_path):
                     data_info = (self & restr).fetch1("data_info")
