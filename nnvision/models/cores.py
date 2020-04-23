@@ -6,8 +6,11 @@ from mlutils import regularizers
 
 from torch.nn import functional as F
 from torchvision.models import vgg16, alexnet, vgg19, vgg19_bn
-#from ptrnets import vgg19_original, vgg19_norm
-#from ptrnets import vgg16_shape
+
+try:
+    from ptrnets import vgg19_original, vgg19_norm
+except:
+    pass
 
 
 class TransferLearningCore(Core2d, nn.Module):

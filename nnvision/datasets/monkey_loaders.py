@@ -19,11 +19,12 @@ def monkey_static_loader(dataset,
                          train_frac=0.8,
                          subsample=1,
                          crop=96,
+                         scale=1,
                          time_bins_sum=12,
                          avg=False,
                          image_file=None,
                          return_data_info=False,
-                         store_data_info=True):
+                         store_data_info=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -57,6 +58,7 @@ def monkey_static_loader(dataset,
         crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
             if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
                 i.e. [(crop_left, crop_right), (crop_top, crop_bottom)]
+        scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
 
@@ -80,25 +82,9 @@ def monkey_static_loader(dataset,
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
-
-    if image_file is not None and os.path.exists(image_file):
-        with open(image_file, "rb") as pkl:
-            images = pickle.load(pkl)
-    else:
-        image_paths = os.listdir(image_cache_path)
-
-        images = []
-        for image in image_paths:
-            image_path = os.path.join(image_cache_path, image)
-            if not os.path.isdir(image_path):
-                images.append(np.load(image_path))
-        images = np.stack(images)
-
-    images = images[:, :, :, None]
-    _, h, w = images.shape[:3]
-
-    images_cropped = images[:, crop[0][0]:h - crop[0][1]:subsample, crop[1][0]:w - crop[1][1]:subsample, :]
-
+    
+    # Get mean and std
+   
     if os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
@@ -106,10 +92,20 @@ def monkey_static_loader(dataset,
             return data_info
         img_mean = list(data_info.values())[0]["img_mean"]
         img_std = list(data_info.values())[0]["img_std"]
+        
+        # Initialize cache
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
     else:
-        img_mean = np.mean(images_cropped)
-        img_std = np.std(images_cropped)
-
+        # Initialize cache with no normalization
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False) 
+        
+        # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+        cache.zscore_images(update_stats=True)
+        img_mean = cache.img_mean
+        img_std  = cache.img_std
+    
+    
+    n_images = len(cache)
     data_info = {}
 
     # set up parameters for the different dataset types
@@ -123,12 +119,10 @@ def monkey_static_loader(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    all_train_ids, all_validation_ids = get_validation_split(n_images=images.shape[0] * train_test_split,
+    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
                                                              train_frac=train_frac,
                                                              seed=seed)
-    # Initialize the Image Cache class
-    cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, img_mean=img_mean, img_std=img_std)
-
+    
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
 
@@ -172,7 +166,9 @@ def monkey_static_loader(dataset,
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
 
+
     if store_data_info and not os.path.exists(stats_path):
+
         in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
@@ -187,6 +183,7 @@ def monkey_static_loader(dataset,
                                        img_mean=img_mean,
                                        img_std=img_std)
 
+        
         with open(stats_path, "wb") as pkl:
             pickle.dump(data_info, pkl)
 

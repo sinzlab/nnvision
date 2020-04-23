@@ -12,7 +12,6 @@ from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
 from .utility import unpack_data_info
 
-
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
         # super init to get the _module attribute
@@ -399,7 +398,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                     pad_input=False, batch_norm=True, hidden_dilation=1,
                                     laplace_padding=None, input_regularizer='LaplaceL2norm',
                                     readout_bias=True, init_mu_range=0.2, init_sigma_range=0.5,  # readout args,
-                                    gamma_readout=0.1, elu_offset=0, stack=None, gauss_type='uncorrelated', data_info=None,
+                                    gamma_readout=0.1, elu_offset=0, stack=None, isotropic=True, data_info=None,
                                     ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -429,6 +428,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+        
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
@@ -474,7 +474,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                      init_sigma=init_sigma_range,
                                      bias=readout_bias,
                                      gamma_readout=gamma_readout,
-                                     gauss_type=gauss_type,
+                                     gauss_type=isotropic
                                      )
 
     if readout_bias and data_info is None:
@@ -515,6 +515,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
     else:
         if "train" in dataloaders.keys():
             dataloaders = dataloaders["train"]
+
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
         in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
@@ -641,14 +642,15 @@ def vgg_core_full_gauss_readout(dataloaders, seed,
                                 final_nonlinearity=final_nonlinearity,
                                 bias=bias)
 
-    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
-                                     n_neurons_dict=n_neurons_dict,
-                                     init_mu_range=init_mu_range,
-                                     bias=readout_bias,
-                                     init_sigma=init_sigma_range,
-                                     gamma_readout=gamma_readout,
-                                     gauss_type=gauss_type)
 
+    readout = MultipleGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                 n_neurons_dict=n_neurons_dict,
+                                 init_mu_range=init_mu_range,
+                                 bias=readout_bias,
+                                 init_sigma_range=init_sigma_range,
+                                 gamma_readout=gamma_readout)
+    
+    
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
@@ -680,6 +682,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
     else:
         if "train" in dataloaders.keys():
             dataloaders = dataloaders["train"]
+
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
         in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields

@@ -138,7 +138,9 @@ class MonkeyExperiment(dj.Computed):
             key['session_id'] = k
             key['animal_id'] = str(v["animal_id"])
             key['n_neurons'] = v["n_neurons"]
-
+            key['x_grid']    = v["x_grid"]
+            key['y_grid']    = v["y_grid"]
+            
             self.Sessions().insert1(key, ignore_extra_fields=True)
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
