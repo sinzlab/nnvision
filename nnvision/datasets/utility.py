@@ -168,23 +168,6 @@ class ImageCache:
             self.img_mean = np.float32(img_mean.item())
             self.img_std  = np.float32(img_std.item())
         
-        
-        
-        
-        
-                
-        
-        
-            
-            
-            
-            
-            pass
-        return
-        
-        
-            
-        
 
 
 class CachedTensorDataset(utils.Dataset):
