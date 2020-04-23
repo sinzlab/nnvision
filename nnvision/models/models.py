@@ -93,6 +93,8 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
     class Encoder(nn.Module):
 
         def __init__(self, core, readout, elu_offset):
@@ -113,8 +115,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
     set_random_seed(seed)
 
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
+    core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
                     hidden_kern=hidden_kern,
@@ -143,7 +144,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                                  gamma_readout=gamma_readout)
 
     # initializing readout bias to mean response
-    if readout_bias:
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -190,14 +191,21 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
     Returns: An initialized model which consists of model.core and model.readout
     """
 
-    if "train" in dataloaders.keys():
-        dataloaders = dataloaders["train"]
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
 
-    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
-    session_shape_dict = get_dims_for_loader_dict(dataloaders)
-    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
     source_grids = None
     grid_mean_predictor_type = None
@@ -217,9 +225,6 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
         for match_id in shared_match_ids.values():
             assert len(set(match_id) & all_multi_unit_ids) == len(all_multi_unit_ids), \
                 'All multi unit IDs must be present in all datasets'
-
-    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
-    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     class Encoder(nn.Module):
 
@@ -241,8 +246,7 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
 
     set_random_seed(seed)
 
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
+    core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
                     hidden_kern=hidden_kern,
@@ -279,7 +283,7 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
                                      )
 
     # initializing readout bias to mean response
-    if readout_bias:
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -327,6 +331,8 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
     class Encoder(nn.Module):
 
         def __init__(self, core, readout, elu_offset):
@@ -346,8 +352,7 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
     set_random_seed(seed)
 
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
+    core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
                     hidden_kern=hidden_kern,
@@ -377,7 +382,7 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
                                     init_range=init_range)
 
     # initializing readout bias to mean response
-    if readout_bias:
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -424,7 +429,8 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
         
-    assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
     class Encoder(nn.Module):
 
@@ -444,8 +450,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
 
     set_random_seed(seed)
 
-    # get a stacked2D core from mlutils
-    core = Stacked2dCore(input_channels=input_channels[0],
+    core = Stacked2dCore(input_channels=core_input_channels,
                          hidden_channels=hidden_channels,
                          input_kern=input_kern,
                          hidden_kern=hidden_kern,
@@ -472,7 +477,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
                                      gauss_type=isotropic
                                      )
 
-    if readout_bias:
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -511,6 +516,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
         if "train" in dataloaders.keys():
             dataloaders = dataloaders["train"]
 
+
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
         in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
@@ -518,8 +524,8 @@ def vgg_core_gauss_readout(dataloaders, seed,
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
-        
-    assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
     class Encoder(nn.Module):
         """
@@ -542,7 +548,93 @@ def vgg_core_gauss_readout(dataloaders, seed,
 
     set_random_seed(seed)
 
-    core = TransferLearningCore(input_channels=input_channels[0],
+    core = TransferLearningCore(input_channels=core_input_channels,
+                                tr_model_fn=tr_model_fn,
+                                model_layer=model_layer,
+                                momentum=momentum,
+                                final_batchnorm=final_batchnorm,
+                                final_nonlinearity=final_nonlinearity,
+                                bias=bias)
+
+    readout = MultipleGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                     n_neurons_dict=n_neurons_dict,
+                                     init_mu_range=init_mu_range,
+                                     bias=readout_bias,
+                                     gamma_readout=gamma_readout,
+                                     init_sigma_range=init_sigma_range,
+                                 )
+
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core, readout, elu_offset)
+
+    return model
+
+
+def vgg_core_full_gauss_readout(dataloaders, seed,
+                           input_channels=1, tr_model_fn='vgg16',  # begin of core args
+                           model_layer=11, momentum=0.1, final_batchnorm=True,
+                           final_nonlinearity=True, bias=False,
+                           init_mu_range=0.4, init_sigma_range=0.6, readout_bias=True,  # begin or readout args
+                           gamma_readout=0.002, elu_offset=-1, gauss_type='uncorrelated', data_info=None):
+    """
+    A Model class of a predefined core (using models from torchvision.models). Can be initialized pretrained or random.
+    Can also be set to be trainable or not, independent of initialization.
+
+    Args:
+        dataloaders: a dictionary of train-dataloaders, one loader per session
+            in the format {'data_key': dataloader object, .. }
+        seed: ..
+        pool_steps:
+        pool_kern:
+        readout_bias:
+        init_range:
+        gamma_readout:
+
+    Returns:
+    """
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    class Encoder(nn.Module):
+        """
+        helper nn class that combines the core and readout into the final model
+        """
+
+        def __init__(self, core, readout, elu_offset):
+            super().__init__()
+            self.core = core
+            self.readout = readout
+            self.offset = elu_offset
+
+        def forward(self, x, data_key=None, **kwargs):
+            x = self.core(x)
+            x = self.readout(x, data_key=data_key)
+            return F.elu(x + self.offset) + 1
+
+        def regularizer(self, data_key):
+            return self.readout.regularizer(data_key=data_key) + self.core.regularizer()
+
+    set_random_seed(seed)
+
+    core = TransferLearningCore(input_channels=core_input_channels,
                                 tr_model_fn=tr_model_fn,
                                 model_layer=model_layer,
                                 momentum=momentum,
@@ -559,7 +651,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
                                  gamma_readout=gamma_readout)
     
     
-    if readout_bias and (dataloaders is not None):
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
@@ -591,6 +683,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
         if "train" in dataloaders.keys():
             dataloaders = dataloaders["train"]
 
+
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
         in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
 
@@ -598,6 +691,8 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
     class Encoder(nn.Module):
 
@@ -618,8 +713,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
 
     set_random_seed(seed)
 
-    # get a stacked2D core from mlutils
-    core = SE2dCore(input_channels=input_channels[0],
+    core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
                     hidden_kern=hidden_kern,
@@ -649,7 +743,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
                                             )
 
     # initializing readout bias to mean response
-    if readout_bias:
+    if readout_bias and data_info is None:
         for key, value in dataloaders.items():
             _, targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)

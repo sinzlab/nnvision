@@ -77,7 +77,7 @@ def monkey_static_loader(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = os.path.dirname(image_cache_path) if 'individual' in image_cache_path else image_cache_path
+    image_cache_path = image_cache_path.split('individual')[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)

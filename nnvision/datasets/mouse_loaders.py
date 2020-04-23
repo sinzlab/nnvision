@@ -110,7 +110,7 @@ def mouse_static_loader(path=None,
         dataloaders[tier] = DataLoader(dat, sampler=sampler, batch_size=batch_size)
 
     # create the data_key for a specific data path
-    data_key = path.split('static')[-1].split('.')[0].replace('preproc', '')
+    data_key = path.split('static')[-1].split('.')[0].replace('preproc', '').replace('_nobehavior','')
     return (data_key, dataloaders) if get_key else dataloaders
 
 

@@ -6,8 +6,11 @@ from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
 import os
 import pickle
+from pathlib import Path
+from ..utility.dj_helpers import get_default_args
 
 schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
+
 
 @schema
 class DataInfo(DataInfoBase):
@@ -20,8 +23,14 @@ class DataInfo(DataInfoBase):
             for restr in key:
                 dataset_config = (self.dataset_table & restr).fetch1("dataset_config")
                 image_cache_path = dataset_config.get("image_cache_path", None)
-                image_cache_path = os.path.dirname(image_cache_path) if 'individual' in image_cache_path else image_cache_path
-                stats_filename = make_hash(dataset_config)
+                if image_cache_path is None:
+                    raise ValueError("The argument image_cache_path has to be specified in the dataset_config in order "
+                                     "to create the DataInfo")
+
+                image_cache_path = image_cache_path.split('individual')[0]
+                default_args = get_default_args(resolve_data((self.dataset_table & restr).fetch1("dataset_fn")))
+
+                stats_filename = make_hash(default_args.update(dataset_config))
                 stats_path = os.path.join(path if path is not None else image_cache_path, 'statistics/', stats_filename)
 
                 if not os.path.exists(stats_path):
