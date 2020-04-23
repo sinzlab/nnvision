@@ -3,6 +3,7 @@ import torch
 import torch.utils.data as utils
 import numpy as np
 #from retina.retina import warp_image
+from skimage.transform import rescale
 from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
@@ -72,23 +73,30 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None, subsample=1, crop=0, img_mean=None, img_std=None, filename_precision=6):
+    def __init__(self, path=None, subsample=1, crop=0, scale=1, img_mean=None, img_std=None, transform=True, normalize=True, filename_precision=6):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
         subsample: int - amount of downsampling
         crop:  the expected input is a list of tuples, the specify the exact cropping from all four sides
                 i.e. [(crop_left, crop_right), (crop_top, crop_down)]
+        scale: - the scale factor to upsample or downsample images via interpolation
         img_mean: - mean luminance across all images
         img_std: - std of the luminance across all images
-        leading_zeros: - amount leading zeros of the files in the specified folder
+        transform: - whether to apply a transformation to an image
+        normalize: - whether to standarized inputs by the mean and variance
+        filename_precision: - amount leading zeros of the files in the specified folder
         """
+        
         self.cache = {}
         self.path = path
         self.subsample = subsample
         self.crop = crop
+        self.scale = scale
         self.img_mean = img_mean
         self.img_std = img_std
+        self.transform = transform
+        self.normalize = normalize
         self.leading_zeros = filename_precision
 
     def __len__(self):
@@ -107,23 +115,76 @@ class ImageCache:
         else:
             filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
             image = np.load(filename)
-            transformed_image = self.transform_image(image)
-            self.cache[key] = transformed_image
-            return transformed_image
+            image = self.transform_image(image) if self.transform else image
+            image = self.normalize_image(image) if self.normalize else image
+            image = torch.tensor(image).to(torch.float)
+            self.cache[key] = image
+            return image
 
     def transform_image(self, image):
         """
-        applies transformations to the image: downsampling and cropping, z-scoring, and dimension expansion.
+        applies transformations to the image: downsampling, cropping, rescaling, and dimension expansion.
         """
+        
         h, w = image.shape
+        rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=False, anti_aliasing=False, preserve_range=True).astype(x.dtype) 
         image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample, self.crop[1][0]:w - self.crop[1][1]:self.subsample]
-        image = (image - self.img_mean) / self.img_std
+        image = image if self.scale == 1 else rescale_fn(image, self.scale)
         image = image[None,]
-        return torch.tensor(image).to(torch.float)
+        return image
+    
+    def normalize_image(self, image):
+        """
+        standarizes image
+        """
+        image = (image - self.img_mean) / self.img_std
+        return image
+               
 
     @property
     def cache_size(self):
         return len(self.cache)
+    
+    @property
+    def loaded_images(self):
+        print('Loading images ...')
+        items = [int(file.split('.')[0]) for file in os.listdir(self.path) if file.endswith('.npy')]
+        images = torch.stack([self.update(item) for item in items])
+        return images
+    
+    
+    def zscore_images(self, update_stats=True):
+        """
+        zscore images in cache
+        """
+        images   = self.loaded_images
+        img_mean = images.mean()
+        img_std  = images.std()
+        
+        for key in self.cache:
+            self.cache[key] = (self.cache[key] - img_mean) / img_std
+        
+        if update_stats:
+            self.img_mean = np.float32(img_mean.item())
+            self.img_std  = np.float32(img_std.item())
+        
+        
+        
+        
+        
+                
+        
+        
+            
+            
+            
+            
+            pass
+        return
+        
+        
+            
+        
 
 
 class CachedTensorDataset(utils.Dataset):
