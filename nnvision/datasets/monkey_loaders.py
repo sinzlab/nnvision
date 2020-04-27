@@ -24,7 +24,7 @@ def monkey_static_loader(dataset,
                          avg=False,
                          image_file=None,
                          return_data_info=False,
-                         store_data_info=False):
+                         store_data_info=True):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
