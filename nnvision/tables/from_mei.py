@@ -5,6 +5,12 @@ from .from_nnfabrik import TrainedModel
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
 from featurevis import integration
 from ..mei.helpers import get_neuron_mappings, get_real_mappings
+from ..mei.regularizers import rgb_initial_guess
+from nnfabrik.utility.dj_helpers import make_hash
+from featurevis import integration
+from featurevis.methods import gradient_ascent
+
+import torch
 
 schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
 
@@ -103,7 +109,34 @@ class MonkeySelector(MonkeySelectorTemplate):
 
 
 @schema
+class MEIMethod(dj.Lookup):
+    definition = """
+    # contains methods for generating MEIs and their configurations.
+    method_fn                           : varchar(64)   # name of the method function
+    method_hash                         : varchar(32)   # hash of the method config
+    ---
+    method_config                       : longblob      # method configuration object
+    method_ts       = CURRENT_TIMESTAMP : timestamp     # UTZ timestamp at time of insertion
+    """
+
+    def add_method(self, method_fn, method_config):
+        self.insert1(dict(method_fn=method_fn, method_hash=make_hash(method_config), method_config=method_config))
+
+    def generate_mei(self, dataloader, model, key):
+        method_fn, method_config = (self & key).fetch1("method_fn", "method_config")
+        method_fn = integration.import_module(method_fn)
+        if 'get_initial_guess' in method_config:
+            get_initial_guess = integration.import_module(method_config.pop("get_initial_guess"))
+        else:
+            get_initial_guess = torch.randn
+
+        mei, evaluations = method_fn(dataloader, model, method_config, get_initial_guess=get_initial_guess)
+        return dict(key, evaluations=evaluations, mei=mei)
+
+
+@schema
 class MEI(MEITemplate):
+    method_table = MEIMethod
     trained_model_table = TrainedEnsembleModel
     selector_table = MouseSelector
 
