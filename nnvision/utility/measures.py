@@ -7,7 +7,7 @@ import types
 import contextlib
 
 
-def model_predictions_repeats(dataloader, model, data_key, device='cpu', broadcast_to_target=False):
+def model_predictions_repeats(model, dataloader, data_key, device='cpu', broadcast_to_target=False):
     """
     Computes model predictions for dataloader that yields batches with identical inputs along the first dimension
     Unique inputs will be forwarded only once through the model
@@ -45,7 +45,7 @@ def model_predictions_repeats(dataloader, model, data_key, device='cpu', broadca
     return target, output
     
 
-def model_predictions(dataloader, model, data_key, device='cpu'):
+def model_predictions(model, dataloader, data_key, device='cpu'):
     """
     computes model predictions for a given dataloader and a model
     Returns:
@@ -109,7 +109,7 @@ def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron
     return correlations
 
 
-def get_poisson_loss(model, dataloaders, device='cpu', as_dict=False, avg=False, per_neuron=False, eps=1e-12):
+def get_poisson_loss(model, dataloaders, device='cpu', as_dict=False, avg=False, per_neuron=True, eps=1e-12):
     poisson_loss = {}
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
         for k, v in dataloaders.items():
@@ -145,12 +145,14 @@ def get_repeats(dataloader, min_repeats=2):
     return np.array(repeated_inputs), np.array(repeated_outputs)
 
 
-def get_oracles(dataloaders, as_dict=False):
+def get_oracles(dataloaders, as_dict=False, per_neuron=True):
     oracles = {}
     for k, v in dataloaders.items():
         _, outputs = get_repeats(v)
         oracles[k] = compute_oracle_corr(np.array(outputs))
-    return oracles if as_dict else np.hstack([v for v in oracles.values()])
+    if not as_dict:
+        oracles = np.hstack([v for v in oracles.values()]) if per_neuron else np.mean(np.hstack([v for v in oracles.values()]))
+    return oracles
 
 
 def compute_oracle_corr(repeated_outputs):
@@ -179,12 +181,14 @@ def compute_oracle_corr(repeated_outputs):
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
 
 
-def get_explainable_var(dataloaders, as_dict=False):
+def get_explainable_var(dataloaders, as_dict=False, per_neuron=True):
     explainable_var = {}
     for k ,v in dataloaders.items():
         _, outputs = get_repeats(v)
         explainable_var[k] = compute_explainable_var(outputs)
-    return explainable_var if as_dict else np.hstack([v for v in explainable_var.values()])
+    if not as_dict:
+        explainable_var = np.hstack([v for v in explainable_var.values()]) if per_neuron else np.mean(np.hstack([v for v in explainable_var.values()]))
+    return explainable_var
 
 
 def compute_explainable_var(outputs, eps=1e-9):
@@ -198,7 +202,7 @@ def compute_explainable_var(outputs, eps=1e-9):
     return explainable_var
 
 
-def get_FEV(dataloaders, model, device='cpu', as_dict=False):
+def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True):
     FEV = {}
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
         for k, v in dataloaders.items():
@@ -209,7 +213,9 @@ def get_FEV(dataloaders, model, device='cpu', as_dict=False):
                                  device=device,
                                  data_key=k,
                                  )
-    return FEV if as_dict else np.hstack([v for v in FEV.values()])
+    if not as_dict:
+        FEV = np.hstack([v for v in FEV.values()]) if per_neuron else np.mean(np.hstack([v for v in FEV.values()]))
+    return FEV
 
 
 def compute_FEV(repeated_inputs, repeated_outputs, model, data_key=None, device='cpu', return_exp_var=False):
