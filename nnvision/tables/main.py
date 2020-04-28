@@ -28,7 +28,7 @@ class MonkeyExperiment(dj.Computed):
         # This table stores something.
 
         -> master
-        session_id:            varchar(64)
+        data_key:            varchar(64)
         ---
         animal_id:             varchar(64)
         n_neurons:             int
@@ -43,7 +43,7 @@ class MonkeyExperiment(dj.Computed):
         -> MonkeyExperiment.Sessions
         unit_id:     int
         ---
-        unit_position:  int
+        unit_index:  int
         """
 
     class UnitMeasures(dj.Part):
@@ -95,15 +95,16 @@ class MonkeyExperiment(dj.Computed):
 
             data_key = str(raw_data["session_id"])
 
-
-            unit_ids = raw_data["unit_ids"] if "unit_ids" in raw_data else np.arange(raw_data["testing_responses"].shape[1])
+            unit_ids = raw_data["unit_ids"] if "unit_ids" in raw_data else np.arange(
+                raw_data["testing_responses"].shape[1])
 
             electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
-                                                                                                     dtype=np.double)
+                                                                                                      dtype=np.double)
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
             y_grid = raw_data["y_grid_location"] if "y_grid_location" in raw_data else 0
-            relative_depth = raw_data["relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
-                                                                                                                        dtype=np.double)
+            relative_depth = raw_data[
+                "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
+                                                                                                   dtype=np.double)
             session_dict[data_key] = dict(animal_id=raw_data["subject_id"],
                                           n_neurons=int(len(unit_ids)),
                                           x_grid=x_grid,
@@ -115,9 +116,9 @@ class MonkeyExperiment(dj.Computed):
             session_dict[data_key]['y_grid'] = y_grid
             session_dict[data_key]['relative_depth'] = relative_depth
 
-            responses   = dataloaders["train"][data_key].dataset[:].targets
+            responses = dataloaders["train"][data_key].dataset[:].targets
 
-            avg_firing  = responses.mean(dim=0)
+            avg_firing = responses.mean(dim=0)
             fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
             session_dict[data_key]['avg_firing'] = avg_firing.numpy()
             session_dict[data_key]['fano_factor'] = fano_factor.numpy()
@@ -130,22 +131,23 @@ class MonkeyExperiment(dj.Computed):
         key["n_sessions"] = len(session_dict)
         key["total_n_neurons"] = int(np.sum([v["n_neurons"] for v in session_dict.values()]))
         key["avg_oracle"] = np.nanmean(np.hstack([v["unit_oracles"] for v in session_dict.values()]))
-        key["avg_explainable_var"] = np.nanmean(np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
+        key["avg_explainable_var"] = np.nanmean(
+            np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
 
         self.insert1(key, ignore_extra_fields=True)
 
         for k, v in session_dict.items():
-            key['session_id'] = k
+            key['data_key'] = k
             key['animal_id'] = str(v["animal_id"])
             key['n_neurons'] = v["n_neurons"]
-            key['x_grid']    = v["x_grid"]
-            key['y_grid']    = v["y_grid"]
-            
+            key['x_grid'] = v["x_grid"]
+            key['y_grid'] = v["y_grid"]
+
             self.Sessions().insert1(key, ignore_extra_fields=True)
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
                 key["unit_id"] = int(neuron_id)
-                key["unit_position"] = i
+                key["unit_index"] = i
                 self.Units().insert1(key, ignore_extra_fields=True)
 
                 key['unit_avg_firing'] = session_dict[k]['avg_firing'][i]
