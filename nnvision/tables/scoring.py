@@ -56,3 +56,32 @@ class FEVe(ScoringBase):
     scoring_function = staticmethod(get_FEV)
     scoring_dataset = "test"
     scoring_attribute = "feve"
+
+
+@schema
+class TrainPoissonLoss(ScoringBase):
+    trainedmodel_table = TrainedModel
+    unit_table = MonkeyExperiment.Units
+    scoring_function = staticmethod(get_poisson_loss)
+    scoring_dataset = "train"
+    scoring_attribute = "test_poissonloss"
+
+
+@schema
+class ValidationPoissonLoss(ScoringBase):
+    trainedmodel_table = TrainedModel
+    unit_table = MonkeyExperiment.Units
+    scoring_function = staticmethod(get_poisson_loss)
+    scoring_dataset = "validation"
+    scoring_attribute = "test_poissonloss"
+
+
+@schema
+class TestPoissonLoss(ScoringBase):
+    trainedmodel_table = TrainedModel
+    unit_table = MonkeyExperiment.Units
+    scoring_function = staticmethod(get_poisson_loss)
+    scoring_dataset = "test"
+    scoring_attribute = "test_poissonloss"
+
+
