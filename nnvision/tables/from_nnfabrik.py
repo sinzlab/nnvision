@@ -4,12 +4,13 @@ from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
+from nnfabrik.utility.dj_helpers import CustomSchema
 import os
 import pickle
 from pathlib import Path
 from ..utility.dj_helpers import get_default_args
 
-schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema

@@ -3,9 +3,9 @@ import numpy as np
 import datajoint as dj
 from ..utility.measures import get_oracles, get_explainable_var
 from nnfabrik.main import Dataset
+from nnfabrik.utility.dj_helpers import CustomSchema
 
-schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
-print("Schema name: {}".format(dj.config["schema_name"]))
+schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
@@ -19,8 +19,6 @@ class MonkeyExperiment(dj.Computed):
     experiment_name:       varchar(64)   # another string
     n_sessions:            int
     total_n_neurons:       int
-    avg_oracle:            float
-    avg_explainable_var:   float
     """
 
     class Sessions(dj.Part):
@@ -28,7 +26,7 @@ class MonkeyExperiment(dj.Computed):
         # This table stores something.
 
         -> master
-        data_key:            varchar(64)
+        data_key:              varchar(64)
         ---
         animal_id:             varchar(64)
         n_neurons:             int
