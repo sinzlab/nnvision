@@ -151,6 +151,30 @@ def get_oracles(dataloaders, as_dict=False, per_neuron=True):
     return oracles
 
 
+def get_oracles_corrected(dataloaders, as_dict=False, per_neuron=True):
+    oracles = {}
+    for k, v in dataloaders.items():
+        _, outputs = get_repeats(v)
+        oracles[k] = compute_oracle_corr_corrected(np.array(outputs))
+    if not as_dict:
+        oracles = np.hstack([v for v in oracles.values()]) if per_neuron else np.mean(np.hstack([v for v in oracles.values()]))
+    return oracles
+
+
+def compute_oracle_corr_corrected(repeated_outputs):
+    if len(repeated_outputs.shape) == 3:
+        var_noise = repeated_outputs.var(axis=1).mean(0)
+        var_mean = repeated_outputs.mean(axis=1).var(0)
+    else:
+        var_noise, var_mean = [], []
+        for repeat in repeated_outputs:
+            var_noise.append(repeat.var(axis=0))
+            var_mean.append(repeat.mean(axis=0))
+        var_noise = np.mean(np.array(var_noise), axis=0)
+        var_mean = np.var(np.array(var_mean), axis=0)
+    return var_mean/np.sqrt(var_mean * (var_mean + var_noise))
+
+
 def compute_oracle_corr(repeated_outputs):
     if len(repeated_outputs.shape) == 3:
         _, r, n = repeated_outputs.shape
