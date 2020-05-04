@@ -97,6 +97,14 @@ class TrainedEnsembleModel(TrainedEnsembleModelTemplate):
     dataset_table = Dataset
     trained_model_table = TrainedModel
 
+    def load_model(self, key=None, include_dataloader=True, include_state_dict=True):
+        """Wrapper to preserve the interface of the trained model table."""
+        return integration.load_ensemble_model(self.Member,
+                                               self.trained_model_table,
+                                               key=key,
+                                               include_dataloader=include_dataloader,
+                                               include_state_dict=include_state_dict)
+
 
 @schema
 class MouseSelector(MouseSelectorTemplate):

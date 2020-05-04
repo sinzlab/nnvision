@@ -201,6 +201,17 @@ def compute_oracle_corr(repeated_outputs):
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
 
 
+def get_fraction_oracles(model, dataloaders, device='cpu', corrected=False):
+    dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
+    if corrected:
+        oracles = get_oracles_corrected(dataloaders=dataloaders, as_dict=False, per_neuron=True)
+    else:
+        oracles = get_oracles(dataloaders=dataloaders, as_dict=False, per_neuron=True)
+    test_correlation = get_correlations(model=model, dataloaders=dataloaders, device=device, as_dict=False, per_neuron=True)
+    oracle_performance, _, _, _ = np.linalg.lstsq(np.hstack(oracles)[:, np.newaxis], np.hstack(test_correlation))
+    return oracle_performance
+
+
 def get_explainable_var(dataloaders, as_dict=False, per_neuron=True):
     explainable_var = {}
     for k ,v in dataloaders.items():
@@ -307,3 +318,12 @@ def normalize_RGB(mei):
     mei_copy = mei_copy - mei_copy.min()
     mei_copy = mei_copy / mei_copy.max()
     return mei_copy
+
+
+def get_model_rf_size(model_config):
+    layers = model_config["layers"]
+    input_kern = model_config["input_kern"]
+    hidden_kern = model_config["hidden_kern"]
+    dil = model_config["hidden_dilation"]
+    rf_size = input_kern + ((hidden_kern-1) * dil)*(layers - 1)
+    return rf_size

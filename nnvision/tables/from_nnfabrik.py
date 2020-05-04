@@ -2,13 +2,15 @@ import datajoint as dj
 from nnfabrik.template import TrainedModelBase
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
-from nnfabrik.template import DataInfoBase
+from nnfabrik.template import DataInfoBase, scoring_function_base
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
 import os
 import pickle
 from pathlib import Path
 from ..utility.dj_helpers import get_default_args
+from ..utility.measures import get_oracles
+from .main import MonkeyExperiment
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
@@ -30,8 +32,8 @@ class DataInfo(DataInfoBase):
 
                 image_cache_path = image_cache_path.split('individual')[0]
                 default_args = get_default_args(resolve_data((self.dataset_table & restr).fetch1("dataset_fn")))
-
-                stats_filename = make_hash(default_args.update(dataset_config))
+                default_args.update(dataset_config)
+                stats_filename = make_hash(default_args)
                 stats_path = os.path.join(path if path is not None else image_cache_path, 'statistics/', stats_filename)
 
                 if not os.path.exists(stats_path):
@@ -45,3 +47,4 @@ class DataInfo(DataInfoBase):
 class TrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+
