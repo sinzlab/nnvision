@@ -7,7 +7,7 @@ from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 import numpy as np
 from .main import MonkeyExperiment
-from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations
+from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions
 from .from_nnfabrik import TrainedModel
 from .from_mei import TrainedEnsembleModel
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache
@@ -139,3 +139,65 @@ class TestCorrelationEnsemble(ScoringBase):
     measure_attribute = "test_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache
+
+
+@schema
+class TestPredictions(ScoringBase):
+    trainedmodel_table = TrainedModel
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_predictions)
+    measure_dataset = "test"
+    measure_attribute = "test_predictions"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
+    measure_function_kwargs = dict(test_data=True)
+
+    # table level comment
+    table_comment = "A template table for storing results/scores of a TrainedModel"
+
+    @property
+    def definition(self):
+        definition = """
+                # {table_comment}
+                -> self.trainedmodel_table
+                ---
+                {measure_attribute}:      longblob     # A template for a computed score of a trained model
+                {measure_attribute}_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
+                """.format(table_comment=self.table_comment, measure_attribute=self.measure_attribute)
+        return definition
+
+    class Units(dj.Part):
+        @property
+        def definition(self):
+            definition = """
+                # Scores for Individual Neurons
+                -> master
+                -> master.unit_table
+                ---
+                unit_{measure_attribute}:     longblob   # A template for a computed unit score        
+                """.format(measure_attribute=self._master.measure_attribute)
+            return definition
+
+    def make(self, key):
+        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(
+            key=key)
+
+        model = self.get_model(key=key)
+
+        unit_measures_dict = self.measure_function(model=model,
+                                                   dataloaders=dataloaders,
+                                                   device='cuda',
+                                                   as_dict=True,
+                                                   per_neuron=True,
+                                                   **self.measure_function_kwargs)
+
+        key[self.measure_attribute] = unit_measures_dict
+        self.insert1(key, ignore_extra_fields=True)
+        self.insert_unit_measures(key=key, unit_measures_dict=unit_measures_dict)
+
+
+@schema
+class ValidationPredictions(TestPredictions):
+    measure_dataset = "validation"
+    measure_attribute = "validation_predictions"
+    measure_function_kwargs = dict(test_data=False)
