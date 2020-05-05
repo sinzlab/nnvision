@@ -62,21 +62,6 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     return target.numpy(), output.numpy()
 
 
-def get_predictions(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, test_data=True, **kwargs):
-    predictions = {}
-    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
-        for k, v in dataloaders.items():
-            if test_data:
-                _, output = model_predictions_repeats(dataloader=v, model=model, data_key=k, device=device)
-            else:
-                _, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
-            predictions[k] = output.T
-
-    if not as_dict:
-        predictions = [v for v in predictions.values()]
-    return predictions
-
-
 def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     """
     Returns correlation between model outputs and average responses over repeated trials
@@ -341,3 +326,40 @@ def get_model_rf_size(model_config):
     dil = model_config["hidden_dilation"]
     rf_size = input_kern + ((hidden_kern-1) * dil)*(layers - 1)
     return rf_size
+
+
+def get_predictions(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, test_data=True, **kwargs):
+    predictions = {}
+    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+        for k, v in dataloaders.items():
+            if test_data:
+                _, output = model_predictions_repeats(dataloader=v, model=model, data_key=k, device=device)
+            else:
+                _, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+            predictions[k] = output.T
+
+    if not as_dict:
+        predictions = [v for v in predictions.values()]
+    return predictions
+
+
+def get_targets(model, dataloaders, device='cpu', as_dict=True, per_neuron=True, test_data=True, **kwargs):
+    responses = {}
+    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+        for k, v in dataloaders.items():
+            if test_data:
+                targets, _ = model_predictions_repeats(dataloader=v, model=model, data_key=k, device=device)
+                targets_per_neuron = []
+                for i in range(targets[0].shape[1]):
+                    neuronal_responses = []
+                    for repeats in targets:
+                        neuronal_responses.append(repeats[:,i])
+                    targets_per_neuron.append(neuronal_responses)
+                responses[k] = targets_per_neuron
+            else:
+                targets, _ = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+                responses[k] = targets.T
+
+    if not as_dict:
+        responses = [v for v in responses.values()]
+    return responses
