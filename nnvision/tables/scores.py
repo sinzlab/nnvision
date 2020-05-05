@@ -8,10 +8,12 @@ from nnfabrik.utility.dj_helpers import gitlog, make_hash
 import numpy as np
 from .main import MonkeyExperiment
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations
-from ..tables.from_nnfabrik import TrainedModel
-from .utility import DataCache, TrainedModelCache
+from .from_nnfabrik import TrainedModel
+from .from_mei import TrainedEnsembleModel
+from .utility import DataCache, TrainedModelCache, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase
+
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
@@ -101,3 +103,39 @@ class TestPoissonLoss(ScoringBase):
     measure_attribute = "test_poissonloss"
     data_cache = DataCache
     model_cache = TrainedModelCache
+
+
+@schema
+class TrainCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "train"
+    measure_attribute = "train_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
+
+
+@schema
+class ValidationCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "validation"
+    measure_attribute = "validation_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
+
+
+@schema
+class TestCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test"
+    measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
