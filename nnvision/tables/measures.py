@@ -4,7 +4,7 @@ from .main import MonkeyExperiment
 
 from ..utility.dj_helpers import get_default_args
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, \
-    get_avg_correlations, get_oracles_corrected, get_model_rf_size, get_model_rf_size2
+    get_avg_correlations, get_oracles_corrected, get_model_rf_size
 from .utility import DataCache
 from nnfabrik.template import ScoringBase, MeasuresBase, SummaryMeasuresBase
 from nnfabrik.utility.dj_helpers import CustomSchema
