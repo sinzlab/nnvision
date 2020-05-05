@@ -62,6 +62,20 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     return target.numpy(), output.numpy()
 
 
+def get_predictions(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, test_data=True, **kwargs):
+    predictions = {}
+    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+        for k, v in dataloaders.items():
+            if test_data:
+                _, output = model_predictions_repeats(dataloader=v, model=model, data_key=k, device=device)
+            else:
+                _, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+            predictions[k] = output.T
+
+    if not as_dict:
+        predictions = [v for v in predictions.values()]
+    return predictions
+
 
 def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     """
