@@ -212,6 +212,7 @@ def get_fraction_oracles(model, dataloaders, device='cpu', corrected=False):
 
 
 def get_explainable_var(dataloaders, as_dict=False, per_neuron=True):
+    dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     explainable_var = {}
     for k ,v in dataloaders.items():
         _, outputs = get_repeats(v)
@@ -232,7 +233,7 @@ def compute_explainable_var(outputs, eps=1e-9):
     return explainable_var
 
 
-def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True):
+def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, threshold=None):
     """
     Computes the fraction of explainable variance explained (FEVe) per Neuron, given a model and a dictionary of dataloaders.
     The dataloaders will have to return batches of identical images, with the corresponing neuronal responses.
@@ -243,12 +244,12 @@ def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True):
         device (str): 'cuda' or 'gpu
         as_dict (bool): Returns the scores as a dictionary ('data_keys': values) if set to True.
         per_neuron (bool): Returns the grand average if set to True.
+        threshold (float): for the avg feve, excludes neurons with a explainable variance below threshold
 
     Returns:
         FEV (dict, or np.array, or float): Fraction of explainable varianced explained. Per Neuron or as grand average.
     """
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
-
     FEV = {}
     with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
         for data_key, dataloader in dataloaders.items():
@@ -257,8 +258,12 @@ def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True):
                                                          data_key=data_key,
                                                          device=device,
                                                          broadcast_to_target=True)
-
-            FEV[data_key] = compute_FEV(targets=targets, outputs=outputs)
+            if threshold is None:
+                FEV[data_key] = compute_FEV(targets=targets, outputs=outputs)
+            else:
+                fev, feve = compute_FEV(targets=targets, outputs=outputs, return_exp_var=True)
+                FEV[data_key] = feve[fev>threshold]
+                print(fev,feve)
     if not as_dict:
         FEV = np.hstack([v for v in FEV.values()]) if per_neuron else np.mean(np.hstack([v for v in FEV.values()]))
     return FEV
