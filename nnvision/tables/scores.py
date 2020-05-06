@@ -12,7 +12,7 @@ from .from_nnfabrik import TrainedModel
 from .from_mei import TrainedEnsembleModel
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import ScoringBase
+from nnfabrik.template import ScoringBase, SummaryScoringBase
 
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
@@ -226,3 +226,17 @@ class ValidationPredictions(TestPredictions):
     measure_attribute = "validation_predictions"
     measure_secondary_attribute = "validation_targets"
     measure_function_kwargs = dict(test_data=False)
+
+
+# ============================= SUMMARY SCORES =============================
+
+
+@schema
+class FEVe_thresholded(SummaryScoringBase):
+    trainedmodel_table = TrainedModel
+    measure_function = staticmethod(get_FEV)
+    function_kwargs = dict(threshold=0.15, per_neuron=False)
+    measure_dataset = "test"
+    measure_attribute = "feve"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
