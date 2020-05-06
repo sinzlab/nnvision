@@ -263,7 +263,6 @@ def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, th
             else:
                 fev, feve = compute_FEV(targets=targets, outputs=outputs, return_exp_var=True)
                 FEV[data_key] = feve[fev>threshold]
-                print(fev,feve)
     if not as_dict:
         FEV = np.hstack([v for v in FEV.values()]) if per_neuron else np.mean(np.hstack([v for v in FEV.values()]))
     return FEV
