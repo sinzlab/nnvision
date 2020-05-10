@@ -105,6 +105,9 @@ class TestPoissonLoss(ScoringBase):
     model_cache = TrainedModelCache
 
 
+# ============================= ENSEMBLE SCORES =============================
+
+
 @schema
 class TrainCorrelationEnsemble(ScoringBase):
     trainedmodel_table = TrainedEnsembleModel
@@ -139,6 +142,9 @@ class TestCorrelationEnsemble(ScoringBase):
     measure_attribute = "test_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache
+
+
+# ============================= CUSTOM SCORES =============================
 
 
 @schema

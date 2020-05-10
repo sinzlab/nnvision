@@ -14,6 +14,16 @@ schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
+class ExplainableVar(MeasuresBase):
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_explainable_var)
+    measure_dataset = "test"
+    measure_attribute = "fev"
+    data_cache = DataCache
+
+
+@schema
 class OracleScore(MeasuresBase):
     dataset_table = Dataset
     unit_table = MonkeyExperiment.Units
