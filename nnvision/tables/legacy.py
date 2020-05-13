@@ -3,11 +3,9 @@ import numpy as np
 import datajoint as dj
 from ..utility.measures import get_oracles, get_explainable_var
 from nnfabrik.main import Dataset
-from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import scoring_function_base
-from featurevis import integration
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
+print("Schema name: {}".format(dj.config["schema_name"]))
 
 
 @schema
@@ -21,6 +19,8 @@ class MonkeyExperiment(dj.Computed):
     experiment_name:       varchar(64)   # another string
     n_sessions:            int
     total_n_neurons:       int
+    avg_oracle:            float
+    avg_explainable_var:   float
     """
 
     class Sessions(dj.Part):
@@ -28,7 +28,7 @@ class MonkeyExperiment(dj.Computed):
         # This table stores something.
 
         -> master
-        data_key:              varchar(64)
+        session_id:            varchar(64)
         ---
         animal_id:             varchar(64)
         n_neurons:             int
@@ -43,20 +43,49 @@ class MonkeyExperiment(dj.Computed):
         -> MonkeyExperiment.Sessions
         unit_id:     int
         ---
-        unit_index:  int
-        electrode:   int
-        relative_depth:  float
+        unit_position:  int
         """
 
-        def get_output_selected_model(self, model, key):
-            unit_index, data_key = (self & key).fetch1("unit_index", "data_key")
-            return integration.get_output_selected_model(unit_index, data_key, model)
+    class UnitMeasures(dj.Part):
+        definition = """
+        # again, here some witty comment. 
+
+        -> MonkeyExperiment.Units
+        ---
+        unit_oracle:            float
+        unit_explainable_var:   float
+        """
+
+    class UnitStatistics(dj.Part):
+        definition = """
+        # some string ...
+
+        -> MonkeyExperiment.Units
+        ---
+        unit_avg_firing:      float
+        unit_fano_factor:     float
+        """
+
+    class UnitPhysiology(dj.Part):
+        definition = """
+            # Information about the recording depth as well as spike sorting details
+
+            -> MonkeyExperiment.Units
+            ---
+            electrode:   int
+            relative_depth:  float
+            """
 
     def make(self, key):
-
+        print(key)
         dataset_fn, dataset_config = (Dataset & key).fn_config
+        dataloaders = (Dataset & key).get_dataloader()
+
         filenames = dataset_config["neuronal_data_files"]
         experiment_name, brain_area = dataset_config["dataset"].split('_')
+
+        oracles = get_oracles(dataloaders["test"], as_dict=True)
+        explainable_var = get_explainable_var(dataloaders["test"], as_dict=True)
 
         session_dict = {}
 
@@ -87,17 +116,28 @@ class MonkeyExperiment(dj.Computed):
             session_dict[data_key]['y_grid'] = y_grid
             session_dict[data_key]['relative_depth'] = relative_depth
 
+            responses = dataloaders["train"][data_key].dataset[:].targets
 
+            avg_firing = responses.mean(dim=0)
+            fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
+            session_dict[data_key]['avg_firing'] = avg_firing.numpy()
+            session_dict[data_key]['fano_factor'] = fano_factor.numpy()
+
+            session_dict[data_key]['unit_oracles'] = oracles[data_key]
+            session_dict[data_key]['unit_explainable_variance'] = explainable_var[data_key]
 
         key["brain_area"] = brain_area
         key["experiment_name"] = experiment_name
         key["n_sessions"] = len(session_dict)
         key["total_n_neurons"] = int(np.sum([v["n_neurons"] for v in session_dict.values()]))
+        key["avg_oracle"] = np.nanmean(np.hstack([v["unit_oracles"] for v in session_dict.values()]))
+        key["avg_explainable_var"] = np.nanmean(
+            np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
 
         self.insert1(key, ignore_extra_fields=True)
 
         for k, v in session_dict.items():
-            key['data_key'] = k
+            key['session_id'] = k
             key['animal_id'] = str(v["animal_id"])
             key['n_neurons'] = v["n_neurons"]
             key['x_grid'] = v["x_grid"]
@@ -107,45 +147,17 @@ class MonkeyExperiment(dj.Computed):
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
                 key["unit_id"] = int(neuron_id)
-                key["unit_index"] = i
-                key['electrode'] = session_dict[k]['electrode'][i]
-                key['relative_depth'] = session_dict[k]['relative_depth'][i]
+                key["unit_position"] = i
                 self.Units().insert1(key, ignore_extra_fields=True)
 
+                key['unit_avg_firing'] = session_dict[k]['avg_firing'][i]
+                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i]
+                self.UnitStatistics().insert1(key, ignore_extra_fields=True)
 
+                key['unit_oracle'] = session_dict[k]['unit_oracles'][i]
+                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i]
+                self.UnitMeasures().insert1(key, ignore_extra_fields=True)
 
-# legacy
-class UnitMeasures(dj.Manual):
-    definition = """
-    # again, here some witty comment. 
-
-    -> MonkeyExperiment.Units
-    ---
-    unit_oracle:            float
-    unit_explainable_var:   float
-    """
-    pass
-
-
-class UnitStatistics(dj.Manual):
-    definition = """
-    # some string ...
-
-    -> MonkeyExperiment.Units
-    ---
-    unit_avg_firing:      float
-    unit_fano_factor:     float
-    """
-    def make(self):
-        dataset_fn, dataset_config = (Dataset & key).fn_config
-        dataloaders = (Dataset & key).get_dataloader()
-
-        responses = dataloaders["train"][data_key].dataset[:].targets
-
-        avg_firing = responses.mean(dim=0)
-        fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
-        session_dict[data_key]['avg_firing'] = avg_firing.numpy()
-        session_dict[data_key]['fano_factor'] = fano_factor.numpy()
-
-        session_dict[data_key]['unit_oracles'] = oracles[data_key]
-        session_dict[data_key]['unit_explainable_variance'] = explainable_var[data_key]
+                key['electrode'] = session_dict[k]['electrode'][i]
+                key['relative_depth'] = session_dict[k]['relative_depth'][i]
+                self.UnitPhysiology().insert1(key, ignore_extra_fields=True)
