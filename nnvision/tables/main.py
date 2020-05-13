@@ -4,7 +4,7 @@ import datajoint as dj
 from ..utility.measures import get_oracles, get_explainable_var
 from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import scoring_function_base
+
 from featurevis import integration
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
