@@ -1,5 +1,7 @@
 import numpy as np
 import torch
+import copy
+
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d
@@ -210,6 +212,7 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
     source_grids = None
     grid_mean_predictor_type = None
     if grid_mean_predictor is not None:
+        grid_mean_predictor = copy.deepcopy(grid_mean_predictor)
         grid_mean_predictor_type = grid_mean_predictor.pop('type')
         if grid_mean_predictor_type == 'cortex':
             input_dim = grid_mean_predictor.pop('input_dimensions', 2)

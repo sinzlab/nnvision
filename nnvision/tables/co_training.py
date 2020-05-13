@@ -4,14 +4,14 @@ import datajoint as dj
 from ..utility.measures import get_oracles, get_explainable_var
 from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
-
+from nnfabrik.template import scoring_function_base
 from featurevis import integration
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
-class MonkeyExperiment(dj.Computed):
+class MultiExperiment(dj.Computed):
     definition = """
     # This table stores something which is awesome by design
 
@@ -40,7 +40,7 @@ class MonkeyExperiment(dj.Computed):
         definition = """
         # All Units
 
-        -> MonkeyExperiment.Sessions
+        -> MultiExperiment.Sessions
         unit_id:     int
         ---
         unit_index:  int
@@ -55,7 +55,9 @@ class MonkeyExperiment(dj.Computed):
     def make(self, key):
 
         dataset_fn, dataset_config = (Dataset & key).fn_config
-        filenames = dataset_config["neuronal_data_files"]
+        filenames = dataset_config["sua_data_files"]
+        filenames_mua = dataset_config["mua_data_files"]
+
         experiment_name, brain_area = dataset_config["dataset"].split('_')
 
         session_dict = {}
@@ -65,6 +67,20 @@ class MonkeyExperiment(dj.Computed):
                 raw_data = pickle.load(pkl)
 
             data_key = str(raw_data["session_id"])
+
+            for mua_data_path in filenames_mua:
+                with open(mua_data_path, "rb") as mua_pkl:
+                    mua_data = pickle.load(mua_pkl)
+
+                if str(mua_data["session_id"]) == data_key:
+                    unit_ids_mua = mua_data["unit_ids"] + 100
+                    electrode_mua = mua_data["electrode_nums"]
+                    relative_depth_mua = mua_data["relative_micron_depth"]
+                    break
+
+            if not str(mua_data["session_id"]) == data_key:
+                print("session {} does not exist in MUA. Skipping ...".format(data_key))
+                continue
 
             unit_ids = raw_data["unit_ids"] if "unit_ids" in raw_data else np.arange(
                 raw_data["testing_responses"].shape[1])
@@ -76,6 +92,11 @@ class MonkeyExperiment(dj.Computed):
             relative_depth = raw_data[
                 "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
                                                                                                    dtype=np.double)
+
+            unit_ids = np.concatenate([unit_ids, unit_ids_mua])
+            electrode = np.concatenate([electrode, electrode_mua])
+            relative_depth = np.concatenate([relative_depth, relative_depth_mua])
+
             session_dict[data_key] = dict(animal_id=raw_data["subject_id"],
                                           n_neurons=int(len(unit_ids)),
                                           x_grid=x_grid,
@@ -111,41 +132,3 @@ class MonkeyExperiment(dj.Computed):
                 key['electrode'] = session_dict[k]['electrode'][i]
                 key['relative_depth'] = session_dict[k]['relative_depth'][i]
                 self.Units().insert1(key, ignore_extra_fields=True)
-
-
-
-# legacy
-class UnitMeasures(dj.Manual):
-    definition = """
-    # again, here some witty comment. 
-
-    -> MonkeyExperiment.Units
-    ---
-    unit_oracle:            float
-    unit_explainable_var:   float
-    """
-    pass
-
-
-class UnitStatistics(dj.Manual):
-    definition = """
-    # some string ...
-
-    -> MonkeyExperiment.Units
-    ---
-    unit_avg_firing:      float
-    unit_fano_factor:     float
-    """
-    def make(self):
-        dataset_fn, dataset_config = (Dataset & key).fn_config
-        dataloaders = (Dataset & key).get_dataloader()
-
-        responses = dataloaders["train"][data_key].dataset[:].targets
-
-        avg_firing = responses.mean(dim=0)
-        fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
-        session_dict[data_key]['avg_firing'] = avg_firing.numpy()
-        session_dict[data_key]['fano_factor'] = fano_factor.numpy()
-
-        session_dict[data_key]['unit_oracles'] = oracles[data_key]
-        session_dict[data_key]['unit_explainable_variance'] = explainable_var[data_key]
