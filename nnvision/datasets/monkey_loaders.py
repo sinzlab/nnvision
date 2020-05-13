@@ -326,16 +326,18 @@ def monkey_mua_sua_loader(dataset,
                 mua_responses_test = mua_data["testing_responses"].astype(np.float32)
                 mua_training_image_ids = mua_data["training_image_ids"] - image_id_offset
                 mua_testing_image_ids = mua_data["testing_image_ids"] - image_id_offset
-                print(i)
                 break
 
+        if not str(mua_data["session_id"]) == data_key:
+            print("session {} does not exist in MUA. Skipping ...".format(data_key))
+            continue
         if not np.array_equal(training_image_ids, mua_training_image_ids):
             raise ValueError("Training image IDs do not match between the spike sorted data and mua data")
         if not np.array_equal(testing_image_ids, mua_testing_image_ids):
             raise ValueError("Testing image IDs do not match between the spike sorted data and mua data")
-        print("concat now")
         responses_train = np.concatenate([responses_train, mua_responses_train], axis=0)
         responses_test = np.concatenate([responses_test, mua_responses_test], axis=0)
+
 
         if dataset != 'PlosCB19_V1':
             responses_test = responses_test.transpose((2, 0, 1))
