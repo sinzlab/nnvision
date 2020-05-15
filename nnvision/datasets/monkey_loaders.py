@@ -191,7 +191,7 @@ def monkey_static_loader(dataset,
 
 
 def monkey_mua_sua_loader(dataset,
-                         sua_data_files,
+                         neuronal_data_files,
                          mua_data_files,
                          image_cache_path,
                          batch_size=64,
@@ -305,7 +305,7 @@ def monkey_mua_sua_loader(dataset,
                                                              seed=seed)
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
-    for i, datapath in enumerate(sua_data_files):
+    for i, datapath in enumerate(neuronal_data_files):
 
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
@@ -329,14 +329,14 @@ def monkey_mua_sua_loader(dataset,
                 break
 
         if not str(mua_data["session_id"]) == data_key:
-            print("session {} does not exist in MUA. Skipping ...".format(data_key))
-            continue
-        if not np.array_equal(training_image_ids, mua_training_image_ids):
-            raise ValueError("Training image IDs do not match between the spike sorted data and mua data")
-        if not np.array_equal(testing_image_ids, mua_testing_image_ids):
-            raise ValueError("Testing image IDs do not match between the spike sorted data and mua data")
-        responses_train = np.concatenate([responses_train, mua_responses_train], axis=0)
-        responses_test = np.concatenate([responses_test, mua_responses_test], axis=0)
+            print("session {} does not exist in MUA. Skipping MUA".format(data_key))
+        else:
+            if not np.array_equal(training_image_ids, mua_training_image_ids):
+                raise ValueError("Training image IDs do not match between the spike sorted data and mua data")
+            if not np.array_equal(testing_image_ids, mua_testing_image_ids):
+                raise ValueError("Testing image IDs do not match between the spike sorted data and mua data")
+            responses_train = np.concatenate([responses_train, mua_responses_train], axis=0)
+            responses_test = np.concatenate([responses_test, mua_responses_test], axis=0)
 
 
         if dataset != 'PlosCB19_V1':
