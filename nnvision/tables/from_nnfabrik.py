@@ -7,10 +7,7 @@ from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
 import os
 import pickle
-from pathlib import Path
 from ..utility.dj_helpers import get_default_args
-from ..utility.measures import get_oracles
-from .main import MonkeyExperiment
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
