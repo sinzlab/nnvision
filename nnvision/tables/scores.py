@@ -6,22 +6,22 @@ import os
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 import numpy as np
-from .main import MonkeyExperiment
+from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
 from .from_nnfabrik import TrainedModel
 from .from_mei import TrainedEnsembleModel
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
-
+from .from_nnfabrik import ScoringBaseNeuronType
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
-class TrainCorrelation(ScoringBase):
+class TrainCorrelation(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "train"
     measure_attribute = "train_correlation"
@@ -30,9 +30,9 @@ class TrainCorrelation(ScoringBase):
 
 
 @schema
-class ValidationCorrelation(ScoringBase):
+class ValidationCorrelation(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "validation"
     measure_attribute = "validation_correlation"
@@ -41,9 +41,9 @@ class ValidationCorrelation(ScoringBase):
 
 
 @schema
-class TestCorrelation(ScoringBase):
+class TestCorrelation(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
@@ -52,9 +52,9 @@ class TestCorrelation(ScoringBase):
 
 
 @schema
-class AverageCorrelation(ScoringBase):
+class AverageCorrelation(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_avg_correlations)
     measure_attribute = "avg_correlation"
     data_cache = DataCache
@@ -62,9 +62,9 @@ class AverageCorrelation(ScoringBase):
 
 
 @schema
-class FEVe(ScoringBase):
+class FEVe(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_FEV)
     measure_dataset = "test"
     measure_attribute = "feve"
@@ -73,9 +73,9 @@ class FEVe(ScoringBase):
 
 
 @schema
-class TrainPoissonLoss(ScoringBase):
+class TrainPoissonLoss(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "train"
     measure_attribute = "train_poissonloss"
@@ -84,9 +84,9 @@ class TrainPoissonLoss(ScoringBase):
 
 
 @schema
-class ValidationPoissonLoss(ScoringBase):
+class ValidationPoissonLoss(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "validation"
     measure_attribute = "validation_poissonloss"
@@ -95,9 +95,9 @@ class ValidationPoissonLoss(ScoringBase):
 
 
 @schema
-class TestPoissonLoss(ScoringBase):
+class TestPoissonLoss(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "test"
     measure_attribute = "test_poissonloss"
@@ -109,10 +109,10 @@ class TestPoissonLoss(ScoringBase):
 
 
 @schema
-class TrainCorrelationEnsemble(ScoringBase):
+class TrainCorrelationEnsemble(ScoringBaseNeuronType):
     trainedmodel_table = TrainedEnsembleModel
     dataset_table = Dataset
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "train"
     measure_attribute = "train_correlation"
@@ -121,10 +121,10 @@ class TrainCorrelationEnsemble(ScoringBase):
 
 
 @schema
-class ValidationCorrelationEnsemble(ScoringBase):
+class ValidationCorrelationEnsemble(ScoringBaseNeuronType):
     trainedmodel_table = TrainedEnsembleModel
     dataset_table = Dataset
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "validation"
     measure_attribute = "validation_correlation"
@@ -133,10 +133,10 @@ class ValidationCorrelationEnsemble(ScoringBase):
 
 
 @schema
-class TestCorrelationEnsemble(ScoringBase):
+class TestCorrelationEnsemble(ScoringBaseNeuronType):
     trainedmodel_table = TrainedEnsembleModel
     dataset_table = Dataset
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
@@ -148,9 +148,9 @@ class TestCorrelationEnsemble(ScoringBase):
 
 
 @schema
-class TestPredictions(ScoringBase):
+class TestPredictions(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
-    unit_table = MonkeyExperiment.Units
+    unit_table = Recording.Units
     measure_function = staticmethod(get_predictions)
     measure_secondary_function = staticmethod(get_targets)
     measure_dataset = "test"
@@ -215,11 +215,14 @@ class TestPredictions(ScoringBase):
         for data_key, unit_scores in unit_predictions_dict.items():
             for unit_index, unit_score in enumerate(unit_scores):
                 unit_secondary_score = unit_targets_dict[data_key][unit_index]
-                key.pop("unit_id") if "unit_id" in key else None
-                key.pop("data_key") if "data_key" in key else None
+                if "unit_id" in key: key.pop("unit_id")
+                if "data_key" in key: key.pop("data_key")
+                if "unit_type" in key: key.pop("unit_type")
                 neuron_key = dict(unit_index=unit_index, data_key=data_key)
+                unit_type = ((self.unit_table & key) & neuron_key).fetch1("unit_type")
                 unit_id = ((self.unit_table & key) & neuron_key).fetch1("unit_id")
                 key["unit_id"] = unit_id
+                key["unit_type"] = unit_type
                 key["unit_{}".format(self.measure_attribute)] = unit_score
                 key["unit_{}".format(self.measure_secondary_attribute)] = unit_secondary_score
                 key["data_key"] = data_key
