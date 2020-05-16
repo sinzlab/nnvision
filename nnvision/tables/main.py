@@ -50,7 +50,10 @@ class Recording(dj.Computed):
     def make(self, key):
 
         dataset_fn, dataset_config = (Dataset & key).fn_config
-        filenames = dataset_config["neuronal_data_files"]
+        dataset = dataset_config.get("dataset", None)
+        filenames = dataset_config.get("neuronal_data_files", None)
+        if filenames is None:
+            filenames = dataset_config.get("sua_data_files", None)
         filenames_mua = dataset_config.get("mua_data_files", None)
 
         experiment_name, brain_area = dataset_config["dataset"].split('_')
@@ -84,9 +87,14 @@ class Recording(dj.Computed):
                     print("session {} does not exist in MUA. Skipping MUA for that session".format(data_key))
                     unit_ids_mua, electrode_mua, relative_depth_mua, unit_type_mua = [], [], [], []
 
-            unit_ids = raw_data.get("unit_ids", np.arange(raw_data["testing_responses"].shape[0]))
-            unit_type = raw_data.get("unit_type", np.ones(raw_data["testing_responses"].shape[0]))
+            if dataset == 'PlosCB19_V1':
+                n_neurons = raw_data["testing_responses"].shape[1]
+            else:
+                n_neurons = raw_data["testing_responses"].shape[0]
 
+            unit_ids = raw_data.get("unit_ids", np.arange(n_neurons))
+            unit_type = raw_data.get("unit_type", np.ones(n_neurons))
+            print(unit_ids.shape)
             electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
                                                                                                       dtype=np.double)
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
