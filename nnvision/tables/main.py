@@ -7,6 +7,7 @@ from ..datasets.conventions import unit_type_conventions
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
+
 @schema
 class Recording(dj.Computed):
     definition = """
@@ -37,7 +38,7 @@ class Recording(dj.Computed):
         definition = """
         # All Units
 
-        -> MultiExperiment.Sessions
+        -> Recording.Sessions
         unit_id:            int     
         unit_type:          int
         ---
@@ -50,7 +51,7 @@ class Recording(dj.Computed):
 
         dataset_fn, dataset_config = (Dataset & key).fn_config
         filenames = dataset_config["neuronal_data_files"]
-        filenames_mua = dataset_config["mua_data_files"]
+        filenames_mua = dataset_config.get("mua_data_files", None)
 
         experiment_name, brain_area = dataset_config["dataset"].split('_')
 
@@ -59,30 +60,32 @@ class Recording(dj.Computed):
         for file in filenames:
             with open(file, "rb") as pkl:
                 raw_data = pickle.load(pkl)
-
             data_key = str(raw_data["session_id"])
 
-            for mua_data_path in filenames_mua:
-                with open(mua_data_path, "rb") as mua_pkl:
-                    mua_data = pickle.load(mua_pkl)
+            if filenames_mua is None:
+                unit_ids_mua, electrode_mua, relative_depth_mua, unit_type_mua = [], [], [], []
+            else:
+                for mua_data_path in filenames_mua:
+                    with open(mua_data_path, "rb") as mua_pkl:
+                        mua_data = pickle.load(mua_pkl)
 
-                if str(mua_data["session_id"]) == data_key:
-                    unit_ids_mua = mua_data["unit_ids"]
-                    electrode_mua = mua_data["electrode_nums"]
-                    relative_depth_mua = mua_data["relative_micron_depth"]
-                    unit_types = mua_data["unit_type"]
+                    if str(mua_data["session_id"]) == data_key:
+                        unit_ids_mua = mua_data["unit_ids"]
+                        electrode_mua = mua_data["electrode_nums"]
+                        relative_depth_mua = mua_data["relative_micron_depth"]
+                        unit_types = mua_data["unit_type"]
 
-                    unit_type_mua = np.ones(unit_types.shape[0])
-                    for i, unit in enumerate(unit_types):
-                        unit_type_mua[i] = unit_type_conventions[unit]
-                    break
+                        unit_type_mua = np.ones(unit_types.shape[0])
+                        for i, unit in enumerate(unit_types):
+                            unit_type_mua[i] = unit_type_conventions[unit]
+                        break
 
-            if not str(mua_data["session_id"]) == data_key:
-                print("session {} does not exist in MUA. Skipping MUA for that session".format(data_key))
-                unit_ids_mua, electrode_mua, relative_depth_mua = [],[],[]
+                if not str(mua_data["session_id"]) == data_key:
+                    print("session {} does not exist in MUA. Skipping MUA for that session".format(data_key))
+                    unit_ids_mua, electrode_mua, relative_depth_mua, unit_type_mua = [], [], [], []
 
-            unit_ids = raw_data.get("unit_ids", np.arange(raw_data["testing_responses"].shape[1]))
-            unit_type = raw_data.get("unit_type", np.ones(raw_data["testing_responses"].shape[1]))
+            unit_ids = raw_data.get("unit_ids", np.arange(raw_data["testing_responses"].shape[0]))
+            unit_type = raw_data.get("unit_type", np.ones(raw_data["testing_responses"].shape[0]))
 
             electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
                                                                                                       dtype=np.double)
