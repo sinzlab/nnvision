@@ -11,8 +11,8 @@ schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 @schema
 class Recording(dj.Computed):
     definition = """
-    # This table stores something which is awesome by design
-
+    # Overview table that summarizes the experiment, session, and unit data of table entry in nnfabrik's Dataset.
+    
     -> Dataset
     ---
     brain_area:            varchar(64)   # some string
@@ -55,18 +55,22 @@ class Recording(dj.Computed):
         if filenames is None:
             filenames = dataset_config.get("sua_data_files", None)
         filenames_mua = dataset_config.get("mua_data_files", None)
+        if filenames_mua is not None and filenames is None:
+            print("found MUA only ...")
+            filenames = filenames_mua
+            filenames_mua = None
 
         experiment_name, brain_area = dataset_config["dataset"].split('_')
 
         session_dict = {}
-
         for file in filenames:
             with open(file, "rb") as pkl:
                 raw_data = pickle.load(pkl)
             data_key = str(raw_data["session_id"])
 
             if filenames_mua is None:
-                unit_ids_mua, electrode_mua, relative_depth_mua, unit_type_mua = [], [], [], []
+                print("what")
+                unit_ids_mua, electrode_mua, relative_depth_mua, unit_types_mua = [], [], [], []
             else:
                 for mua_data_path in filenames_mua:
                     with open(mua_data_path, "rb") as mua_pkl:
@@ -76,16 +80,12 @@ class Recording(dj.Computed):
                         unit_ids_mua = mua_data["unit_ids"]
                         electrode_mua = mua_data["electrode_nums"]
                         relative_depth_mua = mua_data["relative_micron_depth"]
-                        unit_types = mua_data["unit_type"]
-
-                        unit_type_mua = np.ones(unit_types.shape[0])
-                        for i, unit in enumerate(unit_types):
-                            unit_type_mua[i] = unit_type_conventions[unit]
+                        unit_types_mua = mua_data["unit_type"]
                         break
 
                 if not str(mua_data["session_id"]) == data_key:
                     print("session {} does not exist in MUA. Skipping MUA for that session".format(data_key))
-                    unit_ids_mua, electrode_mua, relative_depth_mua, unit_type_mua = [], [], [], []
+                    unit_ids_mua, electrode_mua, relative_depth_mua, unit_types_mua = [], [], [], []
 
             if dataset == 'PlosCB19_V1':
                 n_neurons = raw_data["testing_responses"].shape[1]
@@ -94,7 +94,7 @@ class Recording(dj.Computed):
 
             unit_ids = raw_data.get("unit_ids", np.arange(n_neurons))
             unit_type = raw_data.get("unit_type", np.ones(n_neurons))
-            print(unit_ids.shape)
+
             electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
                                                                                                       dtype=np.double)
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
@@ -102,9 +102,13 @@ class Recording(dj.Computed):
             relative_depth = raw_data[
                 "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
                                                                                                    dtype=np.double)
-
             unit_ids = np.concatenate([unit_ids, unit_ids_mua])
-            unit_type = np.concatenate([unit_type, unit_type_mua])
+            unit_type = np.concatenate([unit_type, unit_types_mua])
+            unit_type_int = []
+            for unit in unit_type:
+                unit_type_int.append(unit_type_conventions.get(unit, unit))
+            unit_type_int = np.array(unit_type_int).astype(np.float)
+
             electrode = np.concatenate([electrode, electrode_mua])
             relative_depth = np.concatenate([relative_depth, relative_depth_mua])
 
@@ -114,13 +118,11 @@ class Recording(dj.Computed):
                                           y_grid=y_grid)
 
             session_dict[data_key]['unit_id'] = unit_ids
-            session_dict[data_key]['unit_type'] = unit_type
+            session_dict[data_key]['unit_type'] = unit_type_int
             session_dict[data_key]['electrode'] = electrode
             session_dict[data_key]['x_grid'] = x_grid
             session_dict[data_key]['y_grid'] = y_grid
             session_dict[data_key]['relative_depth'] = relative_depth
-
-
 
         key["brain_area"] = brain_area
         key["experiment_name"] = experiment_name
@@ -141,7 +143,7 @@ class Recording(dj.Computed):
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
                 key["unit_id"] = int(neuron_id)
                 key["unit_index"] = i
-                key['unit_type'] = session_dict[k]['unit_type'][i]
+                key['unit_type'] = int((session_dict[k]['unit_type'][i]).astype(np.float))
                 key['electrode'] = session_dict[k]['electrode'][i]
                 key['relative_depth'] = session_dict[k]['relative_depth'][i]
                 self.Units().insert1(key, ignore_extra_fields=True)
