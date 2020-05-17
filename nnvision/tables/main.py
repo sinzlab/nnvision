@@ -1,3 +1,16 @@
+from __future__ import annotations
+
+from typing import Callable, Iterable, Mapping, Optional, Tuple, Dict, Any
+
+from torch.nn import Module
+from torch.utils.data import DataLoader
+
+from featurevis.integration import ConstrainedOutputModel
+
+
+Key = Dict[str, Any]
+Dataloaders = Dict[str, DataLoader]
+
 import pickle
 import numpy as np
 import datajoint as dj
@@ -46,6 +59,10 @@ class Recording(dj.Computed):
         electrode:          int
         relative_depth:     float
         """
+        constrained_output_model = ConstrainedOutputModel
+        def get_output_selected_model(self, model: Module, key: Key) -> constrained_output_model:
+            unit_index, data_key = (self & key).fetch1("unit_index", "data_key")
+            return self.constrained_output_model(model, unit_index, forward_kwargs=dict(data_key=data_key))
 
     def make(self, key):
 
