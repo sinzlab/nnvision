@@ -7,6 +7,9 @@ import types
 import contextlib
 import featurevis
 from ..mei.helpers import is_ensemble
+import warnings
+from .measure_helpers import get_subset_of_repeats
+
 
 def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadcast_to_target=False):
     """
@@ -212,11 +215,13 @@ def get_fraction_oracles(model, dataloaders, device='cpu', corrected=False):
     return oracle_performance
 
 
-def get_explainable_var(dataloaders, as_dict=False, per_neuron=True):
+def get_explainable_var(dataloaders, as_dict=False, per_neuron=True, repeat_limit=None, randomize=True):
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     explainable_var = {}
     for k ,v in dataloaders.items():
         _, outputs = get_repeats(v)
+        if repeat_limit is not None:
+            outputs = get_subset_of_repeats(outputs=outputs, repeat_limit=repeat_limit, randomize=randomize)
         explainable_var[k] = compute_explainable_var(outputs)
     if not as_dict:
         explainable_var = np.hstack([v for v in explainable_var.values()]) if per_neuron else np.mean(np.hstack([v for v in explainable_var.values()]))
