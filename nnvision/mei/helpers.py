@@ -1,5 +1,11 @@
 from featurevis.integration import load_pickled_data
 import numpy as np
+import types
+import featurevis
+
+def is_ensemble(model):
+    return (isinstance(model, types.FunctionType) or isinstance(model, featurevis.integration.EnsembleModel))
+
 
 def get_neuron_mappings(dataset_config, key, load_func=None):
     if load_func is None:
