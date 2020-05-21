@@ -204,7 +204,8 @@ def monkey_mua_sua_loader(dataset,
                          avg=False,
                          image_file=None,
                          return_data_info=False,
-                         store_data_info=True):
+                         store_data_info=True,
+                         mua_selector=None):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -322,8 +323,10 @@ def monkey_mua_sua_loader(dataset,
                 mua_data = pickle.load(mua_pkl)
 
             if str(mua_data["session_id"]) == data_key:
-                mua_responses_train = mua_data["training_responses"].astype(np.float32)
-                mua_responses_test = mua_data["testing_responses"].astype(np.float32)
+                if mua_selector is not None:
+                    selected_mua = mua_selector[data_key]
+                mua_responses_train = mua_data["training_responses"].astype(np.float32)[selected_mua]
+                mua_responses_test = mua_data["testing_responses"].astype(np.float32)[selected_mua]
                 mua_training_image_ids = mua_data["training_image_ids"] - image_id_offset
                 mua_testing_image_ids = mua_data["testing_image_ids"] - image_id_offset
                 break
