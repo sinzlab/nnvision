@@ -1,6 +1,6 @@
 import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
-from .main import MonkeyExperiment
+from nnvision.tables.legacy.main import MonkeyExperiment
 
 from ..utility.dj_helpers import get_default_args
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, \

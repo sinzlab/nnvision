@@ -15,6 +15,7 @@ from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
 
+
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
