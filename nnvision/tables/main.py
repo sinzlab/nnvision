@@ -86,7 +86,6 @@ class Recording(dj.Computed):
             data_key = str(raw_data["session_id"])
 
             if filenames_mua is None:
-                print("what")
                 unit_ids_mua, electrode_mua, relative_depth_mua, unit_types_mua = [], [], [], []
             else:
                 for mua_data_path in filenames_mua:
