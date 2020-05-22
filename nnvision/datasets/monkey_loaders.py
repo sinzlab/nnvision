@@ -325,6 +325,8 @@ def monkey_mua_sua_loader(dataset,
             if str(mua_data["session_id"]) == data_key:
                 if mua_selector is not None:
                     selected_mua = mua_selector[data_key]
+                else:
+                    selected_mua = np.ones(len(mua_data["unit_ids"])).astype(bool)
                 mua_responses_train = mua_data["training_responses"].astype(np.float32)[selected_mua]
                 mua_responses_test = mua_data["testing_responses"].astype(np.float32)[selected_mua]
                 mua_training_image_ids = mua_data["training_image_ids"] - image_id_offset

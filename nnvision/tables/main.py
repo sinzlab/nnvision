@@ -96,7 +96,7 @@ class Recording(dj.Computed):
                         if mua_selector is not None:
                             selected_mua = mua_selector[data_key]
                         else:
-                            selected_mua = np.ones(len(mua_data["unit_ids"]))
+                            selected_mua = np.ones(len(mua_data["unit_ids"])).astype(bool)
                         unit_ids_mua = mua_data["unit_ids"][selected_mua]
                         electrode_mua = mua_data["electrode_nums"][selected_mua]
                         relative_depth_mua = mua_data["relative_micron_depth"][selected_mua]
