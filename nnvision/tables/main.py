@@ -76,7 +76,7 @@ class Recording(dj.Computed):
             print("found MUA only ...")
             filenames = filenames_mua
             filenames_mua = None
-
+        mua_selector = dataset_config.get("mua_selector", None)
         experiment_name, brain_area = dataset_config["dataset"].split('_')
 
         session_dict = {}
@@ -93,10 +93,14 @@ class Recording(dj.Computed):
                         mua_data = pickle.load(mua_pkl)
 
                     if str(mua_data["session_id"]) == data_key:
-                        unit_ids_mua = mua_data["unit_ids"]
-                        electrode_mua = mua_data["electrode_nums"]
-                        relative_depth_mua = mua_data["relative_micron_depth"]
-                        unit_types_mua = mua_data["unit_type"]
+                        if mua_selector is not None:
+                            selected_mua = mua_selector[data_key]
+                        else:
+                            selected_mua = np.ones(len(mua_data["unit_ids"]))
+                        unit_ids_mua = mua_data["unit_ids"][selected_mua]
+                        electrode_mua = mua_data["electrode_nums"][selected_mua]
+                        relative_depth_mua = mua_data["relative_micron_depth"][selected_mua]
+                        unit_types_mua = mua_data["unit_type"][selected_mua]
                         break
 
                 if not str(mua_data["session_id"]) == data_key:
