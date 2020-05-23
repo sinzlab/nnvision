@@ -20,7 +20,7 @@ schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
-class TrainCorrelation(ScoringBaseNeuronType):
+class TrainCorrelationScore(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
@@ -31,7 +31,7 @@ class TrainCorrelation(ScoringBaseNeuronType):
 
 
 @schema
-class ValidationCorrelation(ScoringBaseNeuronType):
+class ValidationCorrelationScore(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
@@ -42,7 +42,7 @@ class ValidationCorrelation(ScoringBaseNeuronType):
 
 
 @schema
-class TestCorrelation(ScoringBaseNeuronType):
+class TestCorrelationScore(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
@@ -53,7 +53,7 @@ class TestCorrelation(ScoringBaseNeuronType):
 
 
 @schema
-class AverageCorrelation(ScoringBaseNeuronType):
+class CorrelationToAverageScore(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_avg_correlations)
@@ -63,7 +63,7 @@ class AverageCorrelation(ScoringBaseNeuronType):
 
 
 @schema
-class FEVe(ScoringBaseNeuronType):
+class FEVeScore(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_FEV)
@@ -110,7 +110,7 @@ class TestPoissonLoss(ScoringBaseNeuronType):
 
 
 @schema
-class TrainCorrelationEnsemble(ScoringBaseNeuronType):
+class TrainCorrelationEnsembleScore(ScoringBaseNeuronType):
     trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
@@ -122,7 +122,7 @@ class TrainCorrelationEnsemble(ScoringBaseNeuronType):
 
 
 @schema
-class ValidationCorrelationEnsemble(ScoringBaseNeuronType):
+class ValidationCorrelationEnsembleScore(ScoringBaseNeuronType):
     trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
@@ -134,7 +134,7 @@ class ValidationCorrelationEnsemble(ScoringBaseNeuronType):
 
 
 @schema
-class TestCorrelationEnsemble(ScoringBaseNeuronType):
+class TestCorrelationEnsembleScore(ScoringBaseNeuronType):
     trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
