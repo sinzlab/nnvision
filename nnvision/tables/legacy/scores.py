@@ -4,7 +4,7 @@ from .main import MonkeyExperiment
 
 from nnvision.utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
 from nnvision.tables.from_nnfabrik import TrainedModel
-from nnvision.tables.from_mei import TrainedEnsembleModel
+from nnvision.tables.legacy.from_mei import TrainedEnsembleModel
 from nnvision.tables.utility import DataCache, TrainedModelCache, EnsembleModelCache, EnsembleModelCache_legacy
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
