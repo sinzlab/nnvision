@@ -9,7 +9,7 @@ import numpy as np
 from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
 from .from_nnfabrik import TrainedModel
-from .from_mei import TrainedEnsembleModel
+from .from_mei import Ensemble
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
@@ -111,7 +111,7 @@ class TestPoissonLoss(ScoringBaseNeuronType):
 
 @schema
 class TrainCorrelationEnsemble(ScoringBaseNeuronType):
-    trainedmodel_table = TrainedEnsembleModel
+    trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
@@ -123,7 +123,7 @@ class TrainCorrelationEnsemble(ScoringBaseNeuronType):
 
 @schema
 class ValidationCorrelationEnsemble(ScoringBaseNeuronType):
-    trainedmodel_table = TrainedEnsembleModel
+    trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
@@ -135,7 +135,7 @@ class ValidationCorrelationEnsemble(ScoringBaseNeuronType):
 
 @schema
 class TestCorrelationEnsemble(ScoringBaseNeuronType):
-    trainedmodel_table = TrainedEnsembleModel
+    trainedmodel_table = Ensemble
     dataset_table = Dataset
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
