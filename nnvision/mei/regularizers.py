@@ -1,5 +1,5 @@
-from featurevis.ops import ChangeStd, GaussianBlur, Jitter, TotalVariation, ChangeNorm, ClipRange
-from featurevis.utils import Compose
+from featurevis.legacy.ops import ChangeStd, GaussianBlur, Jitter, TotalVariation, ChangeNorm, ClipRange
+from featurevis.legacy.utils import Compose
 from featurevis import utils, ops
 from .utility import cumstom_initial_guess
 from functools import partial
