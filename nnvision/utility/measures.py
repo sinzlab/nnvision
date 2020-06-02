@@ -175,7 +175,7 @@ def compute_oracle_corr_corrected(repeated_outputs):
             var_mean.append(repeat.mean(axis=0))
         var_noise = np.mean(np.array(var_noise), axis=0)
         var_mean = np.var(np.array(var_mean), axis=0)
-    return var_mean/np.sqrt(var_mean * (var_mean + var_noise))
+    return var_mean / np.sqrt(var_mean * (var_mean + var_noise))
 
 
 def compute_oracle_corr(repeated_outputs):
@@ -212,7 +212,7 @@ def get_fraction_oracles(model, dataloaders, device='cpu', corrected=False):
         oracles = get_oracles(dataloaders=dataloaders, as_dict=False, per_neuron=True)
     test_correlation = get_correlations(model=model, dataloaders=dataloaders, device=device, as_dict=False, per_neuron=True)
     oracle_performance, _, _, _ = np.linalg.lstsq(np.hstack(oracles)[:, np.newaxis], np.hstack(test_correlation))
-    return oracle_performance
+    return oracle_performance[0]
 
 
 def get_explainable_var(dataloaders, as_dict=False, per_neuron=True, repeat_limit=None, randomize=True):
