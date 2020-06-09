@@ -165,6 +165,14 @@ def get_oracles_corrected(dataloaders, as_dict=False, per_neuron=True):
 
 
 def compute_oracle_corr_corrected(repeated_outputs):
+    """
+
+    Args:
+        repeated_outputs (list or array): array(images, repeats, responses), or a list of lists of repeats per image.
+
+    Returns: the oracle correlations per neuron
+
+    """
     if len(repeated_outputs.shape) == 3:
         var_noise = repeated_outputs.var(axis=1).mean(0)
         var_mean = repeated_outputs.mean(axis=1).var(0)
