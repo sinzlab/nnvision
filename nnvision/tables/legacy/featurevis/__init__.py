@@ -1,1 +1,1 @@
-from featurevis.core import gradient_ascent
+from .core import gradient_ascent
