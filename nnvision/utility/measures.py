@@ -22,7 +22,7 @@ def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadc
     """
     
     target = []
-    unique_images = torch.empty(0).cuda()
+    unique_images = torch.empty(0)
     for images, responses in dataloader:
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
