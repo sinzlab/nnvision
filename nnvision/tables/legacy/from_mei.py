@@ -1,13 +1,11 @@
 import datajoint as dj
-from nnvision.tables.legacy.featurevis.main import TrainedEnsembleModelTemplate, CSRFV1SelectorTemplate, MEIMethod, MEITemplate
+from nnvision.legacy.featurevis.main import TrainedEnsembleModelTemplate, MEITemplate
 from nnfabrik.main import Dataset
 from nnvision.tables.from_nnfabrik import TrainedModel
 from mlutils.data.datasets import StaticImageSet, FileTreeDataset
-from nnvision.tables.legacy.featurevis import integration
-from nnvision.mei.helpers import get_neuron_mappings, get_real_mappings
-from nnvision.mei.regularizers import rgb_initial_guess
+from nnvision.legacy.featurevis import integration
+from nnvision.mei.helpers import get_neuron_mappings
 from nnfabrik.utility.dj_helpers import make_hash
-from nnvision.tables.legacy.featurevis.methods import gradient_ascent
 
 import torch
 

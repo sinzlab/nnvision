@@ -3,7 +3,7 @@ import numpy as np
 import datajoint as dj
 from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
-from .featurevis import integration
+from nnvision.legacy.featurevis import integration
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
