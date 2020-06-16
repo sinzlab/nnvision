@@ -46,6 +46,12 @@ class TrainedModel(TrainedModelBase):
     data_info_table = DataInfo
 
 
+@schema
+class TrainedTransferModel(TrainedModelBase):
+    table_comment = "Trained models"
+    data_info_table = DataInfo
+
+
 class ScoringBaseNeuronType(ScoringBase):
     """
     A class that modifies the the scoring template from nnfabrik to reflect the changed primary attributes of the Units
