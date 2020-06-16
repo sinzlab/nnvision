@@ -8,7 +8,7 @@ from nnfabrik.utility.dj_helpers import gitlog, make_hash
 import numpy as np
 from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
-from .from_nnfabrik import TrainedModel
+from .from_nnfabrik import TrainedModel, TrainedTransferModel
 from .from_mei import Ensemble
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
@@ -104,6 +104,17 @@ class TestPoissonLoss(ScoringBaseNeuronType):
     measure_attribute = "test_poissonloss"
     data_cache = DataCache
     model_cache = TrainedModelCache
+
+
+@schema
+class TransferTestCorrelationScore(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test"
+    measure_attribute = "test_correlation"
+    data_cache = None
+    model_cache = None
 
 
 # ============================= ENSEMBLE SCORES =============================
