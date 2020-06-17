@@ -52,6 +52,20 @@ class TrainedTransferModel(TrainedModelBase):
     data_info_table = DataInfo
 
 
+class ScoringTable(ScoringBase):
+    """
+    Overwrites the nnfabriks scoring template, to make it handle mouse repeat-dataloaders.
+    """
+    dataloader_function_kwargs = {}
+
+    def get_repeats_dataloaders(self, key=None, **kwargs):
+        if key is None:
+            key = self.fetch1('KEY')
+        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
+            key=key)
+        return dataloaders["test"]
+
+
 class ScoringBaseNeuronType(ScoringBase):
     """
     A class that modifies the the scoring template from nnfabrik to reflect the changed primary attributes of the Units
