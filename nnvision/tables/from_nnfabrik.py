@@ -71,6 +71,16 @@ class ScoringBaseNeuronType(ScoringBase):
     A class that modifies the the scoring template from nnfabrik to reflect the changed primary attributes of the Units
     table.
     """
+
+    dataloader_function_kwargs = {}
+
+    def get_repeats_dataloaders(self, key=None, **kwargs):
+        if key is None:
+            key = self.fetch1('KEY')
+        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
+            key=key)
+        return dataloaders["test"]
+
     def insert_unit_measures(self, key, unit_measures_dict):
         key = key.copy()
         for data_key, unit_scores in unit_measures_dict.items():
@@ -93,6 +103,16 @@ class MeasuresBaseNeuronType(MeasuresBase):
     A class that modifies the the scoring template from nnfabrik to reflect the changed primary attributes of the Units
     table.
     """
+
+    dataloader_function_kwargs = {}
+
+    def get_repeats_dataloaders(self, key=None, **kwargs):
+        if key is None:
+            key = self.fetch1('KEY')
+        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
+            key=key)
+        return dataloaders["test"]
+
     def insert_unit_measures(self, key, unit_measures_dict):
         key = key.copy()
         for data_key, unit_scores in unit_measures_dict.items():
