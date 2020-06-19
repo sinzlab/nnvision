@@ -2,7 +2,7 @@ import datajoint as dj
 from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
-from nnfabrik.template import DataInfoBase, ScoringBase
+from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
 import os
