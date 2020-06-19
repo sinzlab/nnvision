@@ -18,6 +18,7 @@ from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
 from ..datasets.conventions import unit_type_conventions
 
+
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
