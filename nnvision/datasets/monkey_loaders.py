@@ -147,7 +147,7 @@ def monkey_static_loader(dataset,
                 responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
 
         if image_frac < 1:
-            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac, seed=seed)
+            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac)
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 

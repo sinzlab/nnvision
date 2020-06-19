@@ -74,6 +74,9 @@ def get_fraction_of_training_images(image_ids, fraction, seed=None, replace=Fals
 
     if seed is not None:
         np.random.seed(seed)
+    else:
+        np.random.seed()
+
     n_images = len(image_ids)
     image_indices = np.arange(n_images)
     idx_out = np.random.choice(image_indices, int(n_images * fraction), replace=replace)
