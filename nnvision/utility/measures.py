@@ -5,9 +5,12 @@ from mlutils.measures import corr
 from mlutils.training import eval_state, device_state
 import types
 import contextlib
+from nnvision.utility.measure_helpers import is_ensemble_function
+import warnings
+from .measure_helpers import get_subset_of_repeats
 
 
-def model_predictions_repeats(model, dataloader, data_key, device='cpu', broadcast_to_target=False):
+def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadcast_to_target=False):
     """
     Computes model predictions for a dataloader that yields batches with identical inputs along the first dimension.
     Unique inputs will be forwarded only once through the model
@@ -29,8 +32,8 @@ def model_predictions_repeats(model, dataloader, data_key, device='cpu', broadca
         target.append(responses.detach().cpu().numpy())
     
     # Forward unique images once:
-    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
-        with device_state(model, device) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+    with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
+        with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
             output = model(unique_images.to(device), data_key=data_key).detach().cpu()
     
     output = output.numpy()   
@@ -55,7 +58,7 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
         with torch.no_grad():
-            with device_state(model, device) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+            with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
                 output = torch.cat((output, (model(images.to(device), data_key=data_key).detach().cpu())), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
 
@@ -90,7 +93,7 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
 def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     correlations = {}
-    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+    with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
             correlations[k] = corr(target, output, axis=0)
@@ -106,7 +109,7 @@ def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron
 
 def get_poisson_loss(model, dataloaders, device='cpu', as_dict=False, avg=False, per_neuron=True, eps=1e-12):
     poisson_loss = {}
-    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+    with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
             loss = output - target * np.log(output + eps)
@@ -161,6 +164,14 @@ def get_oracles_corrected(dataloaders, as_dict=False, per_neuron=True):
 
 
 def compute_oracle_corr_corrected(repeated_outputs):
+    """
+
+    Args:
+        repeated_outputs (list or array): array(images, repeats, responses), or a list of lists of repeats per image.
+
+    Returns: the oracle correlations per neuron
+
+    """
     if len(repeated_outputs.shape) == 3:
         var_noise = repeated_outputs.var(axis=1).mean(0)
         var_mean = repeated_outputs.mean(axis=1).var(0)
@@ -171,7 +182,7 @@ def compute_oracle_corr_corrected(repeated_outputs):
             var_mean.append(repeat.mean(axis=0))
         var_noise = np.mean(np.array(var_noise), axis=0)
         var_mean = np.var(np.array(var_mean), axis=0)
-    return var_mean/np.sqrt(var_mean * (var_mean + var_noise))
+    return var_mean / np.sqrt(var_mean * (var_mean + var_noise))
 
 
 def compute_oracle_corr(repeated_outputs):
@@ -208,14 +219,16 @@ def get_fraction_oracles(model, dataloaders, device='cpu', corrected=False):
         oracles = get_oracles(dataloaders=dataloaders, as_dict=False, per_neuron=True)
     test_correlation = get_correlations(model=model, dataloaders=dataloaders, device=device, as_dict=False, per_neuron=True)
     oracle_performance, _, _, _ = np.linalg.lstsq(np.hstack(oracles)[:, np.newaxis], np.hstack(test_correlation))
-    return oracle_performance
+    return oracle_performance[0]
 
 
-def get_explainable_var(dataloaders, as_dict=False, per_neuron=True):
+def get_explainable_var(dataloaders, as_dict=False, per_neuron=True, repeat_limit=None, randomize=True):
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     explainable_var = {}
     for k ,v in dataloaders.items():
         _, outputs = get_repeats(v)
+        if repeat_limit is not None:
+            outputs = get_subset_of_repeats(outputs=outputs, repeat_limit=repeat_limit, randomize=randomize)
         explainable_var[k] = compute_explainable_var(outputs)
     if not as_dict:
         explainable_var = np.hstack([v for v in explainable_var.values()]) if per_neuron else np.mean(np.hstack([v for v in explainable_var.values()]))
@@ -251,7 +264,7 @@ def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, th
     """
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     FEV = {}
-    with eval_state(model) if not isinstance(model, types.FunctionType) else contextlib.nullcontext():
+    with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for data_key, dataloader in dataloaders.items():
             targets, outputs = model_predictions_repeats(model=model,
                                                          dataloader=dataloader,

@@ -67,6 +67,22 @@ def get_validation_split(n_images, train_frac, seed):
     return train_idx, val_idx
 
 
+def get_fraction_of_training_images(image_ids, fraction, seed=None, replace=False):
+
+    if len(image_ids.shape) > 1:
+        raise ValueError("image_ids must be a one dimensional vector ")
+
+    if seed is not None:
+        np.random.seed(seed)
+    else:
+        np.random.seed()
+
+    n_images = len(image_ids)
+    image_indices = np.arange(n_images)
+    idx_out = np.random.choice(image_indices, int(n_images * fraction), replace=replace)
+    return idx_out
+
+
 class ImageCache:
     """
     A simple cache which loads images into memory given a path to the directory where the images are stored.

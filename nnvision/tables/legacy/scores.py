@@ -1,21 +1,21 @@
 import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
-from .main import Recording
-from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
-from .from_nnfabrik import TrainedModel, TrainedTransferModel
-from .utility import DataCache, TrainedModelCache
+from .main import MonkeyExperiment
+
+from nnvision.utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
+from nnvision.tables.from_nnfabrik import TrainedModel
+from nnvision.tables.legacy.from_mei import TrainedEnsembleModel
+from nnvision.tables.utility import DataCache, TrainedModelCache, EnsembleModelCache, EnsembleModelCache_legacy
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
-from .from_nnfabrik import ScoringBaseNeuronType
-
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
 
 @schema
-class TrainCorrelationScore(ScoringBaseNeuronType):
+class TrainCorrelation(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "train"
     measure_attribute = "train_correlation"
@@ -24,9 +24,9 @@ class TrainCorrelationScore(ScoringBaseNeuronType):
 
 
 @schema
-class ValidationCorrelationScore(ScoringBaseNeuronType):
+class ValidationCorrelation(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "validation"
     measure_attribute = "validation_correlation"
@@ -35,9 +35,9 @@ class ValidationCorrelationScore(ScoringBaseNeuronType):
 
 
 @schema
-class TestCorrelationScore(ScoringBaseNeuronType):
+class TestCorrelation(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
@@ -46,9 +46,9 @@ class TestCorrelationScore(ScoringBaseNeuronType):
 
 
 @schema
-class CorrelationToAverageScore(ScoringBaseNeuronType):
+class AverageCorrelation(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_avg_correlations)
     measure_attribute = "avg_correlation"
     data_cache = DataCache
@@ -56,9 +56,9 @@ class CorrelationToAverageScore(ScoringBaseNeuronType):
 
 
 @schema
-class FEVeScore(ScoringBaseNeuronType):
+class FEVe(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_FEV)
     measure_dataset = "test"
     measure_attribute = "feve"
@@ -67,9 +67,9 @@ class FEVeScore(ScoringBaseNeuronType):
 
 
 @schema
-class TrainPoissonLoss(ScoringBaseNeuronType):
+class TrainPoissonLoss(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "train"
     measure_attribute = "train_poissonloss"
@@ -78,9 +78,9 @@ class TrainPoissonLoss(ScoringBaseNeuronType):
 
 
 @schema
-class ValidationPoissonLoss(ScoringBaseNeuronType):
+class ValidationPoissonLoss(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "validation"
     measure_attribute = "validation_poissonloss"
@@ -89,9 +89,9 @@ class ValidationPoissonLoss(ScoringBaseNeuronType):
 
 
 @schema
-class TestPoissonLoss(ScoringBaseNeuronType):
+class TestPoissonLoss(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_poisson_loss)
     measure_dataset = "test"
     measure_attribute = "test_poissonloss"
@@ -99,24 +99,52 @@ class TestPoissonLoss(ScoringBaseNeuronType):
     model_cache = TrainedModelCache
 
 
+# ============================= ENSEMBLE SCORES =============================
+
+
 @schema
-class TransferTestCorrelationScore(ScoringBaseNeuronType):
-    trainedmodel_table = TrainedTransferModel
-    unit_table = Recording.Units
+class TrainCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "train"
+    measure_attribute = "train_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache_legacy
+
+
+@schema
+class ValidationCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "validation"
+    measure_attribute = "validation_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache_legacy
+
+
+@schema
+class TestCorrelationEnsemble(ScoringBase):
+    trainedmodel_table = TrainedEnsembleModel
+    dataset_table = Dataset
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
-    data_cache = None
-    model_cache = None
+    data_cache = DataCache
+    model_cache = EnsembleModelCache_legacy
 
 
 # ============================= CUSTOM SCORES =============================
 
 
 @schema
-class TestPredictions(ScoringBaseNeuronType):
+class TestPredictions(ScoringBase):
     trainedmodel_table = TrainedModel
-    unit_table = Recording.Units
+    unit_table = MonkeyExperiment.Units
     measure_function = staticmethod(get_predictions)
     measure_secondary_function = staticmethod(get_targets)
     measure_dataset = "test"
@@ -181,14 +209,11 @@ class TestPredictions(ScoringBaseNeuronType):
         for data_key, unit_scores in unit_predictions_dict.items():
             for unit_index, unit_score in enumerate(unit_scores):
                 unit_secondary_score = unit_targets_dict[data_key][unit_index]
-                if "unit_id" in key: key.pop("unit_id")
-                if "data_key" in key: key.pop("data_key")
-                if "unit_type" in key: key.pop("unit_type")
+                key.pop("unit_id") if "unit_id" in key else None
+                key.pop("data_key") if "data_key" in key else None
                 neuron_key = dict(unit_index=unit_index, data_key=data_key)
-                unit_type = ((self.unit_table & key) & neuron_key).fetch1("unit_type")
                 unit_id = ((self.unit_table & key) & neuron_key).fetch1("unit_id")
                 key["unit_id"] = unit_id
-                key["unit_type"] = unit_type
                 key["unit_{}".format(self.measure_attribute)] = unit_score
                 key["unit_{}".format(self.measure_secondary_attribute)] = unit_secondary_score
                 key["data_key"] = data_key
