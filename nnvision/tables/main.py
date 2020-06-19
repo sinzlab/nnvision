@@ -5,7 +5,7 @@ from typing import Callable, Iterable, Mapping, Optional, Tuple, Dict, Any
 from torch.nn import Module
 from torch.utils.data import DataLoader
 
-from featurevis.integration import ConstrainedOutputModel
+from mei.modules import ConstrainedOutputModel
 
 
 Key = Dict[str, Any]
