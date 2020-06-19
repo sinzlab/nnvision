@@ -7,7 +7,7 @@ from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
 from .from_nnfabrik import TrainedModel, TrainedTransferModel
 from .from_mei import Ensemble
-from .utility import DataCache, TrainedModelCache, EnsembleModelCache
+from .utility import DataCache
 from .from_nnfabrik import ScoringBaseNeuronType
 from .legacy.from_mei import TrainedEnsembleModel
 
