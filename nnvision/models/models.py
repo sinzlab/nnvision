@@ -765,16 +765,30 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
     return model
 
 
-def simple_core_transfer(dataloaders, seed, transfer_key):
+def simple_core_transfer(dataloaders,
+                         seed,
+                         transfer_key=None,
+                         core_transfer_table=TrainedTransferModel,
+                         readout_transfer_table=TrainedModel,
+                         readout_transfer_key=None,
+                         pretrained_features=False,
+                         pretrained_location=False,
+                         pretrained_bias=False):
+
+
+    if readout_transfer_key is not None and (pretrained_features or pretrained_location or pretrained_bias):
+        raise ValueError("if pretrained features or positions should be transferred, a readout transfer key "
+                         "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
     model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
-    model_state = (TrainedTransferModel & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+    core_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
-    core_state = model_state.copy()
-    for dict_key in model_state:
-        if 'readout' in dict_key:
-            core_state.pop(dict_key);
+    readout_state = (readout_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
-    model.load_state_dict(core_state, strict=False)
+    core = purge_state_dict(state_dict=core_state, key='readout')
+    readout = purge_state_dict(state_dict=readout_state, key='core')
+
+    model.load_state_dict(core, strict=False)
+    model.load_state_dict(readout, strict=False)
 
     return model
