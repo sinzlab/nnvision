@@ -5,15 +5,23 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d
-from nnfabrik.main import Model
+
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
-from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
 from torch import nn
 from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
-from .utility import unpack_data_info
+from .utility import unpack_data_info, purge_state_dict
+
+try:
+    from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from nnfabrik.main import Model
+
+except ModuleNotFoundError:
+    pass
+except:
+    print("dj database connection could not be established. no access to pretrained models available.")
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
