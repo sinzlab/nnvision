@@ -5,8 +5,9 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d
-from nnfabrik.models.pretrained_models import TransferLearningCore
+from nnfabrik.main import Model
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
 from torch import nn
 from torch.nn import functional as F
 
@@ -752,5 +753,20 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
+
+    return model
+
+
+def simple_core_transfer(dataloaders, seed, transfer_key):
+
+    model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    model_state = (TrainedTransferModel & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+
+    core_state = model_state.copy()
+    for dict_key in model_state:
+        if 'readout' in dict_key:
+            core_state.pop(dict_key);
+
+    model.load_state_dict(core_state, strict=False)
 
     return model
