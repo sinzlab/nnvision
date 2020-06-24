@@ -2,7 +2,7 @@ import torch
 import copy
 import mlutils
 from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
-from mlutils.layers.readouts.legacy import Gaussian2d
+from mlutils.layers.legacy import Gaussian2d
 def unpack_data_info(data_info):
 
     in_shapes_dict = {k: v["input_dimensions"] for k, v in data_info.items()}
@@ -11,11 +11,19 @@ def unpack_data_info(data_info):
     return n_neurons_dict, in_shapes_dict, input_channels
 
 
-def purge_state_dict(state_dict, key):
+def purge_state_dict(state_dict, purge_key=None, survival_key=None):
+
+    if (purge_key is None) and (survival_key is None):
+        raise ValueError("purge_key and survival_key can not both be None. At least one key has to be defined")
+
     purged_state_dict = copy.deepcopy(state_dict)
-    for dict_key in purged_state_dict.keys():
-        if key in dict_key:
+
+    for dict_key in state_dict.keys():
+        if (purge_key is not None) and (purge_key in dict_key):
             purged_state_dict.pop(dict_key)
+        elif (survival_key is not None) and (survival_key not in dict_key):
+            purged_state_dict.pop(dict_key)
+
     return purged_state_dict
 
 
