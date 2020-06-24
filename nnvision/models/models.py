@@ -12,7 +12,7 @@ from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
-from .utility import unpack_data_info, purge_state_dict
+from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
@@ -772,23 +772,38 @@ def simple_core_transfer(dataloaders,
                          readout_transfer_table=TrainedModel,
                          readout_transfer_key=None,
                          pretrained_features=False,
-                         pretrained_location=False,
+                         pretrained_grid=False,
                          pretrained_bias=False):
 
 
-    if readout_transfer_key is not None and (pretrained_features or pretrained_location or pretrained_bias):
-        raise ValueError("if pretrained features or positions should be transferred, a readout transfer key "
+    if readout_transfer_key is not None and (pretrained_features or pretrained_grid or pretrained_bias):
+        raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
     model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
-    core_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+    model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
-    readout_state = (readout_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
-
-    core = purge_state_dict(state_dict=core_state, key='readout')
-    readout = purge_state_dict(state_dict=readout_state, key='core')
-
+    core = purge_state_dict(state_dict=model_state, purge_key='readout')
     model.load_state_dict(core, strict=False)
-    model.load_state_dict(readout, strict=False)
+
+    for params in model.core.parameters():
+        params.requires_grad = False
+
+    if readout_transfer_key is not None:
+        readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+        readout = purge_state_dict(state_dict=readout_state, purge_key='core')
+        feature_key, grid_key, bias_key = get_readout_key_names(model)
+
+        if not pretrained_features:
+            readout = purge_state_dict(state_dict=readout, purge_key=feature_key)
+
+        if not pretrained_grid:
+            readout = purge_state_dict(state_dict=readout, purge_key=grid_key)
+
+        if not pretrained_bias:
+            readout = purge_state_dict(state_dict=readout, purge_key=bias_key)
+
+
+        model.load_state_dict(readout, strict=False)
 
     return model
