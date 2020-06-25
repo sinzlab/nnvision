@@ -5,7 +5,6 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d
-from nnfabrik.models.pretrained_models import TransferLearningCore
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
 from torch.nn import functional as F
@@ -36,8 +35,8 @@ class Encoder(nn.Module):
 
 
 def task_core_gauss_readout(dataloaders, seed,
-                            input_channels=1, model_name='vgg16',  # begin of core args
-                            layer_name=11, pretrained=True, bias = False,
+                            input_channels=1, model_name='vgg19',  # begin of core args
+                            layer_name='features.10', pretrained=True, bias = False,
                             final_batchnorm=True, final_nonlinearity=True,
                             momentum=0.1,fine_tune=False,
                             init_mu_range=0.4, init_sigma_range=0.6, # readout args,
