@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
 from .utility import unpack_data_info
 
-from ptrnets.cores import TaskCore
+from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
 
 
 class Encoder(nn.Module):
@@ -80,7 +80,7 @@ def task_core_gauss_readout(dataloaders, seed,
 
     set_random_seed(seed)
 
-    core = TaskCore(input_channels=core_input_channels,
+    core = TaskDrivenCore2(input_channels=core_input_channels,
                     model_name=model_name,
                     layer_name=layer_name,
                     pretrained=pretrained,
@@ -89,7 +89,11 @@ def task_core_gauss_readout(dataloaders, seed,
                     final_nonlinearity=final_nonlinearity,
                     momentum=momentum,
                     fine_tune=fine_tune)
-
+    
+    set_random_seed(seed)
+    
+    core.initialize()
+    
     readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
                                      n_neurons_dict=n_neurons_dict,
                                      init_mu_range=init_mu_range,
