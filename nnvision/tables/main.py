@@ -5,7 +5,7 @@ from typing import Callable, Iterable, Mapping, Optional, Tuple, Dict, Any
 from torch.nn import Module
 from torch.utils.data import DataLoader
 
-from featurevis.integration import ConstrainedOutputModel
+from mei.modules import ConstrainedOutputModel
 
 
 Key = Dict[str, Any]
@@ -16,8 +16,8 @@ import numpy as np
 import datajoint as dj
 from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
-from featurevis import integration
 from ..datasets.conventions import unit_type_conventions
+
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 

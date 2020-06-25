@@ -1,16 +1,9 @@
 import datajoint as dj
-from nnfabrik.template import TrainedModelBase
-import tempfile
-import torch
-import os
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
-from nnfabrik.utility.dj_helpers import gitlog, make_hash
-import numpy as np
 from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
-from .from_nnfabrik import TrainedModel
-from .from_mei import Ensemble
-from .utility import DataCache, TrainedModelCache, EnsembleModelCache
+from .from_nnfabrik import TrainedModel, TrainedTransferModel
+from .utility import DataCache, TrainedModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.template import ScoringBase, SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
@@ -106,43 +99,15 @@ class TestPoissonLoss(ScoringBaseNeuronType):
     model_cache = TrainedModelCache
 
 
-# ============================= ENSEMBLE SCORES =============================
-
-
 @schema
-class TrainCorrelationEnsembleScore(ScoringBaseNeuronType):
-    trainedmodel_table = Ensemble
-    dataset_table = Dataset
-    unit_table = Recording.Units
-    measure_function = staticmethod(get_correlations)
-    measure_dataset = "train"
-    measure_attribute = "train_correlation"
-    data_cache = DataCache
-    model_cache = EnsembleModelCache
-
-
-@schema
-class ValidationCorrelationEnsembleScore(ScoringBaseNeuronType):
-    trainedmodel_table = Ensemble
-    dataset_table = Dataset
-    unit_table = Recording.Units
-    measure_function = staticmethod(get_correlations)
-    measure_dataset = "validation"
-    measure_attribute = "validation_correlation"
-    data_cache = DataCache
-    model_cache = EnsembleModelCache
-
-
-@schema
-class TestCorrelationEnsembleScore(ScoringBaseNeuronType):
-    trainedmodel_table = Ensemble
-    dataset_table = Dataset
+class TransferTestCorrelationScore(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
-    data_cache = DataCache
-    model_cache = EnsembleModelCache
+    data_cache = None
+    model_cache = None
 
 
 # ============================= CUSTOM SCORES =============================

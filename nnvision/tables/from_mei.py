@@ -3,8 +3,8 @@ from __future__ import annotations
 import datajoint as dj
 from nnfabrik.main import Dataset
 from .from_nnfabrik import TrainedModel
-from featurevis import mixins
-from featurevis.main import MEITemplate, MEISeed
+from mei import mixins
+from mei.main import MEITemplate, MEISeed
 from torch.utils.data import DataLoader
 from nnfabrik.utility.dj_helpers import CustomSchema
 from .main import Recording

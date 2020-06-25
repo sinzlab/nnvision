@@ -6,7 +6,7 @@ import pickle
 from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
-from .utility import get_validation_split, ImageCache, get_cached_loader
+from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
 
@@ -24,7 +24,9 @@ def monkey_static_loader(dataset,
                          avg=False,
                          image_file=None,
                          return_data_info=False,
-                         store_data_info=True):
+                         store_data_info=True,
+                         image_frac=1.,
+                         image_selection_seed=None):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -143,6 +145,11 @@ def monkey_static_loader(dataset,
             if time_bins_sum is not None:  # then average over given time bins
                 responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
                 responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+
+        if image_frac < 1:
+            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac)
+            training_image_ids = training_image_ids[idx_out]
+            responses_train = responses_train[idx_out]
 
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
