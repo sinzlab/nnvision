@@ -14,8 +14,6 @@ from torch.nn import functional as F
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
 from .utility import unpack_data_info
-from nnvision.tables.from_nnfabrik import TrainedModel
-from mlutils.layers.readouts import FullGaussian2d
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
@@ -771,65 +769,4 @@ def simple_core_transfer(dataloaders, seed, transfer_key):
 
     model.load_state_dict(core_state, strict=False)
 
-    return model
-
-def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
-                                   dataset_fn, dataset_hash, trainer_fn,
-                                   trainer_hash):
-
-    
-    dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
-                                                   dataset_hash=dataset_hash,
-                                                   trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
-    model.cuda();
-    model.eval()
-
-
-    data_key = list(model.readout.keys())[0]
-
-    in_shape = model.readout[data_key].in_shape
-    init_mu_range = model.readout[data_key].init_mu_range
-    init_sigma = model.readout[data_key].init_sigma
-
-    grid_augment = torch.tensor([[0,0]])
-
-    total_n_neurons = 0
-    for data_key, readout in model.readout.items():
-        if data_key == 'augmentation':
-            continue
-        total_n_neurons += readout.outdims
-    
-    n_augmented_units = total_n_neurons
-
-    model.readout['augmentation'] = FullGaussian2d(in_shape=in_shape, outdims=n_augmented_units, bias=True, 
-                                                   init_mu_range=init_mu_range, init_sigma=init_sigma, 
-                                                   gauss_type='isotropic')
-    model.cuda();
-    insert_index = 0
-    for data_key, readout in model.readout.items():
-
-        if data_key == 'augmentation':
-            continue
-
-        for i in range(readout.outdims):
-
-            features = model.readout[data_key].features.data[:,:,:,i]
-            bias = model.readout[data_key].bias.data[i]
-            sigma = model.readout[data_key].sigma.data[0][i]
-
-            model.readout["augmentation"].features.data[:, :, :, insert_index] = features
-            model.readout["augmentation"].bias.data[insert_index]  = bias
-            model.readout['augmentation'].sigma.data[:, insert_index, :, :] = sigma
-            model.readout['augmentation'].mu.data[:, insert_index, :, :] = grid_augment
-
-            insert_index += 1
-
-    sessions = []
-    for data_key in model.readout.keys():
-        if data_key != 'augmentation':
-            sessions.append(data_key)
-
-    for session in sessions:
-        model.readout.pop(session)
-    
     return model
