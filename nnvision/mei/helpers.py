@@ -1,4 +1,4 @@
-from featurevis.integration import load_pickled_data
+from nnvision.legacy.featurevis.integration import load_pickled_data
 import numpy as np
 
 
