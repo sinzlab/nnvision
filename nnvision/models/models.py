@@ -775,8 +775,8 @@ def simple_core_transfer(dataloaders,
                          pretrained_grid=False,
                          pretrained_bias=False):
 
-
-    if readout_transfer_key is not None and (pretrained_features or pretrained_grid or pretrained_bias):
+    print(readout_transfer_key)
+    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
         raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
