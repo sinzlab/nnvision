@@ -767,10 +767,10 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
 
 def simple_core_transfer(dataloaders,
                          seed,
-                         transfer_key=None,
-                         core_transfer_table=TrainedTransferModel,
-                         readout_transfer_table=TrainedModel,
-                         readout_transfer_key=None,
+                         transfer_key=dict(),
+                         core_transfer_table=None,
+                         readout_transfer_table=None,
+                         readout_transfer_key=dict(),
                          pretrained_features=False,
                          pretrained_grid=False,
                          pretrained_bias=False):
@@ -779,6 +779,13 @@ def simple_core_transfer(dataloaders,
     if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
         raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
+
+    # set default values that are in line with parameter expansion
+    if core_transfer_table is None:
+        core_transfer_table = TrainedTransferModel
+
+    if readout_transfer_table is None:
+        readout_transfer_table = TrainedModel
 
     model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
     model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
