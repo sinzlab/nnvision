@@ -4,7 +4,7 @@ import torch
 from ax.service.managed_loop import optimize
 from .dj_helpers import make_hash
 from .nnf_helper import split_module_name, dynamic_import
-from nnfabrik.main import *
+from nnvision.legacy.nnfabrik.main import *
 
 
 class Bayesian():
