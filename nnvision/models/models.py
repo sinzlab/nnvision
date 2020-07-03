@@ -4,7 +4,7 @@ import copy
 
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
-from mlutils.layers.readouts import PointPooled2d
+from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
 
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
@@ -812,5 +812,116 @@ def simple_core_transfer(dataloaders,
 
 
         model.load_state_dict(readout, strict=False)
+
+    return model
+
+
+def transfer_readout_augmentation(dataloaders,
+                                  seed,
+                                  transfer_key=dict(),
+                                  core_transfer_table=None,
+                                  readout_transfer_table=None,
+                                  readout_transfer_key=dict(),
+                                  pretrained_features=False,
+                                  pretrained_grid=False,
+                                  pretrained_bias=False,
+                                  augmented_in=False,
+                                  augment_x_start=-1,
+                                  augment_x_end=1,
+                                  augment_y_start=-1,
+                                  augment_y_end=1,
+                                  n_augment_x=10,
+                                  n_augment_y=10,
+                                  train_augmented_pos=False,
+                                  train_augmented_features=True):
+
+    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
+        raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
+                         "has to be provided, by passing it to the argument 'readout_transfer_key'")
+
+    # set default values that are in line with parameter expansion
+    if core_transfer_table is None:
+        core_transfer_table = TrainedTransferModel
+
+    if readout_transfer_table is None:
+        readout_transfer_table = TrainedModel
+
+    model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+
+    core = purge_state_dict(state_dict=model_state, purge_key='readout')
+    model.load_state_dict(core, strict=False)
+
+    for params in model.core.parameters():
+        params.requires_grad = False
+
+    if readout_transfer_key:
+        readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+        readout = purge_state_dict(state_dict=readout_state, purge_key='core')
+        feature_key, grid_key, bias_key = get_readout_key_names(model)
+
+        if not pretrained_features:
+            readout = purge_state_dict(state_dict=readout, purge_key=feature_key)
+
+        if not pretrained_grid:
+            readout = purge_state_dict(state_dict=readout, purge_key=grid_key)
+
+        if not pretrained_bias:
+            readout = purge_state_dict(state_dict=readout, purge_key=bias_key)
+
+
+        model.load_state_dict(readout, strict=False)
+
+
+    grid_augment = []
+    for x in np.linspace(augment_x_start, augment_x_end, n_augment_x):
+        for y in np.linspace(augment_y_start, augment_y_end, n_augment_y):
+            grid_augment.append([x, y])
+
+    grid_augment = torch.tensor(grid_augment)
+    neuron_repeats = grid_augment.shape[0]
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        total_n_neurons += readout.outdims
+    n_augmented_units = total_n_neurons * neuron_repeats
+
+    in_shape = model.readout[data_key].in_shape
+    gauss_type = model.readout[data_key].gauss_type
+
+    if not augmented_in:
+        model.readout["augmentation"] = FullGaussian2d(in_shape,
+                                                       outdims=n_augmented_units,
+                                                       bias=True,
+                                                       gauss_type=gauss_type)
+
+    # Setting the readout values to
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+        if augmented_in:
+            if data_key != 'augmentation':
+                continue
+            for i in range(readout.outdims //neuron_repeats):
+
+                model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0,
+                :] = grid_augment
+                insert_index += neuron_repeats
+
+        else:
+            if data_key == 'augmentation':
+                continue
+
+            for i in range(readout.outdims):
+                features = model.readout[data_key].features.data[:, :, :, i, ]
+                bias = model.readout[data_key].bias.data[i]
+
+                model.readout["augmentation"].features.data[:, :, :,
+                insert_index:insert_index + neuron_repeats] = features[:, :, :, None]
+                model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0, :] = grid_augment
+                model.readout["augmentation"].bias.data[insert_index:insert_index + neuron_repeats] = bias
+                insert_index += neuron_repeats
+
+    model.readout["augmentation"].mu.requires_grad = False
+    model.readout["augmentation"].sigma.requires_grad = False
 
     return model
