@@ -754,10 +754,10 @@ def simple_core_transfer(dataloaders,
                          readout_transfer_key=dict(),
                          pretrained_features=False,
                          pretrained_grid=False,
-                         pretrained_bias=False):
+                         pretrained_bias=False,
+                         **kwargs):
 
-    print(readout_transfer_key)
-    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
+    if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
         raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
@@ -768,7 +768,15 @@ def simple_core_transfer(dataloaders,
     if readout_transfer_table is None:
         readout_transfer_table = TrainedModel
 
-    model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    if kwargs:
+        model_fn, model_config = (Model & transfer_key).fetch1("model_fn", "model_config")
+        model_config.update(kwargs)
+        model = get_model(model_fn=model_fn,
+                          model_config=model_config,
+                          dataloaders=dataloaders,
+                          seed=seed)
+    else:
+        model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
     model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
     core = purge_state_dict(state_dict=model_state, purge_key='readout')
@@ -777,7 +785,7 @@ def simple_core_transfer(dataloaders,
     for params in model.core.parameters():
         params.requires_grad = False
 
-    if readout_transfer_key is not None:
+    if readout_transfer_key:
         readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
         readout = purge_state_dict(state_dict=readout_state, purge_key='core')
         feature_key, grid_key, bias_key = get_readout_key_names(model)
@@ -803,6 +811,7 @@ def transfer_readout_augmentation(dataloaders,
                                   core_transfer_table=None,
                                   readout_transfer_table=None,
                                   readout_transfer_key=dict(),
+                                  model_config_kwargs=dict(),
                                   pretrained_features=False,
                                   pretrained_grid=False,
                                   pretrained_bias=False,
@@ -816,7 +825,7 @@ def transfer_readout_augmentation(dataloaders,
                                   train_augmented_pos=False,
                                   train_augmented_features=True):
 
-    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
+    if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
         raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
@@ -827,7 +836,15 @@ def transfer_readout_augmentation(dataloaders,
     if readout_transfer_table is None:
         readout_transfer_table = TrainedModel
 
-    model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    if model_config_kwargs:
+        model_fn, model_config = (Model & transfer_key).fetch1("model_fn", "model_config")
+        model_config.update(model_config_kwargs)
+        model = get_model(model_fn=model_fn,
+                          model_config=model_config,
+                          dataloaders=dataloaders,
+                          seed=seed)
+    else:
+        model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
     model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
     core = purge_state_dict(state_dict=model_state, purge_key='readout')
