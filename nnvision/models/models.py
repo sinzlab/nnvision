@@ -4,66 +4,24 @@ import copy
 
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
-from mlutils.layers.readouts import PointPooled2d
+from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
 
+from nnfabrik.builder import get_model
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from torch import nn
 from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
-from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
+from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultiplePointPooled2d, MultipleGaussian2d
 from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
     from nnfabrik.main import Model
-
 except ModuleNotFoundError:
     pass
 except:
     print("dj database connection could not be established. no access to pretrained models available.")
-
-class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
-        # super init to get the _module attribute
-        super(MultiplePointPooled2d, self).__init__()
-        for k in n_neurons_dict:
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-            self.add_module(k, PointPooled2d(
-                in_shape,
-                n_neurons,
-                pool_steps=pool_steps,
-                pool_kern=pool_kern,
-                bias=bias,
-                init_range=init_range)
-                            )
-        self.gamma_readout = gamma_readout
-
-
-class MultipleGaussian2d(torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout):
-        # super init to get the _module attribute
-        super(MultipleGaussian2d, self).__init__()
-        for k in n_neurons_dict:
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-            self.add_module(k, Gaussian2d(
-                in_shape=in_shape,
-                outdims=n_neurons,
-                init_mu_range=init_mu_range,
-                init_sigma_range=init_sigma_range,
-                bias=bias)
-                            )
-        self.gamma_readout = gamma_readout
-
-    def forward(self, *args, data_key=None, **kwargs):
-        if data_key is None and len(self) == 1:
-            data_key = list(self.keys())[0]
-        return self[data_key](*args, **kwargs)
-
-    def regularizer(self, data_key):
-        return self[data_key].feature_l1(average=False) * self.gamma_readout
 
 
 def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
@@ -165,15 +123,37 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
     return model
 
 
-def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
-                               hidden_kern=3, layers=3, gamma_input=15.5,
-                               skip=0, final_nonlinearity=True, momentum=0.9,
-                               pad_input=False, batch_norm=True, hidden_dilation=1,
-                               laplace_padding=None, input_regularizer='LaplaceL2norm',
-                               init_mu_range=0.2, init_sigma=1., readout_bias=True,  # readout args,
-                               gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
-                               depth_separable=False, linear=False, gauss_type='full',
-                               grid_mean_predictor=None, share_features=False, share_grid=False, data_info=None,
+def se_core_full_gauss_readout(dataloaders,
+                               seed,
+                               hidden_channels=32,
+                               input_kern=13,
+                               hidden_kern=3,
+                               layers=3,
+                               gamma_input=15.5,
+                               skip=0,
+                               final_nonlinearity=True,
+                               momentum=0.9,
+                               pad_input=False,
+                               batch_norm=True,
+                               hidden_dilation=1,
+                               laplace_padding=None,
+                               input_regularizer='LaplaceL2norm',
+                               init_mu_range=0.2,
+                               init_sigma=1.,
+                               readout_bias=True,
+                               gamma_readout=4,
+                               elu_offset=0,
+                               stack=None,
+                               se_reduction=32,
+                               n_se_blocks=1,
+                               depth_separable=False,
+                               linear=False,
+                               gauss_type='full',
+                               grid_mean_predictor=None,
+                               share_features=False,
+                               share_grid=False,
+                               data_info=None,
+                               gamma_grid_dispersion=0,
                                ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -291,7 +271,8 @@ def se_core_full_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern
                                      source_grids=source_grids,
                                      share_features=share_features,
                                      share_grid=share_grid,
-                                     shared_match_ids=shared_match_ids
+                                     shared_match_ids=shared_match_ids,
+                                     gamma_grid_dispersion=gamma_grid_dispersion,
                                      )
 
     # initializing readout bias to mean response
@@ -767,20 +748,35 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
 
 def simple_core_transfer(dataloaders,
                          seed,
-                         transfer_key=None,
-                         core_transfer_table=TrainedTransferModel,
-                         readout_transfer_table=TrainedModel,
-                         readout_transfer_key=None,
+                         transfer_key=dict(),
+                         core_transfer_table=None,
+                         readout_transfer_table=None,
+                         readout_transfer_key=dict(),
                          pretrained_features=False,
                          pretrained_grid=False,
-                         pretrained_bias=False):
+                         pretrained_bias=False,
+                         **kwargs):
 
-    print(readout_transfer_key)
-    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
+    if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
         raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
                          "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
-    model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    # set default values that are in line with parameter expansion
+    if core_transfer_table is None:
+        core_transfer_table = TrainedTransferModel
+
+    if readout_transfer_table is None:
+        readout_transfer_table = TrainedModel
+
+    if kwargs:
+        model_fn, model_config = (Model & transfer_key).fetch1("model_fn", "model_config")
+        model_config.update(kwargs)
+        model = get_model(model_fn=model_fn,
+                          model_config=model_config,
+                          dataloaders=dataloaders,
+                          seed=seed)
+    else:
+        model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
     model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
     core = purge_state_dict(state_dict=model_state, purge_key='readout')
@@ -789,7 +785,7 @@ def simple_core_transfer(dataloaders,
     for params in model.core.parameters():
         params.requires_grad = False
 
-    if readout_transfer_key is not None:
+    if readout_transfer_key:
         readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
         readout = purge_state_dict(state_dict=readout_state, purge_key='core')
         feature_key, grid_key, bias_key = get_readout_key_names(model)
@@ -805,5 +801,125 @@ def simple_core_transfer(dataloaders,
 
 
         model.load_state_dict(readout, strict=False)
+
+    return model
+
+
+def transfer_readout_augmentation(dataloaders,
+                                  seed,
+                                  transfer_key=dict(),
+                                  core_transfer_table=None,
+                                  readout_transfer_table=None,
+                                  readout_transfer_key=dict(),
+                                  model_config_kwargs=dict(),
+                                  pretrained_features=False,
+                                  pretrained_grid=False,
+                                  pretrained_bias=False,
+                                  augmented_in=False,
+                                  augment_x_start=-1,
+                                  augment_x_end=1,
+                                  augment_y_start=-1,
+                                  augment_y_end=1,
+                                  n_augment_x=10,
+                                  n_augment_y=10,
+                                  train_augmented_pos=False,
+                                  train_augmented_features=True):
+
+    if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
+        raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
+                         "has to be provided, by passing it to the argument 'readout_transfer_key'")
+
+    # set default values that are in line with parameter expansion
+    if core_transfer_table is None:
+        core_transfer_table = TrainedTransferModel
+
+    if readout_transfer_table is None:
+        readout_transfer_table = TrainedModel
+
+    if model_config_kwargs:
+        model_fn, model_config = (Model & transfer_key).fetch1("model_fn", "model_config")
+        model_config.update(model_config_kwargs)
+        model = get_model(model_fn=model_fn,
+                          model_config=model_config,
+                          dataloaders=dataloaders,
+                          seed=seed)
+    else:
+        model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
+    model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+
+    core = purge_state_dict(state_dict=model_state, purge_key='readout')
+    model.load_state_dict(core, strict=False)
+
+    for params in model.core.parameters():
+        params.requires_grad = False
+
+    if readout_transfer_key:
+        readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+        readout = purge_state_dict(state_dict=readout_state, purge_key='core')
+        feature_key, grid_key, bias_key = get_readout_key_names(model)
+
+        if not pretrained_features:
+            readout = purge_state_dict(state_dict=readout, purge_key=feature_key)
+
+        if not pretrained_grid:
+            readout = purge_state_dict(state_dict=readout, purge_key=grid_key)
+
+        if not pretrained_bias:
+            readout = purge_state_dict(state_dict=readout, purge_key=bias_key)
+
+
+        model.load_state_dict(readout, strict=False)
+
+
+    grid_augment = []
+    for x in np.linspace(augment_x_start, augment_x_end, n_augment_x):
+        for y in np.linspace(augment_y_start, augment_y_end, n_augment_y):
+            grid_augment.append([x, y])
+
+    grid_augment = torch.tensor(grid_augment)
+    neuron_repeats = grid_augment.shape[0]
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        total_n_neurons += readout.outdims
+    n_augmented_units = total_n_neurons * neuron_repeats
+
+    in_shape = model.readout[data_key].in_shape
+    gauss_type = model.readout[data_key].gauss_type
+
+    if not augmented_in:
+        model.readout["augmentation"] = FullGaussian2d(in_shape,
+                                                       outdims=n_augmented_units,
+                                                       bias=True,
+                                                       gauss_type=gauss_type)
+
+    # Setting the readout values to
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+        if augmented_in:
+            if data_key != 'augmentation':
+                continue
+            for i in range(readout.outdims //neuron_repeats):
+
+                model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0,
+                :] = grid_augment
+                insert_index += neuron_repeats
+
+        else:
+            if data_key == 'augmentation':
+                continue
+
+            for i in range(readout.outdims):
+                features = model.readout[data_key].features.data[:, :, :, i, ]
+                bias = model.readout[data_key].bias.data[i]
+
+                model.readout["augmentation"].features.data[:, :, :,
+                insert_index:insert_index + neuron_repeats] = features[:, :, :, None]
+                model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0, :] = grid_augment
+                model.readout["augmentation"].bias.data[insert_index:insert_index + neuron_repeats] = bias
+                insert_index += neuron_repeats
+
+    model.readout["augmentation"].mu.requires_grad = False
+    model.readout["augmentation"].sigma.requires_grad = False
 
     return model
