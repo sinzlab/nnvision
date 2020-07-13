@@ -193,7 +193,6 @@ def monkey_static_loader(dataset,
                                        img_mean=img_mean,
                                        img_std=img_std)
 
-        
         with open(stats_path, "wb") as pkl:
             pickle.dump(data_info, pkl)
 
