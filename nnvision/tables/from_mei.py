@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datajoint as dj
 from nnfabrik.main import Dataset
-from .from_nnfabrik import TrainedModel
+from .from_nnfabrik import TrainedModel, SharedReadoutTrainedModel
 from mei import mixins
 from mei.main import MEITemplate, MEISeed
 from torch.utils.data import DataLoader
@@ -27,6 +27,14 @@ class Ensemble(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
     trained_model_table = TrainedModel
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
+
+@schema
+class SharedReadoutTrainedEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
+    dataset_table = Dataset
+    trained_model_table = SharedReadoutTrainedModel
+    class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
+        pass
+
 
 
 @schema
