@@ -47,6 +47,12 @@ class TrainedModel(TrainedModelBase):
 
 
 @schema
+class TrainedHyperModel(TrainedModelBase):
+    table_comment = "Trained model table for hyperparam searches"
+    data_info_table = DataInfo
+
+
+@schema
 class TrainedTransferModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
