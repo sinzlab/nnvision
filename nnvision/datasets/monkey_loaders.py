@@ -5,6 +5,7 @@ import pickle
 #from retina.retina import warp_image
 from collections import namedtuple, Iterable
 import os
+from pathlib import Path
 from mlutils.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
@@ -193,7 +194,9 @@ def monkey_static_loader(dataset,
                                        img_mean=img_mean,
                                        img_std=img_std)
 
-        
+        stats_path_base =  str(Path(stats_path).parent)
+        if not os.path.exists(stats_path_base):
+            os.mkdir(stats_path_base)
         with open(stats_path, "wb") as pkl:
             pickle.dump(data_info, pkl)
 
@@ -400,6 +403,9 @@ def monkey_mua_sua_loader(dataset,
                                        img_mean=img_mean,
                                        img_std=img_std)
 
+        stats_path_base = str(Path(stats_path).parent)
+        if not os.path.exists(stats_path_base):
+            os.mkdir(stats_path_base)
         with open(stats_path, "wb") as pkl:
             pickle.dump(data_info, pkl)
 
