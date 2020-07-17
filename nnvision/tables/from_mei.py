@@ -22,11 +22,17 @@ class Method(mixins.MEIMethodMixin, dj.Lookup):
 
 
 @schema
+class MethodGroup(mixins.MEIMethodMixin, dj.Lookup):
+    seed_table = MEISeed
+
+
+@schema
 class Ensemble(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
     dataset_table = Dataset
     trained_model_table = TrainedModel
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
+
 
 @schema
 class SharedReadoutTrainedEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
@@ -34,7 +40,6 @@ class SharedReadoutTrainedEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin
     trained_model_table = SharedReadoutTrainedModel
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
-
 
 
 @schema
@@ -52,3 +57,4 @@ class MEI(mixins.MEITemplateMixin, dj.Computed):
     selector_table = Recording.Units
     method_table = Method
     seed_table = MEISeed
+
