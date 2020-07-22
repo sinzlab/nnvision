@@ -152,6 +152,7 @@ class SE2dCore(Core2d, nn.Module):
         super().__init__()
 
         assert not bias or not batch_norm, "bias and batch_norm should not both be true"
+        assert not depth_separable or not attention_conv, "depth_separable and attention_conv should not both be true"
 
         regularizer_config = (
             dict(padding=laplace_padding, kernel=input_kern)
