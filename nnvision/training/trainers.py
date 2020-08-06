@@ -140,3 +140,10 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     score = np.mean(test_correlation) if return_test_score else np.mean(validation_correlation)
     return score, output, model.state_dict()
 
+
+def shared_readout_trainer(model, dataloaders, seed, uid=None, cb=None):
+    score = 0
+    output = 0
+    model_state = model.state_dict()
+
+    return score, output, model_state
