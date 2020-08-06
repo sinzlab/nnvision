@@ -941,8 +941,7 @@ def se_core_shared_gaussian_readout(dataloaders,
         dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
                                                         dataset_hash=dataset_hash,
                                                         trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
-    model.cuda();
-    model.eval()
+
 
     data_key = list(model.readout.keys())[0]
 
