@@ -1,19 +1,28 @@
 from __future__ import annotations
 
 import datajoint as dj
+import warnings
+from functools import partial
+
 from nnfabrik.main import Dataset
+from nnfabrik.utility.dj_helpers import CustomSchema, cleanup_numpy_scalar, make_hash
+from nnfabrik.builder import resolve_fn
+
 from .from_nnfabrik import TrainedModel, SharedReadoutTrainedModel
-from mei import mixins
-from mei.main import MEITemplate, MEISeed
-from torch.utils.data import DataLoader
-from nnfabrik.utility.dj_helpers import CustomSchema
 from .main import Recording
 
-from typing import Callable, Iterable, Mapping, Optional, Tuple, Dict, Any
+from mei import mixins
+from mei.main import MEITemplate, MEISeed
+from mei.modules import ConstrainedOutputModel
+from torch.utils.data import DataLoader
+from torch.nn import Module, ModuleList
+
+from typing import Dict, Any
 Key = Dict[str, Any]
 Dataloaders = Dict[str, DataLoader]
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+resolve_target_fn = partial(resolve_fn, default_base='targets')
 
 
 @schema
