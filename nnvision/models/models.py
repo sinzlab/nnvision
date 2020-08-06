@@ -17,6 +17,7 @@ from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from ..tables.main import Recording
     from nnfabrik.main import Model
 except ModuleNotFoundError:
     pass
@@ -925,10 +926,19 @@ def transfer_readout_augmentation(dataloaders,
     return model
 
 
-def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
-                                    dataset_fn, dataset_hash, trainer_fn,
-                                    trainer_hash):
-    dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
+def se_core_shared_gaussian_readout(dataloaders,
+                                    seed,
+                                    key=None,
+                                    model_fn=None,
+                                    model_hash=None,
+                                    dataset_fn=None,
+                                    dataset_hash=None,
+                                    trainer_fn=None,
+                                    trainer_hash=None):
+    if key is not None:
+        dataloaders, model = TrainedModel().load_model(key)
+    else:
+        dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
                                                         dataset_hash=dataset_hash,
                                                         trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
     model.cuda();
