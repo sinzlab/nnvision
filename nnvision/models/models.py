@@ -17,6 +17,7 @@ from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from ..tables.main import Recording
     from nnfabrik.main import Model
 except ModuleNotFoundError:
     pass
@@ -923,3 +924,141 @@ def transfer_readout_augmentation(dataloaders,
     model.readout["augmentation"].sigma.requires_grad = False
 
     return model
+
+
+def se_core_shared_gaussian_readout(dataloaders,
+                                    seed,
+                                    key=None,
+                                    model_fn=None,
+                                    model_hash=None,
+                                    dataset_fn=None,
+                                    dataset_hash=None,
+                                    trainer_fn=None,
+                                    trainer_hash=None):
+    if key is not None:
+        dataloaders, model = TrainedModel().load_model(key)
+    else:
+        dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
+                                                        dataset_hash=dataset_hash,
+                                                        trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
+
+
+    data_key = list(model.readout.keys())[0]
+
+    in_shape = model.readout[data_key].in_shape
+    init_mu_range = model.readout[data_key].init_mu_range
+    init_sigma = model.readout[data_key].init_sigma
+
+    grid_augment = torch.tensor([[0, 0]])
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        if data_key == 'augmentation':
+            continue
+        total_n_neurons += readout.outdims
+
+    n_augmented_units = total_n_neurons
+
+    model.readout['augmentation'] = FullGaussian2d(in_shape=in_shape, outdims=n_augmented_units, bias=True,
+                                                   init_mu_range=init_mu_range, init_sigma=init_sigma,
+                                                   gauss_type='isotropic')
+    model.cuda();
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+
+        if data_key == 'augmentation':
+            continue
+
+        for i in range(readout.outdims):
+            features = model.readout[data_key].features.data[:, :, :, i]
+            bias = model.readout[data_key].bias.data[i]
+            sigma = model.readout[data_key].sigma.data[0][i]
+
+            model.readout["augmentation"].features.data[:, :, :, insert_index] = features
+            model.readout["augmentation"].bias.data[insert_index] = bias
+            model.readout['augmentation'].sigma.data[:, insert_index, :, :] = sigma
+            model.readout['augmentation'].mu.data[:, insert_index, :, :] = grid_augment
+
+            insert_index += 1
+
+    sessions = []
+    for data_key in model.readout.keys():
+        if data_key != 'augmentation':
+            sessions.append(data_key)
+
+    for session in sessions:
+        model.readout.pop(session)
+
+    return model
+
+
+def augmented_full_readout(dataloaders=None,
+                           seed=None,
+                           key=None,
+                            mua_in=False,
+                            augment_x_start=-.75,
+                            augment_x_end=.75,
+                            augment_y_start=-.75,
+                            augment_y_end=.75,
+                            n_augment_x=5,
+                            n_augment_y=5,
+                            ):
+
+    model = TrainedModel().load_model(key, include_dataloader=False)
+
+    data_key = list(model.readout.keys())[0]
+
+    in_shape = model.readout[data_key].in_shape
+    init_mu_range = model.readout[data_key].init_mu_range
+    init_sigma = model.readout[data_key].init_sigma
+
+    grid_augment = []
+    for x in np.linspace(augment_x_start, augment_x_end, n_augment_x):
+        for y in np.linspace(augment_y_start, augment_y_end, n_augment_y):
+            grid_augment.append([x, y])
+    grid_augment.append([0, 0])
+    grid_augment = torch.tensor(grid_augment)
+    neuron_repeats = grid_augment.shape[0]
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        if data_key == 'augmentation':
+            continue
+        total_n_neurons += readout.outdims - (32 if mua_in else 0)
+
+    n_augmented_units = total_n_neurons * neuron_repeats
+
+    model.readout['augmentation'] = FullGaussian2d(in_shape=in_shape,
+                                                   outdims=n_augmented_units,
+                                                   bias=True,
+                                                   init_mu_range=init_mu_range,
+                                                   init_sigma=init_sigma,
+                                                   gauss_type='isotropic')
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+
+        if data_key == 'augmentation':
+            continue
+
+        for i in range(readout.outdims - (32 if mua_in else 0)):
+            features = model.readout[data_key].features.data[:, :, :, i]
+            bias = model.readout[data_key].bias.data[i]
+            sigma = model.readout[data_key].sigma.data[0][i]
+
+            model.readout["augmentation"].features.data[:, :, :, insert_index:insert_index + neuron_repeats] = features[:, :, :, None]
+            model.readout["augmentation"].bias.data[insert_index:insert_index + neuron_repeats] = bias
+            model.readout['augmentation'].sigma.data[0, insert_index:insert_index + neuron_repeats, 0, :] = sigma
+            model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0, :] = grid_augment
+
+            insert_index += neuron_repeats
+
+    sessions = []
+    for data_key in model.readout.keys():
+        if data_key != 'augmentation':
+            sessions.append(data_key)
+
+    for session in sessions:
+        model.readout.pop(session)
+
+    return model
+

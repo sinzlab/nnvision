@@ -62,6 +62,12 @@ class TrainedTransferModel(TrainedModelBase):
     data_info_table = DataInfo
 
 
+@schema
+class SharedReadoutTrainedModel(TrainedModelBase):
+    table_comment = "Trained models"
+    data_info_table = DataInfo
+
+
 class ScoringTable(ScoringBase):
     """
     Overwrites the nnfabriks scoring template, to make it handle mouse repeat-dataloaders.

@@ -5,6 +5,7 @@ from torch import nn as nn
 from mlutils.layers.attention import AttentionConv
 from mlutils.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
 from mlutils import regularizers
+from .architectures import SQ_EX_Block
 
 from torch.nn import functional as F
 from torchvision.models import vgg16, alexnet, vgg19, vgg19_bn
@@ -90,10 +91,6 @@ class TransferLearningCore(Core2d, nn.Module):
                 i = i+1
         return self.features.TransferLearning[-i].out_channels
 
-
-
-
-from .architectures import SQ_EX_Block
 
 class SE2dCore(Core2d, nn.Module):
     def __init__(
