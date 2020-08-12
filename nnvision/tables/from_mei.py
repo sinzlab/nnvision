@@ -8,7 +8,7 @@ from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema, cleanup_numpy_scalar, make_hash
 from nnfabrik.builder import resolve_fn
 
-from .from_nnfabrik import TrainedModel, SharedReadoutTrainedModel
+from .from_nnfabrik import TrainedModel, SharedReadoutTrainedModel, TrainedTransferModel
 from .main import Recording
 
 from mei import mixins
@@ -252,4 +252,29 @@ class MEIPrototype(mixins.MEITemplateMixin, dj.Computed):
     trained_model_table = SharedReadoutTrainedEnsembleModel
     selector_table = MEIObjective
     method_table = MethodGroup
+    seed_table = MEISeed
+
+
+@schema
+class TransferEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
+    dataset_table = Dataset
+    trained_model_table = TrainedTransferModel
+    class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
+        pass
+
+
+@schema
+class MEITransfer(mixins.MEITemplateMixin, dj.Computed):
+    """MEI table template.
+
+    To create a functional "MEI" table, create a new class that inherits from this template and decorate it with your
+    preferred Datajoint schema. Next assign your trained model (or trained ensemble model) and your selector table to
+    the class variables called "trained_model_table" and "selector_table". By default, the created table will point to
+    the "MEIMethod" table in the Datajoint schema called "nnfabrik.main". This behavior can be changed by overwriting
+    the class attribute called "method_table".
+    """
+
+    trained_model_table = TransferEnsembleModel
+    selector_table = Recording.Units
+    method_table = Method
     seed_table = MEISeed
