@@ -5,17 +5,29 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d
-from nnfabrik.main import Model
+
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
-from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
 from torch import nn
 from torch.nn import functional as F
 
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
+
 from .utility import unpack_data_info
 from nnvision.tables.from_nnfabrik import TrainedModel
 from mlutils.layers.readouts import FullGaussian2d
+
+from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
+
+try:
+    from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from nnfabrik.main import Model
+
+except ModuleNotFoundError:
+    pass
+except:
+    print("dj database connection could not be established. no access to pretrained models available.")
+
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
@@ -759,30 +771,42 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
     return model
 
 
-def simple_core_transfer(dataloaders, seed, transfer_key):
+def simple_core_transfer(dataloaders,
+                         seed,
+                         transfer_key=None,
+                         core_transfer_table=TrainedTransferModel,
+                         readout_transfer_table=TrainedModel,
+                         readout_transfer_key=None,
+                         pretrained_features=False,
+                         pretrained_grid=False,
+                         pretrained_bias=False):
+
+    print(readout_transfer_key)
+    if readout_transfer_key is None and (pretrained_features or pretrained_grid or pretrained_bias):
+        raise ValueError("if pretrained features, positions, or bias should be transferred, a readout transfer key "
+                         "has to be provided, by passing it to the argument 'readout_transfer_key'")
 
     model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed)
-    model_state = (TrainedTransferModel & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+    model_state = (core_transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
 
-    core_state = model_state.copy()
-    for dict_key in model_state:
-        if 'readout' in dict_key:
-            core_state.pop(dict_key);
+    core = purge_state_dict(state_dict=model_state, purge_key='readout')
+    model.load_state_dict(core, strict=False)
 
-    model.load_state_dict(core_state, strict=False)
+    for params in model.core.parameters():
+        params.requires_grad = False
 
     return model
 
 def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
                                    dataset_fn, dataset_hash, trainer_fn,
-                                   trainer_hash):
+                                   trainer_hash, session_list=False):
 
     
     dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
                                                    dataset_hash=dataset_hash,
                                                    trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
     model.cuda();
-    model.eval()
+    model.eval();
 
 
     data_key = list(model.readout.keys())[0]
@@ -805,6 +829,8 @@ def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
                                                    init_mu_range=init_mu_range, init_sigma=init_sigma, 
                                                    gauss_type='isotropic')
     model.cuda();
+    model.eval();
+    
     insert_index = 0
     for data_key, readout in model.readout.items():
 
@@ -815,7 +841,7 @@ def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
 
             features = model.readout[data_key].features.data[:,:,:,i]
             bias = model.readout[data_key].bias.data[i]
-            sigma = model.readout[data_key].sigma.data[0][i]
+            sigma = model.readout[data_key].sigma.data[:, i, :, :]
 
             model.readout["augmentation"].features.data[:, :, :, insert_index] = features
             model.readout["augmentation"].bias.data[insert_index]  = bias
@@ -823,7 +849,10 @@ def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
             model.readout['augmentation'].mu.data[:, insert_index, :, :] = grid_augment
 
             insert_index += 1
-
+    #Put in eval mode again when the new readout is added...
+    model.eval();
+    model.cuda();
+    
     sessions = []
     for data_key in model.readout.keys():
         if data_key != 'augmentation':
@@ -831,5 +860,27 @@ def se_core_shared_gaussian_readout(dataloaders, seed, model_fn, model_hash,
 
     for session in sessions:
         model.readout.pop(session)
-    
-    return model
+    if session_list:
+        return sessions
+    else:
+        return model
+
+#     if readout_transfer_key is not None:
+#         readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+#         readout = purge_state_dict(state_dict=readout_state, purge_key='core')
+#         feature_key, grid_key, bias_key = get_readout_key_names(model)
+
+#         if not pretrained_features:
+#             readout = purge_state_dict(state_dict=readout, purge_key=feature_key)
+
+#         if not pretrained_grid:
+#             readout = purge_state_dict(state_dict=readout, purge_key=grid_key)
+
+#         if not pretrained_bias:
+#             readout = purge_state_dict(state_dict=readout, purge_key=bias_key)
+
+
+#         model.load_state_dict(readout, strict=False)
+
+#     return model
+

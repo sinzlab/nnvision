@@ -1,6 +1,6 @@
 import torch
 
-from featurevis.utils import varargin
+from nnvision.legacy.featurevis.utils import varargin
 
 
 class Ensemble:
