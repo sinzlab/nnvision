@@ -78,7 +78,7 @@ class MultiReadout:
 
 
 class MultipleSpatialXFeatureLinear(MultiReadout, torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, init_noise, bias, normalize, gamma_readout):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, init_noise, bias, normalize, gamma_readout, constrain_pos=False):
         # super init to get the _module attribute
         super().__init__()
         for k in n_neurons_dict:
@@ -89,7 +89,8 @@ class MultipleSpatialXFeatureLinear(MultiReadout, torch.nn.ModuleDict):
                 outdims=n_neurons,
                 init_noise=init_noise,
                 bias=bias,
-                normalize=normalize
+                normalize=normalize,
+                constrain_pos=constrain_pos
             )
                             )
         self.gamma_readout = gamma_readout
