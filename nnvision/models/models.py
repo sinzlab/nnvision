@@ -5,6 +5,7 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
+from mlutils.layers.activations import MultiplePiecewiseLinearExpNonlinearity
 
 from nnfabrik.builder import get_model
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
@@ -1062,7 +1063,6 @@ def augmented_full_readout(dataloaders=None,
 
     return model
 
-
 def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, input_kern=13,          # core args
                                     hidden_kern=3, layers=1, gamma_hidden=0, gamma_input=0.1,
                                     skip=0, final_nonlinearity=True, core_bias=False, momentum=0.9,
@@ -1071,7 +1071,9 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
                                     laplace_padding=None, input_regularizer='LaplaceL2norm',
                                     spatial_norm_size=1, normalization_comp=1, dil_factor=1,       # dn args
                                     readout_bias=False, normalize=True, init_noise=1e-3, constrain_pos=False, # readout args,
-                                    gamma_readout=0.1,  elu_offset=None, stack=None, use_avg_reg=False):
+                                    gamma_readout=0.1,  elu_offset=None, stack=None, use_avg_reg=False,
+                                    final_nonlin=False, nonlin_bias=True, nonlin_initial_value=0.01, vmin=-3, vmax=6, 
+                                     num_bins=50, smooth_reg_weight=0, smoothnes_reg_order=2):
     """
     Model class of a stacked2dCore (from mlutils), a divisive normalization layer and a SpatialXFeatureLinear readout
     Args:
@@ -1099,27 +1101,32 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
     input_channels = [v[in_name][1] for v in session_shape_dict.values()]
     
     assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
+    
+    assert not (readout_bias and nonlin_bias), "Readout and Nonlin bias are True, which will lead to a duplication"
 
     class Encoder(nn.Module):
 
-        def __init__(self, core, dn, readout, elu_offset):
+        def __init__(self, core, dn, readout, nonlin):
             super().__init__()
             self.core = core
             self.dn = dn
             self.readout = readout
-            self.offset = elu_offset
+            self.nonlin = nonlin
 
         def forward(self, x, data_key=None, **kwargs):
             x = self.core(x)
             x = self.dn(x)
             x = self.readout(x, data_key=data_key)
-            if self.offset is None:
+            if self.nonlin is None:
                 return x
             else:
-                return F.elu(x + self.offset) + 1
+                return self.nonlin(x, data_key=data_key)
 
         def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
+            if self.nonlin is None:
+                return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
+            else:
+                return self.core.regularizer() + self.readout.regularizer(data_key=data_key) + self.nonlin.regularizer(data_key=data_key)
 
         def _readout_regularizer_val(self):
             ret = 0
@@ -1131,6 +1138,7 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
         def _core_regularizer_val(self):
             with eval_state(model):
                 return self.core.regularizer().detach().cpu().numpy() if model.core.regularizer() else 0
+            
 
         @property
         def tracked_values(self):
@@ -1169,19 +1177,8 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
                                     dil_factor=dil_factor,
                                     doDilated=True)
     
-    class CoreDN(nn.Module):
-        
-        def __init__(self, core, dn):
-            super().__init__()
-            self.core = core
-            self.dn = dn
-            
-        def forward(self, x):
-            x = self.core(x)
-            return self.dn(x)
-        
 
-    readout = MultipleSpatialXFeatureLinear(CoreDN(core, dn),
+    readout = MultipleSpatialXFeatureLinear(nn.Sequential(core, dn),
                                             in_shape_dict=in_shapes_dict,
                                             n_neurons_dict=n_neurons_dict,
                                             bias=readout_bias,
@@ -1189,12 +1186,25 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
                                             init_noise=init_noise,
                                             constrain_pos=constrain_pos,
                                             gamma_readout=gamma_readout)
+    
+    if final_nonlin:
+    
+        nonlin = MultiplePiecewiseLinearExpNonlinearity(n_neurons_dict=n_neurons_dict,
+                                                        bias=nonlin_bias,
+                                                        initial_value=nonlin_initial_value,
+                                                        vmin=vmin,
+                                                        vmax=vmax,
+                                                        num_bins=num_bins,
+                                                        smooth_reg_weight=smooth_reg_weight,
+                                                        smoothnes_reg_order=smoothnes_reg_order)
+    else:
+        nonlin = None
 
     # initializing readout bias to mean response
     if readout_bias:
         for k in dataloaders:
             readout[k].bias.data = dataloaders[k].dataset[:][1].mean(0)
 
-    model = Encoder(core, dn, readout, elu_offset)
+    model = Encoder(core, dn, readout, nonlin)
 
     return model
