@@ -155,7 +155,7 @@ class ImageCache:
             image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
                     self.crop[1][0]:w - self.crop[1][1]:self.subsample]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,] if len(image.shape) == 2 else image[None,].permute(0, 3, 1, 2)
+            image = image[None,] if len(image.shape) == 2 else image.permute(2, 0, 1)
             return image
         elif len(image.shape) == 3:
             h, w = image.shape[:2]
@@ -164,7 +164,7 @@ class ImageCache:
             image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
                     self.crop[1][0]:w - self.crop[1][1]:self.subsample, ...]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,].transpose(0, 3, 1, 2)
+            image = image.transpose(2, 0, 1)
         else:
             raise ValueError(f"Image shape has to be two dimensional (grayscale) or three dimensional "
                              f"(color, with w x h x c). got image shape {image.shape}")
