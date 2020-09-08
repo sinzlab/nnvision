@@ -141,20 +141,22 @@ class ImageCache:
         """
         applies transformations to the image: downsampling, cropping, rescaling, and dimension expansion.
         """
+        
+        # h, w = image.shape
+        # rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=False, anti_aliasing=False, preserve_range=True).astype(x.dtype)
+        # image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample, self.crop[1][0]:w - self.crop[1][1]:self.subsample]
+        # image = image if self.scale == 1 else rescale_fn(image, self.scale)
+        # image = image[None,]
+        # return image
         if len(image.shape) == 2:
-            h, w = image.shape
-            rescale_fn = lambda x, s: rescale(x,
-                                              s,
-                                              mode='reflect',
-                                              multichannel=False,
-                                              anti_aliasing=False,
+            h, w = image.shape if len(image.shape) == 2 else image.shape[:2]
+            rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=False, anti_aliasing=False,
                                               preserve_range=True).astype(x.dtype)
             image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
                     self.crop[1][0]:w - self.crop[1][1]:self.subsample]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,]
+            image = image[None,] if len(image.shape) == 2 else image[None,].permute(0, 3, 1, 2)
             return image
-
         elif len(image.shape) == 3:
             h, w = image.shape[:2]
             rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=True, anti_aliasing=False,
@@ -162,12 +164,12 @@ class ImageCache:
             image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
                     self.crop[1][0]:w - self.crop[1][1]:self.subsample, ...]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,].permute(0, 3, 1, 2)
+            image = image[None,].transpose(0, 3, 1, 2)
         else:
             raise ValueError(f"Image shape has to be two dimensional (grayscale) or three dimensional "
                              f"(color, with w x h x c). got image shape {image.shape}")
         return image
-    
+
     def normalize_image(self, image):
         """
         standarizes image
