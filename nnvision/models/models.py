@@ -766,6 +766,8 @@ def simple_core_transfer(dataloaders,
     # set default values that are in line with parameter expansion
     if core_transfer_table is None:
         core_transfer_table = TrainedTransferModel
+    elif core_transfer_table == "TrainedModel":
+        core_transfer_table = TrainedModel
 
     if readout_transfer_table is None:
         readout_transfer_table = TrainedModel
