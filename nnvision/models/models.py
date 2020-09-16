@@ -756,6 +756,7 @@ def simple_core_transfer(dataloaders,
                          pretrained_features=False,
                          pretrained_grid=False,
                          pretrained_bias=False,
+                         freeze_core=True,
                          **kwargs):
 
     if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
@@ -783,8 +784,9 @@ def simple_core_transfer(dataloaders,
     core = purge_state_dict(state_dict=model_state, purge_key='readout')
     model.load_state_dict(core, strict=False)
 
-    for params in model.core.parameters():
-        params.requires_grad = False
+    if freeze_core:
+        for params in model.core.parameters():
+            params.requires_grad = False
 
     if readout_transfer_key:
         readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
