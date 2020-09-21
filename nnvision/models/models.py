@@ -1117,8 +1117,7 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
             self.readout = readout
             self.nonlin = nonlin
 
-        def forward(self, *args, data_key=None, **kwargs):
-            x = args[0]
+        def forward(self, x, data_key=None, **kwargs):
             x = self.core(x)
             x = self.dn(x)
             x = self.readout(x, data_key=data_key)
