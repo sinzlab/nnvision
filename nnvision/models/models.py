@@ -1083,7 +1083,11 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
         elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
         all other args: See Documentation of Stacked2dCore in mlutils.layers.cores, divisive_normalization and
             SpatialXFeatureLinear in mlutils.layers.readouts
-    Returns: An initialized model which consists of model.core and model.readout
+    Returns: An initialized model which consists of model.core, model.dn and model.readout (depending on args: model.nonlin)
+    
+    Thus the divisive normalization code is private, it is stored in a different repo (divn), which must be installed to build this model.
+    For access queries please contact @MaxFBurg.
+    
     """
     
     from divn.lib.layer import DivisiveNormalizationLayer
@@ -1093,7 +1097,7 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
     dataloaders = dataloaders.get("train", dataloaders)
 
     # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
     session_shape_dict = get_dims_for_loader_dict(dataloaders)
     n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -1113,7 +1117,8 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
             self.readout = readout
             self.nonlin = nonlin
 
-        def forward(self, x, data_key=None, **kwargs):
+        def forward(self, *args, data_key=None, **kwargs):
+            x = args[0]
             x = self.core(x)
             x = self.dn(x)
             x = self.readout(x, data_key=data_key)
