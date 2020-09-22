@@ -1176,6 +1176,7 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
                          stack=stack,
                          use_avg_reg=use_avg_reg)
     
+    #get a DN layer from divn
     dn = DivisiveNormalizationLayer(num_ch=hidden_channels,
                                     spatial_norm_size=spatial_norm_size,
                                     normalization_comp=normalization_comp,
