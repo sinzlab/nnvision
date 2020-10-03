@@ -137,6 +137,8 @@ def monkey_static_loader(dataset,
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
         responses_test = raw_data["testing_responses"].astype(np.float32)
+        labels_train = raw_data["training_labels"].astype(np.float32)
+        labels_test = raw_data["testing_labels"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
@@ -161,13 +163,16 @@ def monkey_static_loader(dataset,
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]
 
+        labels_val = labels_train[val_idx]
+        labels_train = labels_train[train_idx]
+
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids,
-                                        responses_test,
+        train_loader = get_cached_loader(training_image_ids, labels_train, responses_train, names=('inputs', 'labels', 'responses'), batch_size=batch_size, image_cache=cache)
+        val_loader = get_cached_loader(validation_image_ids, labels_val, responses_val, names=('inputs', 'labels', 'responses'), batch_size=batch_size, image_cache=cache)
+        test_loader = get_cached_loader(testing_image_ids, labels_test,
+                                        responses_test, names=('inputs', 'labels', 'responses'),
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
@@ -179,8 +184,7 @@ def monkey_static_loader(dataset,
 
 
     if store_data_info and not os.path.exists(stats_path):
-
-        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        in_name, _, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}

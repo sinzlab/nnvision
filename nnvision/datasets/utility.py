@@ -131,6 +131,8 @@ class ImageCache:
         else:
             filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
             image = np.load(filename)
+            if len(image.shape) == 2:
+                image = np.stack((image,) * 3, axis=-1)
             image = self.transform_image(image) if self.transform else image
             image = self.normalize_image(image) if self.normalize else image
             image = torch.tensor(image).to(torch.float)
@@ -247,7 +249,7 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cache=None, repeat_condition=None):
+def get_cached_loader(image_ids, labels, responses, batch_size, names=('inputs', 'labels', 'responses'), shuffle=True, image_cache=None, repeat_condition=None):
     """
 
     Args:
@@ -261,8 +263,9 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
     """
 
     image_ids = torch.tensor(image_ids.astype(np.int32))
+    labels = torch.tensor(labels, dtype=torch.long)
     responses = torch.tensor(responses).to(torch.float)
-    dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
+    dataset = CachedTensorDataset(image_ids, labels, responses, names=names, image_cache=image_cache)
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
