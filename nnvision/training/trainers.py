@@ -67,7 +67,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
 
         """
         loss_scale = np.sqrt(len(dataloader[data_key].dataset) / args[0].shape[0]) if scale_loss else 1.0
-        return loss_scale * criterion(model(args[0].to(device), data_key), args[1].to(device)) \
+        return loss_scale * criterion(model(args[0].to(device), data_key=data_key), args[1].to(device)) \
                + model.regularizer(data_key)
 
     ##### Model training ####################################################################################################
@@ -140,3 +140,10 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     score = np.mean(test_correlation) if return_test_score else np.mean(validation_correlation)
     return score, output, model.state_dict()
 
+
+def shared_readout_trainer(model, dataloaders, seed, uid=None, cb=None):
+    score = 0
+    output = 0
+    model_state = model.state_dict()
+
+    return score, output, model_state

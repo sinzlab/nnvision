@@ -5,9 +5,8 @@ from mlutils.measures import corr
 from mlutils.training import eval_state, device_state
 import types
 import contextlib
-from nnvision.utility.measure_helpers import is_ensemble_function
 import warnings
-from .measure_helpers import get_subset_of_repeats
+from .measure_helpers import get_subset_of_repeats, is_ensemble_function
 
 
 def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadcast_to_target=False):
@@ -311,31 +310,6 @@ def compute_FEV(targets, outputs, return_exp_var=False):
     return [FEV, FEVe] if return_exp_var else FEVe
 
 
-def get_cross_oracles(data, reference_data):
-    _, outputs = get_repeats(data)
-    _, outputs_reference = get_repeats(reference_data)
-    cross_oracles = compute_cross_oracles(outputs, outputs_reference)
-    return cross_oracles
-
-
-def compute_cross_oracles(repeats, reference_data):
-    pass
-
-
-def normalize_RGB_channelwise(mei):
-    mei_copy = mei.copy()
-    mei_copy = mei_copy - mei_copy.min(axis=(1, 2), keepdims=True)
-    mei_copy = mei_copy / mei_copy.max(axis=(1, 2), keepdims=True)
-    return mei_copy
-
-
-def normalize_RGB(mei):
-    mei_copy = mei.copy()
-    mei_copy = mei_copy - mei_copy.min()
-    mei_copy = mei_copy / mei_copy.max()
-    return mei_copy
-
-
 def get_model_rf_size(model_config):
     layers = model_config["layers"]
     input_kern = model_config["input_kern"]
@@ -380,3 +354,43 @@ def get_targets(model, dataloaders, device='cpu', as_dict=True, per_neuron=True,
     if not as_dict:
         responses = [v for v in responses.values()]
     return responses
+
+
+def get_avg_firing(dataloaders, as_dict=False, per_neuron=True):
+    """
+    Returns average firing rate across the whole dataset
+    """
+
+    avg_firing = {}
+    for k, dataloader in dataloaders.items():
+        target = torch.empty(0)
+        for images, responses in dataloader:
+            if len(images.shape) == 5:
+                responses = responses.squeeze(dim=0)
+            target = torch.cat((target, responses.detach().cpu()), dim=0)
+        avg_firing[k] = target.mean(0).numpy()
+
+    if not as_dict:
+        avg_firing = np.hstack([v for v in avg_firing.values()]) if per_neuron else np.mean(
+            np.hstack([v for v in avg_firing.values()]))
+    return avg_firing
+
+
+def get_fano_factor(dataloaders, as_dict=False, per_neuron=True):
+    """
+    Returns average firing rate across the whole dataset
+    """
+
+    fano_factor = {}
+    for k, dataloader in dataloaders.items():
+        target = torch.empty(0)
+        for images, responses in dataloader:
+            if len(images.shape) == 5:
+                responses = responses.squeeze(dim=0)
+            target = torch.cat((target, responses.detach().cpu()), dim=0)
+        fano_factor[k] = (target.var(0) / target.mean(0)).numpy()
+
+    if not as_dict:
+        fano_factor = np.hstack([v for v in fano_factor.values()]) if per_neuron else np.mean(
+            np.hstack([v for v in fano_factor.values()]))
+    return fano_factor

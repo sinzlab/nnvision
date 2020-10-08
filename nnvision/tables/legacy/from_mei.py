@@ -6,6 +6,7 @@ from mlutils.data.datasets import StaticImageSet, FileTreeDataset
 from nnvision.legacy.featurevis import integration
 from nnvision.mei.helpers import get_neuron_mappings
 from nnfabrik.utility.dj_helpers import make_hash
+from .main import MonkeyExperiment
 
 import torch
 
@@ -146,4 +147,18 @@ class MEI(MEITemplate):
     method_table = MEIMethod
     trained_model_table = TrainedEnsembleModel
     selector_table = MouseSelector
+
+
+@schema
+class MEI_monkey(MEITemplate):
+    method_table = MEIMethod
+    trained_model_table = TrainedEnsembleModel
+    selector_table = MonkeyExperiment.Units
+
+
+@schema
+class MEI_update(MEITemplate):
+    method_table = MEIMethod
+    trained_model_table = TrainedEnsembleModel
+    selector_table = MonkeyExperiment.Units
 
