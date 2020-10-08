@@ -149,5 +149,9 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
         self.gamma_grid_dispersion = gamma_grid_dispersion
 
     def regularizer(self, data_key):
-        return self[data_key].feature_l1(average=False) * self.gamma_readout \
-               + self[data_key].mu_dispersion()*self.gamma_grid_dispersion
+        if hasattr(FullGaussian2d, 'mu_dispersion'):
+            return self[data_key].feature_l1(average=False) * self.gamma_readout \
+                   + self[data_key].mu_dispersion() * self.gamma_grid_dispersion
+        else:
+            return self[data_key].feature_l1(average=False) * self.gamma_readout
+
