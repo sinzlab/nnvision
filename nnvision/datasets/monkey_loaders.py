@@ -472,7 +472,7 @@ def monkey_static_loader_closed_loop(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+    dataloaders = {'train': {}, 'validation': {}, 'test': {}, 'test_mei': {}, 'test_control': {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
