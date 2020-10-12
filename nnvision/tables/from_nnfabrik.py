@@ -1,6 +1,13 @@
 import datajoint as dj
-from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
-from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
+try:
+    # for pre-release nnfabrik
+    from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
+except:
+    # for versions >= 0.12.6
+    from nnfabrik.templates.trained_model import TrainedModelBase
+    from nnfabrik.templates.scoring import ScoringBase
+    from nnfabrik.templates.scoring import MeasuresBase
+
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
@@ -58,6 +65,12 @@ class TrainedHyperModel(TrainedModelBase):
 
 @schema
 class TrainedTransferModel(TrainedModelBase):
+    table_comment = "Trained models"
+    data_info_table = DataInfo
+
+
+@schema
+class SharedReadoutTrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
 

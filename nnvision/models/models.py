@@ -5,6 +5,7 @@ import copy
 from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
 from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
+from mlutils.layers.activations import MultiplePiecewiseLinearExpNonlinearity
 
 from nnfabrik.builder import get_model
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
@@ -17,6 +18,7 @@ from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from ..tables.main import Recording
     from nnfabrik.main import Model
 except ModuleNotFoundError:
     pass
@@ -755,6 +757,7 @@ def simple_core_transfer(dataloaders,
                          pretrained_features=False,
                          pretrained_grid=False,
                          pretrained_bias=False,
+                         freeze_core=True,
                          **kwargs):
 
     if not readout_transfer_key and (pretrained_features or pretrained_grid or pretrained_bias):
@@ -764,6 +767,8 @@ def simple_core_transfer(dataloaders,
     # set default values that are in line with parameter expansion
     if core_transfer_table is None:
         core_transfer_table = TrainedTransferModel
+    elif core_transfer_table == "TrainedModel":
+        core_transfer_table = TrainedModel
 
     if readout_transfer_table is None:
         readout_transfer_table = TrainedModel
@@ -782,8 +787,9 @@ def simple_core_transfer(dataloaders,
     core = purge_state_dict(state_dict=model_state, purge_key='readout')
     model.load_state_dict(core, strict=False)
 
-    for params in model.core.parameters():
-        params.requires_grad = False
+    if freeze_core:
+        for params in model.core.parameters():
+            params.requires_grad = False
 
     if readout_transfer_key:
         readout_state = (readout_transfer_table & readout_transfer_key).get_full_config(include_state_dict=True)["state_dict"]
@@ -921,5 +927,294 @@ def transfer_readout_augmentation(dataloaders,
 
     model.readout["augmentation"].mu.requires_grad = False
     model.readout["augmentation"].sigma.requires_grad = False
+
+    return model
+
+
+def se_core_shared_gaussian_readout(dataloaders,
+                                    seed,
+                                    key=None,
+                                    model_fn=None,
+                                    model_hash=None,
+                                    dataset_fn=None,
+                                    dataset_hash=None,
+                                    trainer_fn=None,
+                                    trainer_hash=None):
+    if key is not None:
+        dataloaders, model = TrainedModel().load_model(key)
+    else:
+        dataloaders, model = TrainedModel().load_model(dict(model_hash=model_hash,
+                                                        dataset_hash=dataset_hash,
+                                                        trainer_hash=trainer_hash, seed=seed), include_dataloader=True)
+
+
+    data_key = list(model.readout.keys())[0]
+
+    in_shape = model.readout[data_key].in_shape
+    init_mu_range = model.readout[data_key].init_mu_range
+    init_sigma = model.readout[data_key].init_sigma
+
+    grid_augment = torch.tensor([[0, 0]])
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        if data_key == 'augmentation':
+            continue
+        total_n_neurons += readout.outdims
+
+    n_augmented_units = total_n_neurons
+
+    model.readout['augmentation'] = FullGaussian2d(in_shape=in_shape, outdims=n_augmented_units, bias=True,
+                                                   init_mu_range=init_mu_range, init_sigma=init_sigma,
+                                                   gauss_type='isotropic')
+    model.cuda();
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+
+        if data_key == 'augmentation':
+            continue
+
+        for i in range(readout.outdims):
+            features = model.readout[data_key].features.data[:, :, :, i]
+            bias = model.readout[data_key].bias.data[i]
+            sigma = model.readout[data_key].sigma.data[0][i]
+
+            model.readout["augmentation"].features.data[:, :, :, insert_index] = features
+            model.readout["augmentation"].bias.data[insert_index] = bias
+            model.readout['augmentation'].sigma.data[:, insert_index, :, :] = sigma
+            model.readout['augmentation'].mu.data[:, insert_index, :, :] = grid_augment
+
+            insert_index += 1
+
+    sessions = []
+    for data_key in model.readout.keys():
+        if data_key != 'augmentation':
+            sessions.append(data_key)
+
+    for session in sessions:
+        model.readout.pop(session)
+
+    return model
+
+
+def augmented_full_readout(dataloaders=None,
+                           seed=None,
+                           key=None,
+                            mua_in=False,
+                            augment_x_start=-.75,
+                            augment_x_end=.75,
+                            augment_y_start=-.75,
+                            augment_y_end=.75,
+                            n_augment_x=5,
+                            n_augment_y=5,
+                            ):
+
+    model = TrainedModel().load_model(key, include_dataloader=False)
+
+    data_key = list(model.readout.keys())[0]
+
+    in_shape = model.readout[data_key].in_shape
+    init_mu_range = model.readout[data_key].init_mu_range
+    init_sigma = model.readout[data_key].init_sigma
+
+    grid_augment = []
+    for x in np.linspace(augment_x_start, augment_x_end, n_augment_x):
+        for y in np.linspace(augment_y_start, augment_y_end, n_augment_y):
+            grid_augment.append([x, y])
+    grid_augment.append([0, 0])
+    grid_augment = torch.tensor(grid_augment)
+    neuron_repeats = grid_augment.shape[0]
+
+    total_n_neurons = 0
+    for data_key, readout in model.readout.items():
+        if data_key == 'augmentation':
+            continue
+        total_n_neurons += readout.outdims - (32 if mua_in else 0)
+
+    n_augmented_units = total_n_neurons * neuron_repeats
+
+    model.readout['augmentation'] = FullGaussian2d(in_shape=in_shape,
+                                                   outdims=n_augmented_units,
+                                                   bias=True,
+                                                   init_mu_range=init_mu_range,
+                                                   init_sigma=init_sigma,
+                                                   gauss_type='isotropic')
+    insert_index = 0
+    for data_key, readout in model.readout.items():
+
+        if data_key == 'augmentation':
+            continue
+
+        for i in range(readout.outdims - (32 if mua_in else 0)):
+            features = model.readout[data_key].features.data[:, :, :, i]
+            bias = model.readout[data_key].bias.data[i]
+            sigma = model.readout[data_key].sigma.data[0][i]
+
+            model.readout["augmentation"].features.data[:, :, :, insert_index:insert_index + neuron_repeats] = features[:, :, :, None]
+            model.readout["augmentation"].bias.data[insert_index:insert_index + neuron_repeats] = bias
+            model.readout['augmentation'].sigma.data[0, insert_index:insert_index + neuron_repeats, 0, :] = sigma
+            model.readout["augmentation"].mu.data[0, insert_index:insert_index + neuron_repeats, 0, :] = grid_augment
+
+            insert_index += neuron_repeats
+
+    sessions = []
+    for data_key in model.readout.keys():
+        if data_key != 'augmentation':
+            sessions.append(data_key)
+
+    for session in sessions:
+        model.readout.pop(session)
+
+    return model
+
+def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, input_kern=13,          # core args
+                                    hidden_kern=3, layers=1, gamma_hidden=0, gamma_input=0.1,
+                                    skip=0, final_nonlinearity=True, core_bias=False, momentum=0.9,
+                                    pad_input=False, hidden_dilation=1, batch_norm=True, 
+                                    batch_norm_scale=False, independent_bn_bias=False,
+                                    laplace_padding=None, input_regularizer='LaplaceL2norm',
+                                    spatial_norm_size=1, normalization_comp=1, dil_factor=1,       # dn args
+                                    readout_bias=False, normalize=True, init_noise=1e-3, constrain_pos=False, # readout args,
+                                    gamma_readout=0.1,  elu_offset=None, stack=None, use_avg_reg=False,
+                                    final_nonlin=False, nonlin_bias=True, nonlin_initial_value=0.01, vmin=-3, vmax=6, 
+                                     num_bins=50, smooth_reg_weight=0, smoothnes_reg_order=2):
+    """
+    Model class of a stacked2dCore (from mlutils), a divisive normalization layer and a SpatialXFeatureLinear readout
+    Args:
+        dataloaders: a dictionary of dataloaders, one loader per session
+            in the format {'data_key': dataloader object, .. }
+        seed: random seed
+        elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
+        all other args: See Documentation of Stacked2dCore in mlutils.layers.cores, divisive_normalization and
+            SpatialXFeatureLinear in mlutils.layers.readouts
+    Returns: An initialized model which consists of model.core, model.dn and model.readout (depending on args: model.nonlin)
+    
+    Thus the divisive normalization code is private, it is stored in a different repo (divn), which must be installed to build this model.
+    For access queries please contact @MaxFBurg.
+    
+    """
+    
+    from divn.lib.layer import DivisiveNormalizationLayer
+    
+
+    # make sure trainloader is being used
+    dataloaders = dataloaders.get("train", dataloaders)
+
+    # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+    in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+    session_shape_dict = get_dims_for_loader_dict(dataloaders)
+    n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+    in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+    input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+    
+    assert np.unique(input_channels).size == 1, "all input channels must be of equal size"
+    
+    assert not (readout_bias and nonlin_bias), "Readout and Nonlin bias are True, which will lead to a duplication"
+
+    class Encoder(nn.Module):
+
+        def __init__(self, core, dn, readout, nonlin):
+            super().__init__()
+            self.core = core
+            self.dn = dn
+            self.readout = readout
+            self.nonlin = nonlin
+
+        def forward(self, *args, data_key=None, **kwargs):
+            x = args[0]
+            x = self.core(x)
+            x = self.dn(x)
+            x = self.readout(x, data_key=data_key)
+            if self.nonlin is None:
+                return x
+            else:
+                return self.nonlin(x, data_key=data_key)
+
+        def regularizer(self, data_key):
+            if self.nonlin is None:
+                return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
+            else:
+                return self.core.regularizer() + self.readout.regularizer(data_key=data_key) + self.nonlin.regularizer(data_key=data_key)
+
+        def _readout_regularizer_val(self):
+            ret = 0
+            with eval_state(model):
+                for data_key in model.readout:
+                    ret += self.readout.regularizer(data_key).detach().cpu().numpy()
+            return ret
+
+        def _core_regularizer_val(self):
+            with eval_state(model):
+                return self.core.regularizer().detach().cpu().numpy() if model.core.regularizer() else 0
+            
+
+        @property
+        def tracked_values(self):
+            return dict(readout_l1=self._readout_regularizer_val, 
+                        core_reg=self._core_regularizer_val)
+
+    set_random_seed(seed)
+
+    # get a stacked2D core from mlutils
+    core = Stacked2dCore(input_channels=input_channels[0],
+                         hidden_channels=hidden_channels,
+                         input_kern=input_kern,
+                         hidden_kern=hidden_kern,
+                         layers=layers,
+                         gamma_hidden=gamma_hidden,
+                         gamma_input=gamma_input,
+                         skip=skip,
+                         final_nonlinearity=final_nonlinearity,
+                         elu_xshift=1,
+                         elu_yshift=1,
+                         bias=core_bias,
+                         momentum=momentum,
+                         pad_input=pad_input,
+                         batch_norm=batch_norm,
+                         batch_norm_scale=batch_norm_scale,
+                         independent_bn_bias=independent_bn_bias,
+                         hidden_dilation=hidden_dilation,
+                         laplace_padding=laplace_padding,
+                         input_regularizer=input_regularizer,
+                         stack=stack,
+                         use_avg_reg=use_avg_reg)
+    
+    #get a DN layer from divn
+    dn = DivisiveNormalizationLayer(num_ch=hidden_channels,
+                                    spatial_norm_size=spatial_norm_size,
+                                    normalization_comp=normalization_comp,
+                                    dil_factor=dil_factor,
+                                    doDilated=True)
+    
+
+    readout = MultipleSpatialXFeatureLinear(nn.Sequential(core, dn),
+                                            in_shape_dict=in_shapes_dict,
+                                            n_neurons_dict=n_neurons_dict,
+                                            bias=readout_bias,
+                                            normalize=normalize,
+                                            init_noise=init_noise,
+                                            constrain_pos=constrain_pos,
+                                            gamma_readout=gamma_readout)
+    
+    if final_nonlin:
+    
+        nonlin = MultiplePiecewiseLinearExpNonlinearity(n_neurons_dict=n_neurons_dict,
+                                                        bias=nonlin_bias,
+                                                        initial_value=nonlin_initial_value,
+                                                        vmin=vmin,
+                                                        vmax=vmax,
+                                                        num_bins=num_bins,
+                                                        smooth_reg_weight=smooth_reg_weight,
+                                                        smoothnes_reg_order=smoothnes_reg_order)
+    else:
+        nonlin = None
+
+    # initializing readout bias to mean response
+    if readout_bias:
+        for k in dataloaders:
+            readout[k].bias.data = dataloaders[k].dataset[:][1].mean(0)
+
+    model = Encoder(core, dn, readout, nonlin)
 
     return model
