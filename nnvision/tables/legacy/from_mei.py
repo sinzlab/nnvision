@@ -155,3 +155,10 @@ class MEI_monkey(MEITemplate):
     trained_model_table = TrainedEnsembleModel
     selector_table = MonkeyExperiment.Units
 
+
+@schema
+class MEI_update(MEITemplate):
+    method_table = MEIMethod
+    trained_model_table = TrainedEnsembleModel
+    selector_table = MonkeyExperiment.Units
+
