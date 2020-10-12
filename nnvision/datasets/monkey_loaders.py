@@ -186,14 +186,14 @@ def monkey_static_loader(dataset,
         in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
-        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        #n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
             data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
                                        input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
+                                       output_dimension=1, #n_neurons_dict[data_key],
                                        img_mean=img_mean,
                                        img_std=img_std)
 
