@@ -216,6 +216,18 @@ class TestCorrelationScoreEnsemble(ScoringBaseNeuronType):
     model_cache = EnsembleModelCache
 
 
+
+@schema
+class ValidationCorrelationScoreEnsemble(ScoringBaseNeuronType):
+    trainedmodel_table = Ensemble
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "validation"
+    measure_attribute = "validation_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
+
+
 # ============================= SUMMARY SCORES =============================
 
 
