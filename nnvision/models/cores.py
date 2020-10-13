@@ -1,8 +1,11 @@
 from collections import OrderedDict, Iterable
 import torch
 from torch import nn as nn
+
+from mlutils.layers.attention import AttentionConv
 from mlutils.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
 from mlutils import regularizers
+from .architectures import SQ_EX_Block
 
 from torch.nn import functional as F
 from torchvision.models import vgg16, alexnet, vgg19, vgg19_bn
@@ -89,10 +92,6 @@ class TransferLearningCore(Core2d, nn.Module):
         return self.features.TransferLearning[-i].out_channels
 
 
-
-
-from .architectures import SQ_EX_Block
-
 class SE2dCore(Core2d, nn.Module):
     def __init__(
             self,
@@ -115,6 +114,7 @@ class SE2dCore(Core2d, nn.Module):
             se_reduction=32,
             n_se_blocks=1,
             depth_separable=False,
+            attention_conv=False,
             linear=False,
     ):
         """
@@ -143,11 +143,13 @@ class SE2dCore(Core2d, nn.Module):
                             stack = -1 will only select the last layer as the readout layer
                             stack = 0  will only readout from the first layer
             se_reduction:   Int. Reduction of Channels for Global Pooling of the Squeeze and Excitation Block.
+            attention_conv: Boolean, if True, uses self-attention instead of convolution for layers 2 and following
         """
 
         super().__init__()
 
         assert not bias or not batch_norm, "bias and batch_norm should not both be true"
+        assert not depth_separable or not attention_conv, "depth_separable and attention_conv should not both be true"
 
         regularizer_config = (
             dict(padding=laplace_padding, kernel=input_kern)
@@ -191,6 +193,14 @@ class SE2dCore(Core2d, nn.Module):
                                                         kernel_size=hidden_kern[l - 1],
                                                         dilation=hidden_dilation, padding=hidden_padding, bias=False,
                                                         stride=1)
+            elif attention_conv:
+                layer["conv"] = AttentionConv(
+                    hidden_channels if not skip > 1 else min(skip, l) * hidden_channels,
+                    hidden_channels,
+                    hidden_kern[l - 1],
+                    padding=hidden_padding,
+                    bias=bias and not batch_norm,
+                )
             else:
                 layer["conv"] = nn.Conv2d(
                     hidden_channels if not skip > 1 else min(skip, l) * hidden_channels,

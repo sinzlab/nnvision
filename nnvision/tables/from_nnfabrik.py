@@ -1,11 +1,19 @@
 import datajoint as dj
-from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
-from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
+try:
+    # for pre-release nnfabrik
+    from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
+except:
+    # for versions >= 0.12.6
+    from nnfabrik.templates.trained_model import TrainedModelBase
+    from nnfabrik.templates.scoring import ScoringBase
+    from nnfabrik.templates.scoring import MeasuresBase
+
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
 import os
+from pathlib import Path
 import pickle
 from ..utility.dj_helpers import get_default_args
 
@@ -36,6 +44,9 @@ class DataInfo(DataInfoBase):
                 if not os.path.exists(stats_path):
                     data_info = (self & restr).fetch1("data_info")
 
+                    stats_path_base = str(Path(stats_path).parent)
+                    if not os.path.exists(stats_path_base):
+                        os.mkdir(stats_path_base)
                     with open(stats_path, "wb") as pkl:
                         pickle.dump(data_info, pkl)
 
@@ -47,7 +58,19 @@ class TrainedModel(TrainedModelBase):
 
 
 @schema
+class TrainedHyperModel(TrainedModelBase):
+    table_comment = "Trained model table for hyperparam searches"
+    data_info_table = DataInfo
+
+
+@schema
 class TrainedTransferModel(TrainedModelBase):
+    table_comment = "Trained models"
+    data_info_table = DataInfo
+
+
+@schema
+class SharedReadoutTrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
 
