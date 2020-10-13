@@ -91,7 +91,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
 
     if track_training:
         tracker_dict = dict(correlation=partial(get_correlations, model=model, dataloaders=dataloaders["validation"], device=device, per_neuron=False),
-                            poisson_loss=partial(get_poisson_loss, model=model, dataloders=dataloaders["validation"], device=device, per_neuron=False, avg=False))
+                            poisson_loss=partial(get_poisson_loss, model=model, dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=False))
         if hasattr(model, 'tracked_values'):
             tracker_dict.update(model.tracked_values)
         tracker = MultipleObjectiveTracker(**tracker_dict)
