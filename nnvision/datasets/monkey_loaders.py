@@ -1,3 +1,4 @@
+import warnings
 import torch
 import torch.utils.data as utils
 import numpy as np
@@ -141,6 +142,13 @@ def monkey_static_loader(dataset,
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
         if dataset != 'PlosCB19_V1':
+            if len(responses_test.shape) != 3:
+                responses_test = responses_test[None, ...]
+                responses_train = responses_train[None, ...]
+                # correct the shape of the responses for a session that was exported incorrectly
+                if data_key != '3653663964522':
+                    warnings.warn("Pickle file with invalid response shape detected")
+
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
