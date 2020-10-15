@@ -480,7 +480,13 @@ def monkey_static_loader_closed_loop(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}, 'test_mei': {}, 'test_control': {}}
+    dataloaders = {'train': {},
+                   'validation': {},
+                   'test': {},
+                   'test_mei_uncropped': {},
+                   'test_control_uncropped': {},
+                   'test_mei_cropped': {},
+                   'test_control_cropped': {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -547,26 +553,36 @@ def monkey_static_loader_closed_loop(dataset,
         responses_train = raw_data["training_responses"].astype(np.float32)
 
         responses_test = raw_data["testing_responses"].astype(np.float32)
-        responses_mei = raw_data["mei_responses"].astype(np.float32)
-        responses_control = raw_data["control_responses"].astype(np.float32)
+
+        mei_uncropped_responses = raw_data["mei_uncropped_responses"].astype(np.float32)
+        control_uncropped_responses = raw_data["control_uncropped_responses"].astype(np.float32)
+        mei_cropped_responses = raw_data["mei_cropped_responses"].astype(np.float32)
+        control_cropped_responses = raw_data["control_cropped_responses"].astype(np.float32)
 
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
-        mei_ids = raw_data["mei_ids"]
-        control_ids = raw_data["control_ids"]
+
+        mei_uncropped_ids = raw_data["mei_uncropped_ids"]
+        mei_cropped_ids = raw_data["mei_cropped_ids"]
+        control_uncropped_ids = raw_data["control_uncropped_ids"]
+        control_cropped_ids = raw_data["control_cropped_ids"]
 
         if dataset != 'PlosCB19_V1':
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
-            responses_mei = responses_mei.transpose((2, 0, 1))
-            responses_control = responses_control.transpose((2, 0, 1))
+            mei_uncropped_responses = mei_uncropped_responses.transpose((2, 0, 1))
+            control_uncropped_responses = control_uncropped_responses.transpose((2, 0, 1))
+            mei_cropped_responses = mei_cropped_responses.transpose((2, 0, 1))
+            control_cropped_responses = control_cropped_responses.transpose((2, 0, 1))
 
             if time_bins_sum is not None:  # then average over given time bins
                 responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
                 responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
-                responses_mei = (np.mean if avg else np.sum)(responses_mei[:, :, time_bins_sum], axis=-1)
-                responses_control = (np.mean if avg else np.sum)(responses_control[:, :, time_bins_sum], axis=-1)
+                mei_uncropped_responses = (np.mean if avg else np.sum)(mei_uncropped_responses[:, :, time_bins_sum], axis=-1)
+                control_uncropped_responses = (np.mean if avg else np.sum)(control_uncropped_responses[:, :, time_bins_sum], axis=-1)
+                mei_cropped_responses = (np.mean if avg else np.sum)(mei_cropped_responses[:, :, time_bins_sum], axis=-1)
+                control_cropped_responses = (np.mean if avg else np.sum)(control_cropped_responses[:, :, time_bins_sum], axis=-1)
 
         if image_frac < 1:
             if randomize_image_selection:
@@ -594,25 +610,42 @@ def monkey_static_loader_closed_loop(dataset,
                                         image_cache=cache,
                                         repeat_condition=testing_image_ids)
 
-        mei_loader = get_cached_loader(mei_ids,
-                                        responses_mei,
+        mei_uncropped_loader = get_cached_loader(mei_uncropped_ids,
+                                        mei_uncropped_responses,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
-                                        repeat_condition=mei_ids)
+                                        repeat_condition=mei_uncropped_ids)
 
-        control_loader = get_cached_loader(control_ids,
-                                        responses_control,
+        control_uncropped_loader = get_cached_loader(control_uncropped_ids,
+                                        control_uncropped_responses,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
-                                        repeat_condition=control_ids)
+                                        repeat_condition=control_uncropped_ids)
+
+        mei_cropped_loader = get_cached_loader(mei_cropped_ids,
+                                       mei_cropped_responses,
+                                       batch_size=None,
+                                       shuffle=None,
+                                       image_cache=cache,
+                                       repeat_condition=mei_cropped_ids)
+
+        control_cropped_loader = get_cached_loader(control_cropped_ids,
+                                           control_cropped_responses,
+                                           batch_size=None,
+                                           shuffle=None,
+                                           image_cache=cache,
+                                           repeat_condition=control_cropped_ids)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
-        dataloaders["test_mei"][data_key] = mei_loader
-        dataloaders["test_control"][data_key] = control_loader
+
+        dataloaders["test_mei_uncropped"][data_key] = mei_uncropped_loader
+        dataloaders["test_mei_cropped"][data_key] = mei_cropped_loader
+        dataloaders["test_control_uncropped"][data_key] = control_uncropped_loader
+        dataloaders["test_control_cropped"][data_key] = control_cropped_loader
 
     if store_data_info and not os.path.exists(stats_path):
 
