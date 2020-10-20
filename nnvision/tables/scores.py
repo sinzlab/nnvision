@@ -99,17 +99,6 @@ class TestPoissonLoss(ScoringBaseNeuronType):
     model_cache = TrainedModelCache
 
 
-@schema
-class TransferTestCorrelationScore(ScoringBaseNeuronType):
-    trainedmodel_table = TrainedTransferModel
-    unit_table = Recording.Units
-    measure_function = staticmethod(get_correlations)
-    measure_dataset = "test"
-    measure_attribute = "test_correlation"
-    data_cache = None
-    model_cache = None
-
-
 # ============================= CUSTOM SCORES =============================
 
 
@@ -241,4 +230,59 @@ class FEVe_thresholded(SummaryScoringBase):
     data_cache = DataCache
     model_cache = TrainedModelCache
 
+# ============================= TransferTrainedModel SCORES =============================
 
+
+@schema
+class TransferTestCorrelationScore(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test"
+    measure_attribute = "test_correlation"
+    data_cache = None
+    model_cache = None
+
+
+@schema
+class TransferTestCorrelationMEICropped(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test_mei_cropped"
+    measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
+
+
+@schema
+class TransferTestCorrelationMEIUncropped(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test_mei_uncropped"
+    measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
+
+
+@schema
+class TransferTestCorrelationControlCropped(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test_control_cropped"
+    measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
+
+
+@schema
+class TransferTestCorrelationControlUncropped(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "test_control_uncropped"
+    measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
