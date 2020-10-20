@@ -89,7 +89,16 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None, subsample=1, crop=0, scale=1, img_mean=None, img_std=None, transform=True, normalize=True, filename_precision=6):
+    def __init__(self, path=None,
+                 subsample=1,
+                 crop=0,
+                 scale=1,
+                 img_mean=None,
+                 img_std=None,
+                 transform=True,
+                 normalize=True,
+                 filename_precision=6,
+                 ):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
@@ -268,3 +277,27 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
                                                                                                             shuffle=shuffle,
                                                                                                             )
     return dataloader
+
+
+def get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57):
+    """
+
+    Args:
+        stimulus_location: in pixels on the presentation monitor (1920 x 1080 resolution).
+        crop (tuple): [(crop_top, crop_bottom), (crop_left, crop_right)]
+        monitor_scaling_factor: upscaling factor from imagenet images (default 420x420 px) to monitor presentation
+            (1920 x 1080 px)
+
+    Returns:
+        crop_shifted (tuple):
+    """
+
+    # rounding down the pixels after dividing by the scaling factor
+    w_shift = int(stimulus_location[0] / monitor_scaling_factor)
+    h_shift = int(stimulus_location[1] / monitor_scaling_factor)
+
+    crop_shifted = ((crop[0][0] + h_shift, crop[0][1] - h_shift),
+                    (crop[1][0] + w_shift, crop[1][1] - w_shift))
+
+    return crop_shifted
+
