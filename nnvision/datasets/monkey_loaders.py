@@ -8,7 +8,7 @@ from collections import namedtuple, Iterable
 import os
 from pathlib import Path
 from mlutils.data.samplers import RepeatsBatchSampler
-from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
+from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images, get_crop_from_stimulus_location
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
 
@@ -62,7 +62,7 @@ def monkey_static_loader(dataset,
         subsample: int - downsampling factor
         crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
             if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
-                i.e. [(crop_left, crop_right), (crop_top, crop_bottom)]
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
@@ -87,9 +87,8 @@ def monkey_static_loader(dataset,
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
-    
+
     # Get mean and std
-   
     if os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
@@ -259,7 +258,7 @@ def monkey_mua_sua_loader(dataset,
         subsample: int - downsampling factor
         crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
             if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
-                i.e. [(crop_left, crop_right), (crop_top, crop_bottom)]
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
@@ -436,7 +435,8 @@ def monkey_static_loader_closed_loop(dataset,
                          store_data_info=True,
                          image_frac=1.,
                          image_selection_seed=None,
-                         randomize_image_selection=True):
+                         randomize_image_selection=True,
+                         stimulus_location=None):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -469,7 +469,7 @@ def monkey_static_loader_closed_loop(dataset,
         subsample: int - downsampling factor
         crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
             if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
-                i.e. [(crop_left, crop_right), (crop_top, crop_bottom)]
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
@@ -502,7 +502,6 @@ def monkey_static_loader_closed_loop(dataset,
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
 
     # Get mean and std
-
     if os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
@@ -526,6 +525,8 @@ def monkey_static_loader_closed_loop(dataset,
 
     n_images = len(cache)
     data_info = {}
+    if stimulus_location is not None:
+        TrainImageCaches = {}
 
     # set up parameters for the different dataset types
     if dataset == 'PlosCB19_V1':
@@ -601,8 +602,21 @@ def monkey_static_loader_closed_loop(dataset,
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+        if stimulus_location is not None:
+            training_crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57)
+
+            TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale, transform=True,
+                               normalize=False)
+            TrainImageCaches[data_key].zscore_images(update_stats=True)
+
+            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size,
+                                             image_cache=TrainImageCaches[data_key])
+            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
+                                           image_cache=TrainImageCaches[data_key])
+        else:
+                train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
+                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+
         test_loader = get_cached_loader(testing_image_ids,
                                         responses_test,
                                         batch_size=None,
