@@ -81,6 +81,9 @@ def monkey_static_loader(dataset,
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
+    if not isinstance(image_frac, Iterable):
+        image_frac = [image_frac for i in neuronal_data_files]
+
     # clean up image path because of legacy folder structure
     image_cache_path = image_cache_path.split('individual')[0]
 
@@ -155,10 +158,10 @@ def monkey_static_loader(dataset,
                 responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
                 responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
 
-        if image_frac < 1:
+        if image_frac[i] < 1:
             if randomize_image_selection:
-                image_selection_seed = int(image_selection_seed*image_frac)
-            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac, seed=image_selection_seed)
+                image_selection_seed = int(image_selection_seed*image_frac[i])
+            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac[i], seed=image_selection_seed)
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
@@ -494,11 +497,18 @@ def monkey_static_loader_closed_loop(dataset,
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
+    if not isinstance(image_frac, Iterable):
+        image_frac = [image_frac for i in neuronal_data_files]
+
+    if not isinstance(stimulus_location, Iterable):
+        stimulus_location = [stimulus_location for i in neuronal_data_files]
+
     # clean up image path because of legacy folder structure
     image_cache_path = image_cache_path.split('individual')[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
+
     stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
 
     # Get mean and std
@@ -585,7 +595,7 @@ def monkey_static_loader_closed_loop(dataset,
                 mei_cropped_responses = (np.mean if avg else np.sum)(mei_cropped_responses[:, :, time_bins_sum], axis=-1)
                 control_cropped_responses = (np.mean if avg else np.sum)(control_cropped_responses[:, :, time_bins_sum], axis=-1)
 
-        if image_frac < 1:
+        if image_frac[i] < 1:
             if randomize_image_selection:
                 image_selection_seed = int(image_selection_seed * image_frac)
             idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac,
