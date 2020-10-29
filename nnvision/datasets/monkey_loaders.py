@@ -439,7 +439,9 @@ def monkey_static_loader_closed_loop(dataset,
                          image_frac=1.,
                          image_selection_seed=None,
                          randomize_image_selection=True,
-                         stimulus_location=None):
+                         stimulus_location=None,
+                         img_mean=None,
+                         img_std=None,):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -524,14 +526,19 @@ def monkey_static_loader_closed_loop(dataset,
         cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
                            img_std=img_std, transform=True, normalize=True)
     else:
-        # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                           normalize=False)
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
 
-        # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
-        cache.zscore_images(update_stats=True)
-        img_mean = cache.img_mean
-        img_std = cache.img_std
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
+                               normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std = cache.img_std
 
     n_images = len(cache)
     data_info = {}
@@ -613,19 +620,25 @@ def monkey_static_loader_closed_loop(dataset,
         training_image_ids = training_image_ids[train_idx]
 
         if stimulus_location is not None:
-            training_crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57)
+            training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
 
-            TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale, transform=True,
-                               normalize=False)
-            TrainImageCaches[data_key].zscore_images(update_stats=True)
+            if img_mean is not None:
+                TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale,
+                                   img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+            else:
+                TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale, transform=True,
+                                   normalize=False)
+                TrainImageCaches[data_key].zscore_images(update_stats=True)
+
+
 
             train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size,
                                              image_cache=TrainImageCaches[data_key])
             val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
                                            image_cache=TrainImageCaches[data_key])
         else:
-                train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
+            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
 
         test_loader = get_cached_loader(testing_image_ids,
                                         responses_test,
