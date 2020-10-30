@@ -1,20 +1,17 @@
 import datajoint as dj
-try:
-    # for pre-release nnfabrik
-    from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
-except:
-    # for versions >= 0.12.6
-    from nnfabrik.templates.trained_model import TrainedModelBase
 
-from .templates import ScoringBase, MeasuresBase, SummaryMeasuresBase, SummaryScoringBase
+from nnfabrik.templates.trained_model import TrainedModelBase
+from nnfabrik.templates.utility import DataInfoBase
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
-from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
+
 import os
 from pathlib import Path
 import pickle
 from ..utility.dj_helpers import get_default_args
+from .templates import ScoringBase, MeasuresBase, SummaryMeasuresBase, SummaryScoringBase
+
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 
