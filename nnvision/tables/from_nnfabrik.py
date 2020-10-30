@@ -5,9 +5,8 @@ try:
 except:
     # for versions >= 0.12.6
     from nnfabrik.templates.trained_model import TrainedModelBase
-    from nnfabrik.templates.scoring import ScoringBase
-    from nnfabrik.templates.scoring import MeasuresBase
 
+from .templates import ScoringBase, MeasuresBase, SummaryMeasuresBase, SummaryScoringBase
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
 from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
