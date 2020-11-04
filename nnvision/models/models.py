@@ -1015,7 +1015,12 @@ def augmented_full_readout(dataloaders=None,
 
     in_shape = model.readout[data_key].in_shape
     init_mu_range = model.readout[data_key].init_mu_range
-    init_sigma = model.readout[data_key].init_sigma
+    if hasattr(model.readout[data_key], 'init_sigma_range'):
+        init_sigma = model.readout[data_key].init_sigma_range
+        gauss_type = "uncorrelated"
+    else:
+        init_sigma = model.readout[data_key].init_sigma
+        gauss_type = "isotropic"
 
     grid_augment = []
     for x in np.linspace(augment_x_start, augment_x_end, n_augment_x):
@@ -1038,7 +1043,7 @@ def augmented_full_readout(dataloaders=None,
                                                    bias=True,
                                                    init_mu_range=init_mu_range,
                                                    init_sigma=init_sigma,
-                                                   gauss_type='isotropic')
+                                                   gauss_type=gauss_type)
     insert_index = 0
     for data_key, readout in model.readout.items():
 
