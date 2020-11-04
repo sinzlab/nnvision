@@ -544,6 +544,7 @@ def monkey_static_loader_closed_loop(dataset,
     data_info = {}
     if stimulus_location is not None:
         TrainImageCaches = {}
+        TestImageCaches = {}
 
     # set up parameters for the different dataset types
     if dataset == 'PlosCB19_V1':
@@ -621,10 +622,15 @@ def monkey_static_loader_closed_loop(dataset,
 
         if stimulus_location is not None:
             training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
+            test_crop = crop - np.clip(training_crop, -999, 0)
 
             if img_mean is not None:
                 TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale,
                                    img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+
+                TestImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=test_crop, scale=scale,
+                                   img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+
             else:
                 TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale, transform=True,
                                    normalize=False)
@@ -639,40 +645,41 @@ def monkey_static_loader_closed_loop(dataset,
         else:
             train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
             val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+            TestImageCaches[data_key] = cache
 
         test_loader = get_cached_loader(testing_image_ids,
                                         responses_test,
                                         batch_size=None,
                                         shuffle=None,
-                                        image_cache=cache,
+                                        image_cache=TestImageCaches[data_key],
                                         repeat_condition=testing_image_ids)
 
         mei_uncropped_loader = get_cached_loader(mei_uncropped_ids,
                                         mei_uncropped_responses,
                                         batch_size=None,
                                         shuffle=None,
-                                        image_cache=cache,
+                                        image_cache=TestImageCaches[data_key],
                                         repeat_condition=mei_uncropped_ids)
 
         control_uncropped_loader = get_cached_loader(control_uncropped_ids,
                                         control_uncropped_responses,
                                         batch_size=None,
                                         shuffle=None,
-                                        image_cache=cache,
+                                        image_cache=TestImageCaches[data_key],
                                         repeat_condition=control_uncropped_ids)
 
         mei_cropped_loader = get_cached_loader(mei_cropped_ids,
                                        mei_cropped_responses,
                                        batch_size=None,
                                        shuffle=None,
-                                       image_cache=cache,
+                                       image_cache=TestImageCaches[data_key],
                                        repeat_condition=mei_cropped_ids)
 
         control_cropped_loader = get_cached_loader(control_cropped_ids,
                                            control_cropped_responses,
                                            batch_size=None,
                                            shuffle=None,
-                                           image_cache=cache,
+                                           image_cache=TestImageCaches[data_key],
                                            repeat_condition=control_cropped_ids)
 
         dataloaders["train"][data_key] = train_loader
