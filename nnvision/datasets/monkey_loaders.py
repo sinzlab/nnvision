@@ -95,12 +95,12 @@ def monkey_static_loader(dataset,
             return data_info
         img_mean = list(data_info.values())[0]["img_mean"]
         img_std = list(data_info.values())[0]["img_std"]
-
+        
         # Initialize cache
         cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
     else:
         # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False) 
         
         # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
         cache.zscore_images(update_stats=True)
@@ -136,8 +136,6 @@ def monkey_static_loader(dataset,
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
         responses_test = raw_data["testing_responses"].astype(np.float32)
-        labels_train = raw_data["training_labels"].astype(np.float32)
-        labels_test = raw_data["testing_labels"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
@@ -162,24 +160,21 @@ def monkey_static_loader(dataset,
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]
 
-        labels_val = labels_train[val_idx]
-        labels_train = labels_train[train_idx]
-
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, labels_train, responses_train, names=('inputs', 'targets'), batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, labels_val, responses_val, names=('inputs', 'targets'), batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids, labels_test,
-                                        responses_test, names=('inputs', 'targets'),
+        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
+        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+        test_loader = get_cached_loader(testing_image_ids,
+                                        responses_test,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
                                         repeat_condition=testing_image_ids)
 
-        dataloaders["train"]["img_classification"] = train_loader
-        dataloaders["validation"]["img_classification"] = val_loader
-        dataloaders["test"]["img_classification"] = test_loader
+        dataloaders["train"][data_key] = train_loader
+        dataloaders["validation"][data_key] = val_loader
+        dataloaders["test"][data_key] = test_loader
 
 
     if store_data_info and not os.path.exists(stats_path):
@@ -197,7 +192,7 @@ def monkey_static_loader(dataset,
                                        img_mean=img_mean,
                                        img_std=img_std)
 
-
+        
         with open(stats_path, "wb") as pkl:
             pickle.dump(data_info, pkl)
 
