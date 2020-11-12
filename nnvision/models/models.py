@@ -156,6 +156,7 @@ def se_core_full_gauss_readout(dataloaders,
                                share_grid=False,
                                data_info=None,
                                gamma_grid_dispersion=0,
+                               attention_conv=False,
                                ):
     """
     Model class of a stacked2dCore (from mlutils) and a pointpooled (spatial transformer) readout
@@ -259,7 +260,8 @@ def se_core_full_gauss_readout(dataloaders,
                     se_reduction=se_reduction,
                     n_se_blocks=n_se_blocks,
                     depth_separable=depth_separable,
-                    linear=linear)
+                    linear=linear,
+                    attention_conv=attention_conv)
 
     readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
                                      n_neurons_dict=n_neurons_dict,
@@ -1007,9 +1009,15 @@ def augmented_full_readout(dataloaders=None,
                             augment_y_end=.75,
                             n_augment_x=5,
                             n_augment_y=5,
+                            trainedmodel_table=None,
                             ):
 
-    model = TrainedModel().load_model(key, include_dataloader=False)
+    if trainedmodel_table is None:
+        trainedmodel_table = TrainedModel
+    elif trainedmodel_table == 'TrainedTransferModel':
+        trainedmodel_table = TrainedTransferModel
+
+    model = trainedmodel_table().load_model(key, include_dataloader=False)
 
     data_key = list(model.readout.keys())[0]
 
@@ -1071,6 +1079,7 @@ def augmented_full_readout(dataloaders=None,
         model.readout.pop(session)
 
     return model
+
 
 def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, input_kern=13,          # core args
                                     hidden_kern=3, layers=1, gamma_hidden=0, gamma_input=0.1,
