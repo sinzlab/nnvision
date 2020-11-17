@@ -7,7 +7,7 @@ import pickle
 from collections import namedtuple, Iterable
 import os
 from pathlib import Path
-from mlutils.data.samplers import RepeatsBatchSampler
+from neuralpredictors.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images, get_crop_from_stimulus_location
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
