@@ -245,6 +245,17 @@ class TransferTestCorrelationScore(ScoringBaseNeuronType):
 
 
 @schema
+class TransferValidationCorrelationScore(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "validation"
+    measure_attribute = "validation_correlation"
+    data_cache = None
+    model_cache = None
+
+
+@schema
 class TransferTestCorrelationMEICropped(ScoringBaseNeuronType):
     trainedmodel_table = TrainedTransferModel
     unit_table = Recording.Units
