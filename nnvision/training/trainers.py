@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import torch
 from tqdm import tqdm
+from collections import Iterable
 
 from neuralpredictors.measures import *
 from neuralpredictors import measures as mlmeasures
@@ -149,7 +150,8 @@ def finetune_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
                                 restore_best=True, lr_decay_steps=3,
                                 lr_decay_factor=0.3, min_lr=0.0001,  # lr scheduler args
                                 cb=None, track_training=False, return_test_score=False,
-                                fine_tune='sequential', **kwargs):
+                                fine_tune='sequential',
+                                **kwargs):
 
 
     def full_objective(model, dataloader, data_key, *args):
@@ -167,6 +169,7 @@ def finetune_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
+
 
     # set the number of iterations over which you would like to accummulate gradients
     optim_step_count = len(dataloaders["train"].keys()) if loss_accum_batch_n is None else loss_accum_batch_n
@@ -192,8 +195,13 @@ def finetune_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     elif fine_tune == 'readout':
         parameters_to_train = [model.readout.parameters()]
 
-    for parameters in parameters_to_train:
-        optimizer = torch.optim.Adam(parameters, lr=lr_init)
+
+
+    for i, parameters in enumerate(parameters_to_train):
+        if isinstance(lr_init, Iterable):
+            lr = lr_init[i]
+        print(f"training with lr = {lr}")
+        optimizer = torch.optim.Adam(parameters, lr=lr)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max' if maximize else 'min',
                                                                factor=lr_decay_factor, patience=patience,
                                                                threshold=tolerance,

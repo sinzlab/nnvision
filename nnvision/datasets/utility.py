@@ -183,7 +183,6 @@ class ImageCache:
         """
         image = (image - self.img_mean) / self.img_std
         return image
-               
 
     @property
     def cache_size(self):
@@ -212,6 +211,14 @@ class ImageCache:
             self.img_mean = np.float32(img_mean.item())
             self.img_std  = np.float32(img_std.item())
         
+    @property
+    def image_shape(self):
+        if self.cache_size > 0:
+            image = next(iter(self.cache.values()))
+            return image.shape
+        else:
+            self.update(1)
+            return self.image_shape
 
 
 class CachedTensorDataset(utils.Dataset):
