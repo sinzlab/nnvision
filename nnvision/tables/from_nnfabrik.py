@@ -64,23 +64,50 @@ class TrainedModel(TrainedModelBase):
     data_info_table = DataInfo
     storage = "minio"
 
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
+
 
 @schema
 class TrainedHyperModel(TrainedModelBase):
     table_comment = "Trained model table for hyperparam searches"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class TrainedTransferModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class SharedReadoutTrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 class ScoringTable(ScoringBase):

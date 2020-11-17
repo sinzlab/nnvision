@@ -9,7 +9,7 @@ from nnfabrik.template import ScoringBase, SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
 from .from_mei import Ensemble
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 @schema
