@@ -10,7 +10,7 @@ from nnfabrik.template import ScoringBase, MeasuresBase, SummaryMeasuresBase
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.builder import resolve_model
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 @schema

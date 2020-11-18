@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from scipy import signal
 
 from mei.legacy.utils import varargin
+from ..utility.measure_helpers import get_cosine_mask
 
 
 class BlurAndCut:
@@ -74,6 +75,33 @@ class ChangeNormAndClip:
 
     @varargin
     def __call__(self, x, iteration=None):
+        x_norm = torch.norm(x.view(len(x), -1), dim=-1)
+        renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1))
+        return torch.clamp(renorm, self.x_min, self.x_max)
+
+
+class MaskChangeNormClip:
+    """ Change the norm of the input.
+
+    Arguments:
+        norm (float or tensor): Desired norm. If tensor, it should be the same length as
+            x.
+    """
+
+    def __init__(self, norm, x_min, x_max, mask_width, mask_height, ppd, fade_start_degrees):
+
+        self.mask = get_cosine_mask(mask_width, mask_height, ppd, fade_start_degrees)
+        self.norm = norm
+        self.x_min = x_min
+        self.x_max = x_max
+
+
+
+    @varargin
+    def __call__(self, x, iteration=None):
+
+        mask = torch.as_tensor(self.mask, device=x.device, dtype=x.dtype)
+        x = x * mask
         x_norm = torch.norm(x.view(len(x), -1), dim=-1)
         renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1))
         return torch.clamp(renorm, self.x_min, self.x_max)

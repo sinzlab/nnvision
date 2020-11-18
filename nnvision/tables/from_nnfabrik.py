@@ -1,23 +1,30 @@
 import datajoint as dj
-try:
-    # for pre-release nnfabrik
-    from nnfabrik.template import TrainedModelBase, ScoringBase, MeasuresBase
-except:
-    # for versions >= 0.12.6
-    from nnfabrik.templates.trained_model import TrainedModelBase
-    from nnfabrik.templates.scoring import ScoringBase
-    from nnfabrik.templates.scoring import MeasuresBase
 
+from nnfabrik.templates import TrainedModelBase, DataInfoBase
+from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
-from nnfabrik.template import DataInfoBase
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
+
 import os
 from pathlib import Path
 import pickle
 from ..utility.dj_helpers import get_default_args
+from .templates import ScoringBase, MeasuresBase, SummaryMeasuresBase, SummaryScoringBase
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
+
+if not 'stores' in dj.config:
+    dj.config['stores'] = {}
+dj.config['stores']['minio'] = {  # store in s3
+    'protocol': 's3',
+    'endpoint': os.environ.get('MINIO_ENDPOINT', 'DUMMY_ENDPOINT'),
+    'bucket': 'nnfabrik',
+    'location': 'dj-store',
+    'access_key': os.environ.get('MINIO_ACCESS_KEY', 'FAKEKEY'),
+    'secret_key': os.environ.get('MINIO_SECRET_KEY', 'FAKEKEY')
+}
 
 
 @schema
@@ -55,24 +62,52 @@ class DataInfo(DataInfoBase):
 class TrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class TrainedHyperModel(TrainedModelBase):
     table_comment = "Trained model table for hyperparam searches"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class TrainedTransferModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class SharedReadoutTrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 class ScoringTable(ScoringBase):
@@ -100,7 +135,7 @@ class ScoringBaseNeuronType(ScoringBase):
     def get_repeats_dataloaders(self, key=None, **kwargs):
         if key is None:
             key = self.fetch1('KEY')
-        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
+        dataloaders = self.trainedmodel_table.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
             key=key)
         return dataloaders["test"]
 

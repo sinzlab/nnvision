@@ -1,48 +1,45 @@
-version: '2.3'
+version: '3.4'
+x-build: &build
+  context: .
+  dockerfile: Dockerfile
+
+x-shared: &common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      - GITHUB_USER=${GITHUB_USER}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - DEV_SOURCE=${DEV_SOURCE}
+  volumes:
+    - .:/src/nndichromacy
+    - ./notebooks:/notebooks
+    - /mnt/scratch07/color_mei:/data
+    - /mnt/scratch07/nexport:/nexport
+  env_file:
+    - .env
+
 services:
-  notebook:
-    build: .
-    env_file: .env
-    ports:
-      - "5003:8888"
+  notebook_server:
+    <<: *common
     volumes:
-      - ../data:/data
-      #- /mnt/qb/data:/data
-      - /tmp:/tmp
-      - .:/src/nnfabrik
+      - .:/src/nnvision
       - ./notebooks:/notebooks
-    environment:
-      - DISPLAY=$DISPLAY
-      - NVIDIA_VISIBLE_DEVICES=0
-  gpu-server_develop:
-    build: .
+      - /var/sinz-shared:/data
     ports:
       - "8888:8888"
+
+  notebook_gpu_server:
+    <<: *common
     volumes:
+      - .:/src/nnvision
+      - ./notebooks:/notebooks
       - /var/lib/nova/sinz-shared:/data
-      - ../projects:/notebooks
-    env_file: .env
-    environment:
-      - DISPLAY=$DISPLAY
-    runtime: nvidia
-  server_develop:
-    build: .
     ports:
       - "8888:8888"
-    volumes:
-      - ../../../var/sinz-shared:/data
-      - ../projects:/notebooks
-    env_file: .env
-    environment:
-      - DISPLAY=$DISPLAY
-    runtime: nvidia
-  gpu_server_playground:
-    build: .
+
+  notebook_bcm:
+    <<: *common
     ports:
       - "8888:8888"
-    volumes:
-      - /var/lib/nova/sinz-shared:/data
-    env_file: .env
-    environment:
-      - DISPLAY=$DISPLAY
-    runtime: nvidia
+
