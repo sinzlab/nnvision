@@ -5,7 +5,7 @@ from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainabl
 from .from_nnfabrik import TrainedModel, TrainedTransferModel
 from .utility import DataCache, TrainedModelCache, EnsembleModelCache, TransferTrainedModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import ScoringBase, SummaryScoringBase
+from .templates import SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
 from .from_mei import Ensemble
 
