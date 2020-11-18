@@ -441,7 +441,9 @@ def monkey_static_loader_closed_loop(dataset,
                          randomize_image_selection=True,
                          stimulus_location=None,
                          img_mean=None,
-                         img_std=None,):
+                         img_std=None,
+                         include_mei_training=False,
+                         include_control_training=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -483,6 +485,10 @@ def monkey_static_loader_closed_loop(dataset,
     """
 
     dataset_config = locals()
+
+    if include_mei_training and include_control_training:
+        raise ValueError("the entire test can not be included into the training set. Set either 'include_mei_training' "
+                         "or 'include_control_training' to False.")
 
     # initialize dataloaders as empty dict
     dataloaders = {'train': {},
@@ -570,7 +576,6 @@ def monkey_static_loader_closed_loop(dataset,
         subject_ids = raw_data["subject_id"]
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
-
         responses_test = raw_data["testing_responses"].astype(np.float32)
 
         mei_uncropped_responses = raw_data["mei_uncropped_responses"].astype(np.float32)
@@ -585,6 +590,7 @@ def monkey_static_loader_closed_loop(dataset,
         mei_cropped_ids = raw_data["mei_cropped_ids"]
         control_uncropped_ids = raw_data["control_uncropped_ids"]
         control_cropped_ids = raw_data["control_cropped_ids"]
+
 
         if dataset != 'PlosCB19_V1':
             responses_test = responses_test.transpose((2, 0, 1))
@@ -610,6 +616,20 @@ def monkey_static_loader_closed_loop(dataset,
                                                       seed=image_selection_seed)
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
+
+        if include_control_training:
+            training_image_ids = np.append(training_image_ids, control_cropped_ids)
+            training_image_ids = np.append(training_image_ids, control_uncropped_ids)
+
+            responses_train = np.vstack([responses_train, control_cropped_responses])
+            responses_train = np.vstack([responses_train, control_uncropped_responses])
+
+        if include_mei_training:
+            training_image_ids = np.append(training_image_ids, mei_cropped_ids)
+            training_image_ids = np.append(training_image_ids, mei_uncropped_ids)
+
+            responses_train = np.vstack([responses_train, mei_cropped_responses])
+            responses_train = np.vstack([responses_train, mei_uncropped_responses])
 
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
