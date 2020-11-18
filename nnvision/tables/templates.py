@@ -87,7 +87,7 @@ class ScoringBase(dj.Computed):
     def get_dataloaders(self, key=None):
         if key is None:
             key = self.fetch1('KEY')
-        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(key=key)
+        dataloaders = self.trainedmodel_table.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(key=key)
         return dataloaders[self.measure_dataset]
 
     def get_repeats_dataloaders(self, key=None):
