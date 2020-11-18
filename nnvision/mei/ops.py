@@ -7,6 +7,7 @@ from scipy import signal
 from mei.legacy.utils import varargin
 from ..utility.measure_helpers import get_cosine_mask
 
+
 class BlurAndCut:
     """ Blur an image with a Gaussian window.
 

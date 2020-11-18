@@ -13,7 +13,7 @@ from ..utility.dj_helpers import get_default_args
 from .templates import ScoringBase, MeasuresBase, SummaryMeasuresBase, SummaryScoringBase
 
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 if not 'stores' in dj.config:
     dj.config['stores'] = {}
@@ -64,23 +64,50 @@ class TrainedModel(TrainedModelBase):
     data_info_table = DataInfo
     storage = "minio"
 
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
+
 
 @schema
 class TrainedHyperModel(TrainedModelBase):
     table_comment = "Trained model table for hyperparam searches"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class TrainedTransferModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 @schema
 class SharedReadoutTrainedModel(TrainedModelBase):
     table_comment = "Trained models"
     data_info_table = DataInfo
+    storage = "minio"
+
+    model_table = Model
+    dataset_table = Dataset
+    trainer_table = Trainer
+    seed_table = Seed
+    user_table = Fabrikant
 
 
 class ScoringTable(ScoringBase):

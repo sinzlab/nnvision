@@ -10,7 +10,7 @@ from .main import MonkeyExperiment
 
 import torch
 
-schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = dj.schema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 class MouseSelectorTemplate(dj.Computed):

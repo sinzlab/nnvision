@@ -13,7 +13,7 @@ from .legacy.from_mei import TrainedEnsembleModel
 
 EnsembleModelCache = FabrikCache(base_table=Ensemble, cache_size_limit=1)
 EnsembleModelCache_legacy = FabrikCache(base_table=TrainedEnsembleModel, cache_size_limit=1)
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 

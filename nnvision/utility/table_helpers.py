@@ -3,6 +3,7 @@ import numpy as np
 from ..tables.from_nnfabrik import Model, TrainedModel, SharedReadoutTrainedModel
 from ..tables.from_mei import SharedReadoutTrainedEnsembleModel
 
+
 def fill_trained_model_table():
     pass
 

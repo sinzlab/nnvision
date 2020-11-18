@@ -9,7 +9,7 @@ from nnfabrik.template import ScoringBase, SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
 from .from_mei import Ensemble
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 @schema
@@ -240,6 +240,17 @@ class TransferTestCorrelationScore(ScoringBaseNeuronType):
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
+    data_cache = None
+    model_cache = None
+
+
+@schema
+class TransferValidationCorrelationScore(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedTransferModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_correlations)
+    measure_dataset = "validation"
+    measure_attribute = "validation_correlation"
     data_cache = None
     model_cache = None
 
