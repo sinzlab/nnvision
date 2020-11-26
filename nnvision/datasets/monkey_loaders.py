@@ -441,7 +441,9 @@ def monkey_static_loader_closed_loop(dataset,
                          randomize_image_selection=True,
                          stimulus_location=None,
                          img_mean=None,
-                         img_std=None,):
+                         img_std=None,
+                         include_mei_training=False,
+                         include_control_training=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -484,6 +486,10 @@ def monkey_static_loader_closed_loop(dataset,
 
     dataset_config = locals()
 
+    if include_mei_training and include_control_training:
+        raise ValueError("the entire test can not be included into the training set. Set either 'include_mei_training' "
+                         "or 'include_control_training' to False.")
+
     # initialize dataloaders as empty dict
     dataloaders = {'train': {},
                    'validation': {},
@@ -492,6 +498,9 @@ def monkey_static_loader_closed_loop(dataset,
                    'test_control_uncropped': {},
                    'test_mei_cropped': {},
                    'test_control_cropped': {}}
+
+    if include_mei_training or include_control_training:
+        dataloaders["validation_extended"] = {}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -570,7 +579,6 @@ def monkey_static_loader_closed_loop(dataset,
         subject_ids = raw_data["subject_id"]
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
-
         responses_test = raw_data["testing_responses"].astype(np.float32)
 
         mei_uncropped_responses = raw_data["mei_uncropped_responses"].astype(np.float32)
@@ -585,6 +593,7 @@ def monkey_static_loader_closed_loop(dataset,
         mei_cropped_ids = raw_data["mei_cropped_ids"]
         control_uncropped_ids = raw_data["control_uncropped_ids"]
         control_cropped_ids = raw_data["control_cropped_ids"]
+
 
         if dataset != 'PlosCB19_V1':
             responses_test = responses_test.transpose((2, 0, 1))
@@ -611,14 +620,40 @@ def monkey_static_loader_closed_loop(dataset,
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
+        if include_mei_training or include_control_training:
+            training_image_ids_original = training_image_ids
+            responses_train_original = responses_train
+
+        if include_control_training:
+            training_image_ids = np.append(training_image_ids, control_cropped_ids)
+            training_image_ids = np.append(training_image_ids, control_uncropped_ids)
+
+            responses_train = np.vstack([responses_train, control_cropped_responses])
+            responses_train = np.vstack([responses_train, control_uncropped_responses])
+
+        if include_mei_training:
+            training_image_ids = np.append(training_image_ids, mei_cropped_ids)
+            training_image_ids = np.append(training_image_ids, mei_uncropped_ids)
+
+            responses_train = np.vstack([responses_train, mei_cropped_responses])
+            responses_train = np.vstack([responses_train, mei_uncropped_responses])
+
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
 
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]
-
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
+
+        if include_mei_training or include_control_training:
+            train_idx = np.isin(training_image_ids_original, all_train_ids)
+            val_idx = np.isin(training_image_ids_original, all_validation_ids)
+
+            responses_val_original = responses_train_original[val_idx]
+            responses_train_original = responses_train_original[train_idx]
+            validation_image_ids_original = training_image_ids_original[val_idx]
+            training_image_ids_original = training_image_ids_original[train_idx]
 
         if stimulus_location is not None:
             training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
@@ -640,11 +675,26 @@ def monkey_static_loader_closed_loop(dataset,
 
             train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size,
                                              image_cache=TrainImageCaches[data_key])
-            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
-                                           image_cache=TrainImageCaches[data_key])
+            if include_mei_training or include_control_training:
+                val_loader = get_cached_loader(validation_image_ids_original, responses_val_original, batch_size=batch_size,
+                                               image_cache=TrainImageCaches[data_key])
+                val_loader_extended = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
+                                               image_cache=TrainImageCaches[data_key])
+            else:
+                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
+                                               image_cache=TrainImageCaches[data_key])
         else:
             train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+            if include_mei_training or include_control_training:
+                val_loader_extended = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+                val_loader = get_cached_loader(validation_image_ids_original,
+                                                responses_val_original,
+                                                batch_size=batch_size,
+                                                image_cache=cache)
+            else:
+                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
+                                               image_cache=cache)
+
             TestImageCaches[data_key] = cache
 
         test_loader = get_cached_loader(testing_image_ids,
@@ -690,6 +740,9 @@ def monkey_static_loader_closed_loop(dataset,
         dataloaders["test_mei_cropped"][data_key] = mei_cropped_loader
         dataloaders["test_control_uncropped"][data_key] = control_uncropped_loader
         dataloaders["test_control_cropped"][data_key] = control_cropped_loader
+
+        if include_mei_training or include_control_training:
+            dataloaders["validation_extended"][data_key] = val_loader_extended
 
     if store_data_info and not os.path.exists(stats_path):
 

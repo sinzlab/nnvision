@@ -30,6 +30,9 @@ dj.config['stores']['minio'] = {  # store in s3
 @schema
 class DataInfo(DataInfoBase):
 
+    dataset_table = Dataset
+    user_table = Fabrikant
+
     def create_stats_files(self, key=None, path=None):
 
         if key == None:
@@ -135,7 +138,7 @@ class ScoringBaseNeuronType(ScoringBase):
     def get_repeats_dataloaders(self, key=None, **kwargs):
         if key is None:
             key = self.fetch1('KEY')
-        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
+        dataloaders = self.trainedmodel_table.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(
             key=key)
         return dataloaders["test"]
 
