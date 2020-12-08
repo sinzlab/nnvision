@@ -29,6 +29,17 @@ services:
     ports:
       - "8888:8888"
 
+  production_server:
+    <<: *common
+    volumes:
+      - .:/src/nnvision
+      - ./notebooks:/notebooks
+      - /var/sinz-shared:/data
+    ports:
+      - "8888:8888"
+    entrypoint: /usr/local/bin/python3
+    command: run.py
+
   notebook_gpu_server:
     <<: *common
     volumes:
@@ -37,6 +48,17 @@ services:
       - /var/lib/nova/sinz-shared:/data
     ports:
       - "8888:8888"
+
+  production_gpu_server:
+    <<: *common
+    volumes:
+      - .:/src/nnvision
+      - ./notebooks:/notebooks
+      - /var/lib/nova/sinz-shared:/data
+    ports:
+      - "8888:8888"
+    entrypoint: /usr/local/bin/python3
+    command: run.py
 
   notebook_bcm:
     <<: *common
