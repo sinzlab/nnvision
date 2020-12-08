@@ -11,7 +11,8 @@ from torch.nn import ModuleDict
 from neuralpredictors.constraints import positive
 from neuralpredictors.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
 from neuralpredictors import regularizers
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d
+from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
+
 
 from neuralpredictors.layers.legacy import Gaussian2d
 
@@ -209,4 +210,36 @@ class MultipleRemappedGaussian2d(MultiReadout, torch.nn.ModuleDict):
                 source_grid=source_grid,
             )
                             )
+        self.gamma_readout = gamma_readout
+
+
+class MultipleAttention2d(MultiReadout, torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        attention_layers,
+        attention_kernel,
+        bias,
+        gamma_readout,
+    ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+
+            self.add_module(
+                k,
+                AttentionReadout(
+                    in_shape=in_shape,
+                    outdims=n_neurons,
+                    attention_layers=attention_layers,
+                    attention_kernel=attention_kernel,
+                    bias=bias
+                ),
+            )
         self.gamma_readout = gamma_readout
