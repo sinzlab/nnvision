@@ -1432,3 +1432,141 @@ def stacked2d_core_dn_linear_readout(dataloaders, seed, hidden_channels=32, inpu
     model = Encoder(core, dn, readout, nonlin)
 
     return model
+
+
+def transfer_core_remapped_gauss_readout(dataloaders,
+                                         seed,
+                                         transfer_key=dict(),
+                                         core_transfer_table=None,
+                                         freeze_core=True,
+                                         gamma_readout=4,
+                                         elu_offset=0,
+                                         gauss_type='full',
+                                         remap_layers=2,
+                                         remap_kernel=3,
+                                         max_remap_amplitude=.2,
+                                         data_info=None,
+                                         init_mu_range=0.2,
+                                         init_sigma=1.,
+                                         readout_bias=True,
+                                         ):
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    set_random_seed(seed)
+
+    core_model = simple_core_transfer(dataloaders=dataloaders,
+                                      seed=seed,
+                                      transfer_key=transfer_key,
+                                      core_transfer_table=core_transfer_table,
+                                      freeze_core=freeze_core,
+                                      data_info=data_info)
+
+    core = core_model.core
+
+    readout = MultipleRemappedGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                         n_neurons_dict=n_neurons_dict,
+                                         init_mu_range=init_mu_range,
+                                         bias=readout_bias,
+                                         init_sigma=init_sigma,
+                                         gamma_readout=gamma_readout,
+                                         gauss_type=gauss_type,
+                                         grid_mean_predictor=None,
+                                         grid_mean_predictor_type=None,
+                                         remap_layers=remap_layers,
+                                         remap_kernel=remap_kernel,
+                                         max_remap_amplitude=max_remap_amplitude,
+                                         source_grids=None,
+                                         share_features=None,
+                                         share_grid=None,
+                                         shared_match_ids=None,
+                                         )
+
+    # initializing readout bias to mean response
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))[:2]
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core=core,
+                    readout=readout,
+                    elu_offset=elu_offset,
+                    )
+    return model
+
+
+def transfer_core_attention_readout(dataloaders,
+                                     seed,
+                                     transfer_key=dict(),
+                                     core_transfer_table=None,
+                                     freeze_core=True,
+                                     gamma_readout=4,
+                                     attention_layers=2,
+                                     attention_kernel=3,
+                                     elu_offset=0,
+                                     data_info=None,
+                                     readout_bias=True,
+                                         ):
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    set_random_seed(seed)
+
+    core_model = simple_core_transfer(dataloaders=dataloaders,
+                                      seed=seed,
+                                      transfer_key=transfer_key,
+                                      core_transfer_table=core_transfer_table,
+                                      freeze_core=freeze_core,
+                                      data_info=data_info,
+                                      )
+
+    core = core_model.core
+
+    readout = MultipleAttention2d(core, in_shape_dict=in_shapes_dict,
+                                  n_neurons_dict=n_neurons_dict,
+                                  bias=readout_bias,
+                                  gamma_readout=gamma_readout,
+                                  attention_layers=attention_layers,
+                                  attention_kernel=attention_kernel,
+                                )
+
+    # initializing readout bias to mean response
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))[:2]
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core=core,
+                    readout=readout,
+                    elu_offset=elu_offset,
+                    )
+    return model
+
