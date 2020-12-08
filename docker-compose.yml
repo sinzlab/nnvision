@@ -38,7 +38,7 @@ services:
     ports:
       - "8888:8888"
     entrypoint: /usr/local/bin/python3
-    command: run.py
+    command: /src/nnvision/run.py
 
   notebook_gpu_server:
     <<: *common
@@ -58,7 +58,7 @@ services:
     ports:
       - "8888:8888"
     entrypoint: /usr/local/bin/python3
-    command: run.py
+    command: /src/nnvision/run.py
 
   notebook_bcm:
     <<: *common
