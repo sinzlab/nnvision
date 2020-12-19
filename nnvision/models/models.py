@@ -12,7 +12,7 @@ from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_
 from torch import nn
 from torch.nn import functional as F
 
-from .encoders import Encoder
+from .encoders import Encoder, EncoderPNL
 from .cores import SE2dCore, TransferLearningCore
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d, MultipleGaussian2d, MultipleAttention2d
 from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
@@ -428,7 +428,9 @@ def se_core_attention_readout(dataloaders, seed, hidden_channels=32, input_kern=
                                    readout_bias=True,  # readout args,
                                    gamma_readout=4, elu_offset=0, stack=None, se_reduction=32, n_se_blocks=1,
                                    depth_separable=False, linear=False,
-                                   attention_layers=2, attention_kernel=3, data_info=None):
+                                   attention_layers=2, attention_kernel=3, data_info=None,
+                                   final_nonlinearity_type=None, nonlin_bias=False, nonlin_init_value=0.01, nonlin_vmin=-3, nonlin_vmax=6,
+                                   nonlin_nbins=50, nonlin_reg_weight=0, nonlin_reg_order=2):
 
     if data_info is not None:
         n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
@@ -482,9 +484,23 @@ def se_core_attention_readout(dataloaders, seed, hidden_channels=32, input_kern=
             _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
-    model = Encoder(core=core,
+    if final_nonlinearity_type is None:
+        model = Encoder(core=core,
                     readout=readout,
                     elu_offset=elu_offset)
+
+    elif final_nonlinearity_type == 'Piecewise':
+        nonlinearity = MultiplePiecewiseLinearExpNonlinearity(n_neurons_dict=n_neurons_dict,
+                                                        bias=nonlin_bias,
+                                                        initial_value=nonlin_init_value,
+                                                        vmin=nonlin_vmax,
+                                                        vmax=nonlin_vmax,
+                                                        num_bins=nonlin_init_value,
+                                                        smooth_reg_weight=nonlin_reg_weight,
+                                                        smoothnes_reg_order=nonlin_reg_order)
+        model = EncoderPNL(core=core,
+                            readout=readout,
+                            nonlinearity=nonlinearity)
 
     return model
 
