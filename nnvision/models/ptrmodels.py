@@ -9,7 +9,7 @@ from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_
 from torch import nn
 from torch.nn import functional as F
 
-from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
+from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d
 from .utility import unpack_data_info
 
 from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
@@ -107,6 +107,92 @@ def task_core_gauss_readout(dataloaders, seed,
                                      share_grid=None, 
                                      shared_match_ids=None)
     
+
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core, readout, elu_offset)
+
+    return model
+
+
+def task_core_remapped_gauss_readout(dataloaders, seed,
+                            input_channels=1, model_name='vgg19',  # begin of core args
+                            layer_name='features.10', pretrained=True, bias=False,
+                            final_batchnorm=True, final_nonlinearity=True,
+                            momentum=0.1, fine_tune=False,
+                            init_mu_range=0.4, init_sigma_range=0.6,  # readout args,
+                            readout_bias=True, gamma_readout=0.01, gauss_type='isotropic',
+                            elu_offset=-1, data_info=None, remap_layers=2, remap_kernel=3, max_remap_amplitude=.2,  # output and data_info
+                            ):
+    """
+    A Model class of a predefined core (using models from ptrnets). Can be initialized pretrained or random.
+    Can also be set to be trainable or not, independent of initialization.
+
+    Args:
+        dataloaders: a dictionary of train-dataloaders, one loader per session
+            in the format {'data_key': dataloader object, .. }
+        seed: ..
+        pool_steps:
+        pool_kern:
+        readout_bias:
+        init_range:
+        gamma_readout:
+
+    Returns:
+    """
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    set_random_seed(seed)
+
+    core = TaskDrivenCore2(input_channels=core_input_channels,
+                           model_name=model_name,
+                           layer_name=layer_name,
+                           pretrained=pretrained,
+                           bias=bias,
+                           final_batchnorm=final_batchnorm,
+                           final_nonlinearity=final_nonlinearity,
+                           momentum=momentum,
+                           fine_tune=fine_tune)
+
+    set_random_seed(seed)
+
+    core.initialize()
+
+    readout = MultipleRemappedGaussian2d(core, in_shape_dict=in_shapes_dict,
+                                         n_neurons_dict=n_neurons_dict,
+                                         init_mu_range=init_mu_range,
+                                         bias=readout_bias,
+                                         init_sigma=init_sigma_range,
+                                         gamma_readout=gamma_readout,
+                                         gauss_type=gauss_type,
+                                         grid_mean_predictor=None,
+                                         grid_mean_predictor_type=None,
+                                         remap_layers=remap_layers,
+                                         remap_kernel=remap_kernel,
+                                         max_remap_amplitude=max_remap_amplitude,
+                                         source_grids=None,
+                                         share_features=None,
+                                         share_grid=None,
+                                         shared_match_ids=None
+                                         )
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
