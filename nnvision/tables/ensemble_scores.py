@@ -51,3 +51,13 @@ class TestCorrelationEnsembleScore(ScoringBaseNeuronType):
     measure_attribute = "test_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache
+
+
+@schema
+class CorrelationToAverageEnsembleScore(ScoringBaseNeuronType):
+    trainedmodel_table = Ensemble
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_avg_correlations)
+    measure_attribute = "avg_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
