@@ -7,14 +7,22 @@ from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
+from nnvision.datasets.utility import Rescale, Crop
 from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
-
+from torchvision import transforms
+from bias_transfer.trainer.main_loop_modules import NoiseAugmentation
+from functools import partial
+from torchvision import datasets
+from imagecorruptions import corrupt
+from imagecorruptions.corruptions import *
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
                          image_cache_path,
+                         original_image_cache_path,
                          batch_size=64,
+                         normalize=True,
                          seed=None,
                          train_frac=0.8,
                          subsample=1,
@@ -27,7 +35,9 @@ def monkey_static_loader(dataset,
                          store_data_info=True,
                          image_frac=1.,
                          image_selection_seed=None,
-                         randomize_image_selection=True):
+                         randomize_image_selection=True,
+                         target_types=["neural"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
+                         add_fly_corrupted_test={}, resize=0):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -68,6 +78,18 @@ def monkey_static_loader(dataset,
     Returns: nested dictionary of dataloaders
     """
 
+    seed = 1000
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    def apply_one_noise(x, std_value=None):
+        noise_config = {
+            "std": {std_value: 1.0}
+        }
+
+        return NoiseAugmentation.apply_noise(x, device="cpu", **noise_config)[0]
+
+
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
@@ -95,17 +117,22 @@ def monkey_static_loader(dataset,
             return data_info
         img_mean = list(data_info.values())[0]["img_mean"]
         img_std = list(data_info.values())[0]["img_std"]
-        
+
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(path=image_cache_path)
+        original_cache = ImageCache(path=original_image_cache_path)
     else:
         # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False) 
-        
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale)
+        original_cache = ImageCache(path=original_image_cache_path)
         # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
         cache.zscore_images(update_stats=True)
         img_mean = cache.img_mean
         img_std  = cache.img_std
+
+    if stats:
+        img_mean = np.float32(stats['mean'])
+        img_std = np.float32(stats['std'])
     
     
     n_images = len(cache)
@@ -125,7 +152,7 @@ def monkey_static_loader(dataset,
     all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
                                                              train_frac=train_frac,
                                                              seed=seed)
-    
+
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
 
@@ -136,6 +163,8 @@ def monkey_static_loader(dataset,
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
         responses_test = raw_data["testing_responses"].astype(np.float32)
+        labels_train = raw_data["training_labels"].astype(np.float32)
+        labels_test = raw_data["testing_labels"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
@@ -157,28 +186,147 @@ def monkey_static_loader(dataset,
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
 
-        responses_val = responses_train[val_idx]
-        responses_train = responses_train[train_idx]
-
+        train_data = dict()
+        val_data = dict()
+        test_data = dict()
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
+        train_data['inputs'] = training_image_ids
+        val_data['inputs'] = validation_image_ids
+        test_data['inputs'] = testing_image_ids
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids,
-                                        responses_test,
+
+        if "img_classification" in target_types:
+            labels_val = labels_train[val_idx]
+            labels_train = labels_train[train_idx]
+            train_data['labels'] = labels_train
+            val_data['labels'] = labels_val
+            test_data['labels'] = labels_test
+        if "neural" in target_types:
+            responses_val = responses_train[val_idx]
+            responses_train = responses_train[train_idx]
+            train_data['responses'] = responses_train
+            val_data['responses'] = responses_val
+            test_data['responses'] = responses_test
+
+        names = tuple(['inputs'])
+        if "labels" in train_data.keys():
+            names += ('labels',)
+        if "responses" in train_data.keys():
+            names += ('responses',)
+
+        transform_train = [
+            transforms.Lambda(Crop(crop, subsample)),
+            transforms.Lambda(Rescale(scale)),
+            transforms.ToPILImage() if apply_augmentation else None,
+            transforms.RandomCrop(input_size, padding=4) if apply_augmentation else None,
+            transforms.RandomHorizontalFlip() if apply_augmentation else None,
+            transforms.RandomRotation(15) if apply_augmentation else None,
+            transforms.ToTensor(),
+            transforms.Normalize(img_mean, img_std)
+            if normalize
+            else None,
+        ]
+
+        transform_val = [
+            transforms.Lambda(Crop(crop, subsample)),
+            transforms.Lambda(Rescale(scale)),
+            transforms.ToTensor(),
+            transforms.Normalize(img_mean, img_std)
+            if normalize
+            else None,
+        ]
+
+        transform_train = transforms.Compose(
+            list(filter(lambda x: x is not None, transform_train))
+        )
+        transform_val = transforms.Compose(
+            list(filter(lambda x: x is not None, transform_val))
+        )
+
+        train_loader = get_cached_loader(train_data, names=names, batch_size=batch_size,image_cache=cache, transform=transform_train)
+        val_loader = get_cached_loader(val_data, names=names, batch_size=batch_size, image_cache=cache, transform=transform_val)
+        test_loader = get_cached_loader(test_data,
+                                        names=names,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
-                                        repeat_condition=testing_image_ids)
+                                        repeat_condition=testing_image_ids, transform=transform_val)
+
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
 
 
-    if store_data_info and not os.path.exists(stats_path):
-        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        if 'labels' in names:
+            transform_val_gauss_levels = {}
+            for level in [0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0]:
+                transform_val_gauss_levels[level] = [
+                    transforms.Lambda(Rescale(resize)) if resize else None,
+                    transforms.Lambda(Crop(crop, subsample)),
+                    transforms.Lambda(Rescale(scale)),
+                    transforms.ToTensor(),
+                    transforms.Lambda(partial(apply_one_noise, std_value=level)),
+                    transforms.Grayscale() if apply_grayscale else None,
+                    transforms.Normalize(img_mean, img_std)
+                    if normalize
+                    else None,
+                ]
+            for level in list(transform_val_gauss_levels.keys()):
+                transform_val_gauss_levels[level] = transforms.Compose(
+                    list(filter(lambda x: x is not None, transform_val_gauss_levels[level]))
+                )
+            val_gauss_loaders = {}
+            for level in list(transform_val_gauss_levels.keys()):
+                val_gauss_loaders[level] = get_cached_loader(val_data, names=names, batch_size=batch_size,
+                                                             image_cache=original_cache, transform=transform_val_gauss_levels[level])
+
+            dataloaders["validation_gauss"] = val_gauss_loaders
+
+            if add_fly_corrupted_test:
+                fly_test_loaders = {}
+                for fly_noise_type, levels in add_fly_corrupted_test.items():
+                    fly_test_loaders[fly_noise_type] = {}
+                    for level in levels:
+
+                        class Noise(object):
+                            def __init__(self, noise_type, severity):
+                                self.noise_type = noise_type
+                                self.severity = severity
+
+                            def __call__(self, pic):
+                                pic = np.asarray(pic)
+                                img = corrupt(pic, corruption_name=self.noise_type, severity=self.severity)
+                                return img
+
+                        transform_fly_test = [
+                            transforms.Lambda(Rescale(resize)) if resize else None,
+                            transforms.Lambda(Crop(crop, subsample)),
+                            transforms.Lambda(Rescale(scale)),
+                            Noise(fly_noise_type, level),
+                            transforms.ToPILImage() if apply_grayscale else None,
+                            transforms.Grayscale() if apply_grayscale else None,
+                            transforms.ToTensor(),
+                            transforms.Normalize(img_mean, img_std)
+                            if normalize
+                            else None,
+                        ]
+                        transform_fly_test = transforms.Compose(
+                            list(filter(lambda x: x is not None, transform_fly_test))
+                        )
+                        fly_test_loaders[fly_noise_type][level] = get_cached_loader(test_data if len(set(testing_image_ids)) > 1000 else val_data,
+                                                                                    names=names, batch_size=batch_size,
+                                                                                    image_cache=original_cache, transform=transform_fly_test)
+
+                dataloaders["fly_c_test"] = fly_test_loaders
+
+
+    if store_data_info and not os.path.exists(stats_path) and "neural" in target_types:
+        if 'labels' in names:
+            in_name, _, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        else:
+            in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}

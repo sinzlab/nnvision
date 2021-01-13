@@ -7,6 +7,7 @@ from skimage.transform import rescale
 from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
+from torchvision import transforms
 
 
 def get_oracle_dataloader(dat,
@@ -61,7 +62,7 @@ def get_validation_split(n_images, train_frac, seed):
 
     """
     if seed: np.random.seed(seed)
-    train_idx, val_idx = np.split(np.random.permutation(int(n_images)), [int(n_images*train_frac)])
+    train_idx, val_idx = np.split(np.random.permutation(np.arange(1, int(n_images+1))), [int(n_images*train_frac)])
     assert not np.any(np.isin(train_idx, val_idx)), "train_set and val_set are overlapping sets"
 
     return train_idx, val_idx
@@ -89,7 +90,7 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None, subsample=1, crop=0, scale=1, img_mean=None, img_std=None, transform=True, normalize=True, filename_precision=6):
+    def __init__(self, path=None, subsample=1, crop=0, scale=1.0, img_mean=None, img_std=None, filename_precision=6):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
@@ -111,8 +112,8 @@ class ImageCache:
         self.scale = scale
         self.img_mean = img_mean
         self.img_std = img_std
-        self.transform = transform
-        self.normalize = normalize
+        # self.transform = transform
+        # self.normalize = normalize
         self.leading_zeros = filename_precision
 
     def __len__(self):
@@ -125,7 +126,7 @@ class ImageCache:
         item = item.tolist() if isinstance(item, Iterable) else item
         return [self[i] for i in item] if isinstance(item, Iterable) else self.update(item)
 
-    def update(self, key):
+    def update(self, key, to_tensor=False):
         if key in self.cache:
             return self.cache[key]
         else:
@@ -133,10 +134,13 @@ class ImageCache:
             image = np.load(filename)
             if len(image.shape) == 2:
                 image = np.stack((image,) * 3, axis=-1)
-            image = self.transform_image(image) if self.transform else image
-            image = self.normalize_image(image) if self.normalize else image
-            image = torch.tensor(image).to(torch.float)
-            self.cache[key] = image
+            #image = self.transform_image(image) if self.transform else image
+            #image = self.normalize_image(image) if self.normalize else image
+            if to_tensor:
+                image = self.transform_image(image)
+                image = torch.tensor(image).to(torch.float)
+            else:
+                self.cache[key] = image
             return image
 
     def transform_image(self, image):
@@ -188,7 +192,7 @@ class ImageCache:
     def loaded_images(self):
         print('Loading images ...')
         items = [int(file.split('.')[0]) for file in os.listdir(self.path) if file.endswith('.npy')]
-        images = torch.stack([self.update(item) for item in items])
+        images = torch.stack([self.update(item, to_tensor=True) for item in items])
         return images
     
     
@@ -200,14 +204,53 @@ class ImageCache:
         img_mean = images.mean()
         img_std  = images.std()
         
-        for key in self.cache:
-            self.cache[key] = (self.cache[key] - img_mean) / img_std
+        # for key in self.cache:
+        #     self.cache[key] = (self.cache[key] - img_mean) / img_std
         
         if update_stats:
-            self.img_mean = np.float32(img_mean.item())
-            self.img_std  = np.float32(img_std.item())
-        
+            self.img_mean = np.float32(img_mean.item() / 255.)
+            self.img_std  = np.float32(img_std.item() / 255.)
 
+
+class Crop(object):
+    def __init__(self, crop, subsample):
+        if isinstance(crop, int):
+            crop = [(crop, crop), (crop, crop)]
+        self.crop = crop
+        self.subsample = subsample
+
+    def __call__(self, image):
+        if len(image.shape) == 2:
+            h, w = image.shape if len(image.shape) == 2 else image.shape[:2]
+            image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
+                    self.crop[1][0]:w - self.crop[1][1]:self.subsample]
+        elif len(image.shape) == 3:
+            h, w = image.shape[:2]
+            image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
+                    self.crop[1][0]:w - self.crop[1][1]:self.subsample, ...]
+        else:
+            raise ValueError(f"Image shape has to be two dimensional (grayscale) or three dimensional "
+                             f"(color, with w x h x c). got image shape {image.shape}")
+
+        return image
+
+class Rescale(object):
+    def __init__(self, scale_factor):
+        self.scale_factor = scale_factor
+
+    def __call__(self, image):
+        if len(image.shape) == 2:
+            rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=False, anti_aliasing=False,
+                                              preserve_range=True).astype(x.dtype)
+            image = image if self.scale_factor == 1 else rescale_fn(image, self.scale_factor)
+        elif len(image.shape) == 3:
+            rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=True, anti_aliasing=False,
+                                              preserve_range=True).astype(x.dtype)
+            image = image if self.scale_factor == 1 else rescale_fn(image, self.scale_factor)
+        else:
+            raise ValueError(f"Image shape has to be two dimensional (grayscale) or three dimensional "
+                             f"(color, with w x h x c). got image shape {image.shape}")
+        return image
 
 class CachedTensorDataset(utils.Dataset):
     """
@@ -219,7 +262,7 @@ class CachedTensorDataset(utils.Dataset):
         *tensors (Tensor): tensors that have the same size of the first dimension.
     """
 
-    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None):
+    def __init__(self, tensors, names=('inputs', 'targets'), image_cache=None, transform=None):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
         if not len(tensors) == len(names):
@@ -229,6 +272,7 @@ class CachedTensorDataset(utils.Dataset):
         self.input_position = names.index("inputs")
         self.DataPoint = namedtuple('DataPoint', names)
         self.image_cache = image_cache
+        self.transform = transform
 
     def __getitem__(self, index):
         """
@@ -239,9 +283,9 @@ class CachedTensorDataset(utils.Dataset):
             key = self.tensors[0][index].item()
         else:
             key = self.tensors[0][index].numpy().astype(np.int32)
-
-        tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
+        tensors_expanded = [tensor[index] if pos != self.input_position else self.image_cache[key]
                             for pos, tensor in enumerate(self.tensors)]
+        tensors_expanded[self.input_position] = self.transform(tensors_expanded[self.input_position])
 
         return self.DataPoint(*tensors_expanded)
 
@@ -249,7 +293,9 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cache=None, repeat_condition=None):
+def get_cached_loader(data, batch_size, names=('inputs', 'labels', 'responses'),
+                      shuffle=True, image_cache=None, repeat_condition=None, transform=None):
+
     """
 
     Args:
@@ -261,10 +307,16 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
 
     Returns: a PyTorch DataLoader object
     """
-
-    image_ids = torch.tensor(image_ids.astype(np.int32))
-    responses = torch.tensor(responses).to(torch.float)
-    dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
+    tensors_list = []
+    image_ids = torch.tensor(data['inputs'].astype(np.int32))
+    tensors_list.append(image_ids)
+    if "labels" in names:
+        labels = torch.tensor(data['labels'], dtype=torch.long)
+        tensors_list.append(labels)
+    if "responses" in names:
+        responses = torch.tensor(data['responses']).to(torch.float)
+        tensors_list.append(responses)
+    dataset = CachedTensorDataset(tensors_list, names=names, image_cache=image_cache, transform=transform)
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,

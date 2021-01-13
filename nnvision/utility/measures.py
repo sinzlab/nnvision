@@ -53,7 +53,9 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     """
 
     target, output = torch.empty(0), torch.empty(0)
-    for images, responses in dataloader:
+    for batch in dataloader:
+        images = batch.inputs
+        responses = batch.responses
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
