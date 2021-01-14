@@ -153,6 +153,12 @@ def monkey_static_loader(dataset,
                                                              train_frac=train_frac,
                                                              seed=seed)
 
+    names = tuple(['inputs'])
+    if "img_classification" in target_types:
+        names += ('labels',)
+    if "neural" in target_types:
+        names += ('responses',)
+
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
 
@@ -208,12 +214,6 @@ def monkey_static_loader(dataset,
             train_data['responses'] = responses_train
             val_data['responses'] = responses_val
             test_data['responses'] = responses_test
-
-        names = tuple(['inputs'])
-        if "labels" in train_data.keys():
-            names += ('labels',)
-        if "responses" in train_data.keys():
-            names += ('responses',)
 
         transform_train = [
             transforms.Lambda(Crop(crop, subsample)),
