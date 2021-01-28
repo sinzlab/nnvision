@@ -49,21 +49,15 @@ class EncoderShifter(nn.Module):
         self.shifter = shifter
 
 
-    def forward(self, *args, data_key=None, eye_position=None, **kwargs):
+    def forward(self, *args, data_key=None, eye_position=None, shift=None, **kwargs):
 
         x = self.core(args[0])
-
-        if len(args) == 3:
-            if args[2].shape[1] == 2:
-                eye_position = args[2]
-
-        if len(args) == 4:
-            if args[3].shape[1] == 2:
-                eye_position = args[3]
-
+        if eye_position is not None and self.shifter is not None:
+            eye_position = eye_position.to(x.device).to(dtype=x.dtype)
+            shift = self.shifter[data_key](eye_position)
 
         sample = kwargs["sample"] if 'sample' in kwargs else None
-        x = self.readout(x, data_key=data_key, sample=sample)
+        x = self.readout(x, data_key=data_key, sample=sample, shift=shift)
         return F.elu(x + self.offset) + 1
 
     def regularizer(self, data_key):
