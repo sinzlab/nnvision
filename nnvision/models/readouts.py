@@ -1,16 +1,8 @@
 import torch
 
 from torch import nn
-from nnfabrik.utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
-from collections import OrderedDict, Iterable
-import numpy as np
-import warnings
+from nnfabrik.utility.nn_helpers import get_module_output
 from torch.nn import Parameter
-from torch.nn import functional as F
-from torch.nn import ModuleDict
-from neuralpredictors.constraints import positive
-from neuralpredictors.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
-from neuralpredictors import regularizers
 from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
 
 
@@ -240,6 +232,88 @@ class MultipleAttention2d(MultiReadout, torch.nn.ModuleDict):
                     attention_layers=attention_layers,
                     attention_kernel=attention_kernel,
                     bias=bias
+                ),
+            )
+        self.gamma_readout = gamma_readout
+
+
+class DenseReadout(nn.Module):
+    """
+    Fully connected readout layer.
+    """
+
+    def __init__(self, in_shape, outdims, bias, init_noise=1e-3):
+        super().__init__()
+        self.in_shape = in_shape
+        self.outdims = outdims
+        self.init_noise = init_noise
+        c, w, h = in_shape
+
+        self.linear = torch.nn.Linear(in_features=c*w*h,
+                                      out_features=outdims,
+                                      bias=False)
+        if bias:
+            bias = Parameter(torch.Tensor(outdims))
+            self.register_parameter("bias", bias)
+        else:
+            self.register_parameter("bias", None)
+
+        self.initialize()
+
+    @property
+    def features(self):
+        return next(iter(self.linear.parameters()))
+
+    def feature_l1(self, average=False):
+        if average:
+            return self.features.abs().mean()
+        else:
+            return self.features.abs().sum()
+
+    def initialize(self):
+        self.features.data.normal_(0, self.init_noise)
+
+    def forward(self, x):
+
+        b, c, w, h = x.shape
+
+        x = x.view(b, c * w * h)
+        y = self.linear(x)
+        if self.bias is not None:
+            y = y + self.bias
+        return y
+
+    def __repr__(self):
+        return self.__class__.__name__ + \
+               ' (' + '{} x {} x {}'.format(*self.in_shape) + ' -> ' + str(
+            self.outdims) + ')'
+
+
+class MultipleDense(MultiReadout, torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        bias,
+        gamma_readout,
+        init_noise,
+    ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+
+            self.add_module(
+                k,
+                DenseReadout(
+                    in_shape=in_shape,
+                    outdims=n_neurons,
+                    bias=bias,
+                    init_noise=init_noise,
                 ),
             )
         self.gamma_readout = gamma_readout
