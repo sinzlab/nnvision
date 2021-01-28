@@ -11,27 +11,10 @@ from torch.nn import functional as F
 
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d
 from .utility import unpack_data_info
+from .encoders import EncoderShifter, Encoder
+from .shifters import MLPShifter, StaticAffine2dShifter
 
 from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
-
-
-class Encoder(nn.Module):
-    """
-    helper nn class that combines the core and readout into the final model
-    """
-    def __init__(self, core, readout, elu_offset):
-        super().__init__()
-        self.core = core
-        self.readout = readout
-        self.offset = elu_offset
-
-    def forward(self, x, data_key=None, **kwargs):
-        x = self.core(x)
-        x = self.readout(x, data_key=data_key)
-        return F.elu(x + self.offset) + 1
-
-    def regularizer(self, data_key):
-        return self.readout.regularizer(data_key=data_key) + self.core.regularizer()
 
 
 def task_core_gauss_readout(dataloaders, seed,
@@ -41,8 +24,11 @@ def task_core_gauss_readout(dataloaders, seed,
                             momentum=0.1,fine_tune=False,
                             init_mu_range=0.4, init_sigma_range=0.6, # readout args,
                             readout_bias=True, gamma_readout=0.01, gauss_type='isotropic',
-                            elu_offset=-1, data_info=None # output and data_info
-                           ):
+                            elu_offset=-1, data_info=None,
+                            shifter = None, shifter_type = 'MLP', input_channels_shifter = 2,
+                            hidden_channels_shifter = 5,
+                            shift_layers = 3, gamma_shifter = 0, shifter_bias = True,
+                            ):
     """
     A Model class of a predefined core (using models from ptrnets). Can be initialized pretrained or random.
     Can also be set to be trainable or not, independent of initialization.
@@ -68,7 +54,7 @@ def task_core_gauss_readout(dataloaders, seed,
 
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -110,10 +96,27 @@ def task_core_gauss_readout(dataloaders, seed,
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
-    model = Encoder(core, readout, elu_offset)
+    if shifter is True:
+        data_keys = [i for i in dataloaders.keys()]
+        if shifter_type == 'MLP':
+            shifter = MLPShifter(data_keys=data_keys,
+                                 input_channels=input_channels_shifter,
+                                 hidden_channels_shifter=hidden_channels_shifter,
+                                 shift_layers=shift_layers,
+                                 gamma_shifter=gamma_shifter
+                                 )
+
+        elif shifter_type == 'StaticAffine':
+            shifter = StaticAffine2dShifter(data_keys=data_keys,
+                                            input_channels=input_channels_shifter,
+                                            bias=shifter_bias,
+                                            gamma_shifter=gamma_shifter)
+
+    model = EncoderShifter(core, readout,
+                           shifter=shifter, elu_offset=elu_offset)
 
     return model
 
@@ -151,7 +154,7 @@ def task_core_remapped_gauss_readout(dataloaders, seed,
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -196,7 +199,7 @@ def task_core_remapped_gauss_readout(dataloaders, seed,
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -256,7 +259,7 @@ def task_core_point_readout(dataloaders, seed,
 
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -293,7 +296,7 @@ def task_core_point_readout(dataloaders, seed,
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
