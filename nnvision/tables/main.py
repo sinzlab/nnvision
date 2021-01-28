@@ -111,7 +111,10 @@ class Recording(dj.Computed):
             if dataset == 'PlosCB19_V1':
                 n_neurons = raw_data["testing_responses"].shape[1]
             else:
-                n_neurons = raw_data["testing_responses"].shape[0]
+                responses_test = raw_data["testing_responses"]
+                if len(responses_test.shape) < 3:
+                    responses_test = responses_test[None, ...]
+                n_neurons = responses_test.shape[0]
 
             unit_ids = raw_data.get("unit_ids", np.arange(n_neurons))
             unit_type = raw_data.get("unit_type", np.ones(n_neurons))
