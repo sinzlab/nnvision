@@ -16,12 +16,14 @@ from functools import partial
 from torchvision import datasets
 from imagecorruptions import corrupt
 from imagecorruptions.corruptions import *
+from nnvision.datasets.utility import convert_to_np
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
                          image_cache_path,
                          original_image_cache_path,
                          batch_size=64,
+                         train_transformation=False,
                          normalize=True,
                          seed=None,
                          train_frac=0.8,
@@ -37,7 +39,7 @@ def monkey_static_loader(dataset,
                          image_selection_seed=None,
                          randomize_image_selection=True,
                          target_types=["neural"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
-                         add_fly_corrupted_test={}, resize=0):
+                         add_fly_corrupted_test={}, resize=0, individual_image_paths=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -102,15 +104,28 @@ def monkey_static_loader(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    if not individual_image_paths:
+        image_cache_path = image_cache_path.split('individual')[0]
+    else:
+        with open(image_cache_path, "rb") as pkl:
+            paths_dict = pickle.load(pkl)
+        image_cache_path = original_image_cache_path = paths_dict
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    if not individual_image_paths:
+        stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    else:
+        stats_path = ""
     
     # Get mean and std
-   
-    if os.path.exists(stats_path):
+    if stats:
+        img_mean = np.float32(stats['mean'])
+        img_std = np.float32(stats['std'])
+        # Initialize cache
+        cache = ImageCache(path=image_cache_path)
+        original_cache = ImageCache(path=original_image_cache_path)
+    elif os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
         if return_data_info:
@@ -130,9 +145,7 @@ def monkey_static_loader(dataset,
         img_mean = cache.img_mean
         img_std  = cache.img_std
 
-    if stats:
-        img_mean = np.float32(stats['mean'])
-        img_std = np.float32(stats['std'])
+
     
     
     n_images = len(cache)
@@ -169,8 +182,9 @@ def monkey_static_loader(dataset,
         data_key = str(raw_data["session_id"])
         responses_train = raw_data["training_responses"].astype(np.float32)
         responses_test = raw_data["testing_responses"].astype(np.float32)
-        labels_train = raw_data["training_labels"].astype(np.float32)
-        labels_test = raw_data["testing_labels"].astype(np.float32)
+        if "img_classification" in target_types:
+            labels_train = raw_data["training_labels"].astype(np.float32)
+            labels_test = raw_data["testing_labels"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
@@ -216,6 +230,9 @@ def monkey_static_loader(dataset,
             test_data['responses'] = responses_test
 
         transform_train = [
+            transforms.ToPILImage() if (resize and train_transformation) else None,
+            transforms.Resize((resize, resize)) if (resize and train_transformation) else None,
+            transforms.Lambda(convert_to_np) if (resize and train_transformation) else None,
             transforms.Lambda(Crop(crop, subsample)),
             transforms.Lambda(Rescale(scale)),
             transforms.ToPILImage() if apply_augmentation else None,
@@ -223,15 +240,20 @@ def monkey_static_loader(dataset,
             transforms.RandomHorizontalFlip() if apply_augmentation else None,
             transforms.RandomRotation(15) if apply_augmentation else None,
             transforms.ToTensor(),
+            transforms.Grayscale() if (apply_grayscale and train_transformation) else None,
             transforms.Normalize(img_mean, img_std)
             if normalize
             else None,
         ]
 
         transform_val = [
+            transforms.ToPILImage() if (resize and train_transformation) else None,
+            transforms.Resize((resize, resize)) if (resize and train_transformation) else None,
+            transforms.Lambda(convert_to_np) if (resize and train_transformation) else None,
             transforms.Lambda(Crop(crop, subsample)),
             transforms.Lambda(Rescale(scale)),
             transforms.ToTensor(),
+            transforms.Grayscale() if (apply_grayscale and train_transformation) else None,
             transforms.Normalize(img_mean, img_std)
             if normalize
             else None,
@@ -263,7 +285,9 @@ def monkey_static_loader(dataset,
             transform_val_gauss_levels = {}
             for level in [0.0, 0.05, 0.1, 0.2, 0.3, 0.5, 1.0]:
                 transform_val_gauss_levels[level] = [
-                    transforms.Lambda(Rescale(resize)) if resize else None,
+                    transforms.ToPILImage() if resize else None,
+                    transforms.Resize((resize, resize)) if resize else None,
+                    transforms.Lambda(convert_to_np) if resize else None,
                     transforms.Lambda(Crop(crop, subsample)),
                     transforms.Lambda(Rescale(scale)),
                     transforms.ToTensor(),
@@ -301,7 +325,9 @@ def monkey_static_loader(dataset,
                                 return img
 
                         transform_fly_test = [
-                            transforms.Lambda(Rescale(resize)) if resize else None,
+                            transforms.ToPILImage() if resize else None,
+                            transforms.Resize((resize, resize))if resize else None,
+                            transforms.Lambda(convert_to_np) if resize else None,
                             transforms.Lambda(Crop(crop, subsample)),
                             transforms.Lambda(Rescale(scale)),
                             Noise(fly_noise_type, level),
@@ -322,7 +348,7 @@ def monkey_static_loader(dataset,
                 dataloaders["fly_c_test"] = fly_test_loaders
 
 
-    if store_data_info and not os.path.exists(stats_path) and "neural" in target_types:
+    if (not stats) and store_data_info and (not os.path.exists(stats_path)) and ("neural" in target_types):
         if 'labels' in names:
             in_name, _, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
         else:

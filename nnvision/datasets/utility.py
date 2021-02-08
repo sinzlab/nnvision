@@ -8,7 +8,7 @@ from collections import namedtuple, Iterable
 import os
 from mlutils.data.samplers import RepeatsBatchSampler
 from torchvision import transforms
-
+from PIL import Image
 
 def get_oracle_dataloader(dat,
                           toy_data=False,
@@ -117,7 +117,10 @@ class ImageCache:
         self.leading_zeros = filename_precision
 
     def __len__(self):
-        return len([file for file in os.listdir(self.path) if file.endswith('.npy')])
+        if not isinstance(self.path, dict):
+            return len([file for file in os.listdir(self.path) if file.endswith('.npy')])
+        else:
+            return len(list(self.path.keys()))
 
     def __contains__(self, key):
         return key in self.cache
@@ -130,8 +133,12 @@ class ImageCache:
         if key in self.cache:
             return self.cache[key]
         else:
-            filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
-            image = np.load(filename)
+            if isinstance(self.path, dict):
+                img_path = self.path[key]
+                image = np.asarray(Image.open(img_path))
+            else:
+                filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
+                image = np.load(filename)
             if len(image.shape) == 2:
                 image = np.stack((image,) * 3, axis=-1)
             #image = self.transform_image(image) if self.transform else image
@@ -191,7 +198,10 @@ class ImageCache:
     @property
     def loaded_images(self):
         print('Loading images ...')
-        items = [int(file.split('.')[0]) for file in os.listdir(self.path) if file.endswith('.npy')]
+        if isinstance(self.path, dict):
+            items = [int(key) for key in self.path.keys()]
+        else:
+            items = [int(file.split('.')[0]) for file in os.listdir(self.path) if file.endswith('.npy')]
         images = torch.stack([self.update(item, to_tensor=True) for item in items])
         return images
     
@@ -211,6 +221,8 @@ class ImageCache:
             self.img_mean = np.float32(img_mean.item() / 255.)
             self.img_std  = np.float32(img_std.item() / 255.)
 
+def convert_to_np(img):
+    return np.asarray(img)
 
 class Crop(object):
     def __init__(self, crop, subsample):
