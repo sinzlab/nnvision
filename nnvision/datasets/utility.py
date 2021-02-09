@@ -135,7 +135,7 @@ class ImageCache:
         else:
             if isinstance(self.path, dict):
                 img_path = self.path[key]
-                image = np.asarray(Image.open(img_path))
+                image = np.asarray(Image.open(img_path).convert('RGB'))
             else:
                 filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
                 image = np.load(filename)
@@ -264,6 +264,8 @@ class Rescale(object):
                              f"(color, with w x h x c). got image shape {image.shape}")
         return image
 
+DataPoint = namedtuple('DataPoint', ('inputs', 'responses'))
+
 class CachedTensorDataset(utils.Dataset):
     """
     Dataset wrapping tensors.
@@ -274,7 +276,7 @@ class CachedTensorDataset(utils.Dataset):
         *tensors (Tensor): tensors that have the same size of the first dimension.
     """
 
-    def __init__(self, tensors, names=('inputs', 'targets'), image_cache=None, transform=None):
+    def __init__(self, tensors, names=('inputs', 'responses'), image_cache=None, transform=None):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
         if not len(tensors) == len(names):
@@ -282,9 +284,12 @@ class CachedTensorDataset(utils.Dataset):
                              'names have to be passed to the TensorDataset')
         self.tensors = tensors
         self.input_position = names.index("inputs")
-        self.DataPoint = namedtuple('DataPoint', names)
         self.image_cache = image_cache
         self.transform = transform
+        if names==('inputs', 'responses'):
+            self.DataPoint = DataPoint
+        else:
+            self.DataPoint = namedtuple('DataPoint', names)
 
     def __getitem__(self, index):
         """
@@ -305,7 +310,7 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(data, batch_size, names=('inputs', 'labels', 'responses'),
+def get_cached_loader(data, batch_size, names=('inputs', 'labels', 'responses'), num_workers=1, pin_memory=True,
                       shuffle=True, image_cache=None, repeat_condition=None, transform=None):
 
     """
@@ -331,8 +336,9 @@ def get_cached_loader(data, batch_size, names=('inputs', 'labels', 'responses'),
     dataset = CachedTensorDataset(tensors_list, names=names, image_cache=image_cache, transform=transform)
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
-    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
+    dataloader = utils.DataLoader(dataset, batch_sampler=sampler, pin_memory=pin_memory, num_workers=num_workers) if batch_size is None else utils.DataLoader(dataset,
                                                                                                             batch_size=batch_size,
-                                                                                                            shuffle=shuffle,
+                                                                                                            shuffle=shuffle, pin_memory=pin_memory,
+                                                                                                            num_workers=num_workers
                                                                                                             )
     return dataloader

@@ -37,7 +37,7 @@ def monkey_static_loader(dataset,
                          store_data_info=True,
                          image_frac=1.,
                          image_selection_seed=None,
-                         randomize_image_selection=True,
+                         randomize_image_selection=True, num_workers=1, pin_memory=True,
                          target_types=["neural"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
                          add_fly_corrupted_test={}, resize=0, individual_image_paths=False):
     """
@@ -266,10 +266,12 @@ def monkey_static_loader(dataset,
             list(filter(lambda x: x is not None, transform_val))
         )
 
-        train_loader = get_cached_loader(train_data, names=names, batch_size=batch_size,image_cache=cache, transform=transform_train)
-        val_loader = get_cached_loader(val_data, names=names, batch_size=batch_size, image_cache=cache, transform=transform_val)
+        train_loader = get_cached_loader(train_data, names=names, batch_size=batch_size,image_cache=cache, transform=transform_train,
+                                         num_workers=num_workers, pin_memory=pin_memory,)
+        val_loader = get_cached_loader(val_data, names=names, batch_size=batch_size, image_cache=cache, transform=transform_val,
+                                       num_workers=num_workers, pin_memory=pin_memory,)
         test_loader = get_cached_loader(test_data,
-                                        names=names,
+                                        names=names,num_workers=num_workers, pin_memory=pin_memory,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
@@ -303,7 +305,7 @@ def monkey_static_loader(dataset,
                 )
             val_gauss_loaders = {}
             for level in list(transform_val_gauss_levels.keys()):
-                val_gauss_loaders[level] = get_cached_loader(val_data, names=names, batch_size=batch_size,
+                val_gauss_loaders[level] = get_cached_loader(val_data, names=names, batch_size=batch_size, num_workers=num_workers, pin_memory=pin_memory,
                                                              image_cache=original_cache, transform=transform_val_gauss_levels[level])
 
             dataloaders["validation_gauss"] = val_gauss_loaders
@@ -342,7 +344,8 @@ def monkey_static_loader(dataset,
                             list(filter(lambda x: x is not None, transform_fly_test))
                         )
                         fly_test_loaders[fly_noise_type][level] = get_cached_loader(test_data if len(set(testing_image_ids)) > 1000 else val_data,
-                                                                                    names=names, batch_size=batch_size,
+                                                                                    names=names, batch_size=batch_size, num_workers=num_workers,
+                                                                                    pin_memory=pin_memory,
                                                                                     image_cache=original_cache, transform=transform_fly_test)
 
                 dataloaders["fly_c_test"] = fly_test_loaders
