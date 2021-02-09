@@ -90,7 +90,7 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None, subsample=1, crop=0, scale=1.0, img_mean=None, img_std=None, filename_precision=6):
+    def __init__(self, path=None, subsample=1, crop=0, scale=1.0, img_mean=None, img_std=None, filename_precision=6, load_all_in_memory=True):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
@@ -104,7 +104,7 @@ class ImageCache:
         normalize: - whether to standarized inputs by the mean and variance
         filename_precision: - amount leading zeros of the files in the specified folder
         """
-        
+        self.load_all_in_memory = load_all_in_memory
         self.cache = {}
         self.path = path
         self.subsample = subsample
@@ -146,7 +146,7 @@ class ImageCache:
             if to_tensor:
                 image = self.transform_image(image)
                 image = torch.tensor(image).to(torch.float)
-            else:
+            elif self.load_all_in_memory:
                 self.cache[key] = image
             return image
 

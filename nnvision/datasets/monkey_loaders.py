@@ -36,7 +36,7 @@ def monkey_static_loader(dataset,
                          return_data_info=False,
                          store_data_info=True,
                          image_frac=1.,
-                         image_selection_seed=None,
+                         image_selection_seed=None, load_all_in_memory=True,
                          randomize_image_selection=True, num_workers=1, pin_memory=True,
                          target_types=["neural"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
                          add_fly_corrupted_test={}, resize=0, individual_image_paths=False):
@@ -123,8 +123,8 @@ def monkey_static_loader(dataset,
         img_mean = np.float32(stats['mean'])
         img_std = np.float32(stats['std'])
         # Initialize cache
-        cache = ImageCache(path=image_cache_path)
-        original_cache = ImageCache(path=original_image_cache_path)
+        cache = ImageCache(path=image_cache_path, load_all_in_memory=load_all_in_memory)
+        original_cache = ImageCache(path=original_image_cache_path, load_all_in_memory=load_all_in_memory)
     elif os.path.exists(stats_path):
         with open(stats_path, "rb") as pkl:
             data_info = pickle.load(pkl)
@@ -134,12 +134,12 @@ def monkey_static_loader(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path)
-        original_cache = ImageCache(path=original_image_cache_path)
+        cache = ImageCache(path=image_cache_path, load_all_in_memory=load_all_in_memory)
+        original_cache = ImageCache(path=original_image_cache_path, load_all_in_memory=load_all_in_memory)
     else:
         # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale)
-        original_cache = ImageCache(path=original_image_cache_path)
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, load_all_in_memory=load_all_in_memory)
+        original_cache = ImageCache(path=original_image_cache_path, load_all_in_memory=load_all_in_memory)
         # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
         cache.zscore_images(update_stats=True)
         img_mean = cache.img_mean
