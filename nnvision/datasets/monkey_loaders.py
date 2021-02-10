@@ -9,7 +9,8 @@ import os
 from pathlib import Path
 from neuralpredictors.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images, get_crop_from_stimulus_location
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
+from ..legacy.nnfabrik.utility.nn_helpers import get_module_output
 from nnfabrik.utility.dj_helpers import make_hash
 import scipy
 
@@ -29,7 +30,11 @@ def monkey_static_loader(dataset,
                          store_data_info=True,
                          image_frac=1.,
                          image_selection_seed=None,
-                         randomize_image_selection=True):
+                         randomize_image_selection=True,
+                         img_mean=None,
+                         img_std=None,
+                         stimulus_location=None,
+                         monitor_scaling_factor=4.57):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -81,6 +86,9 @@ def monkey_static_loader(dataset,
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
+    if stimulus_location is not None:
+        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+
     if not isinstance(image_frac, Iterable):
         image_frac = [image_frac for i in neuronal_data_files]
 
@@ -103,13 +111,18 @@ def monkey_static_loader(dataset,
         # Initialize cache
         cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
     else:
-        # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False) 
-        
-        # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
-        cache.zscore_images(update_stats=True)
-        img_mean = cache.img_mean
-        img_std  = cache.img_std
+
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std  = cache.img_std
     
     
     n_images = len(cache)
