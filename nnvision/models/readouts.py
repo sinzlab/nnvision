@@ -1,7 +1,7 @@
 import torch
 
 from torch import nn
-from nnfabrik.utility.nn_helpers import get_module_output
+from ..legacy.nnfabrik.utility.nn_helpers import get_module_output
 from torch.nn import Parameter
 from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
 

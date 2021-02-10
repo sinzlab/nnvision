@@ -8,7 +8,8 @@ from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d
 from neuralpredictors.layers.activations import MultiplePiecewiseLinearExpNonlinearity
 
 from nnfabrik.builder import get_model
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
+from ..legacy.nnfabrik.utility.nn_helpers import get_module_output
 from torch import nn
 from torch.nn import functional as F
 
