@@ -13,7 +13,7 @@ from .legacy.from_mei import TrainedEnsembleModel
 
 EnsembleModelCache = FabrikCache(base_table=Ensemble, cache_size_limit=1)
 EnsembleModelCache_legacy = FabrikCache(base_table=TrainedEnsembleModel, cache_size_limit=1)
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 
@@ -49,5 +49,15 @@ class TestCorrelationEnsembleScore(ScoringBaseNeuronType):
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
+
+
+@schema
+class CorrelationToAverageEnsembleScore(ScoringBaseNeuronType):
+    trainedmodel_table = Ensemble
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_avg_correlations)
+    measure_attribute = "avg_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache

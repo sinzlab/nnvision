@@ -1,8 +1,8 @@
 import warnings
 import numpy as np
 import torch
-from mlutils.measures import corr
-from mlutils.training import eval_state, device_state
+from neuralpredictors.measures import corr
+from neuralpredictors.training import eval_state, device_state
 import types
 import contextlib
 from nnvision.utility.measure_helpers import is_ensemble_function
@@ -22,7 +22,8 @@ def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadc
     
     target = []
     unique_images = torch.empty(0)
-    for images, responses in dataloader:
+    for batch in dataloader:
+        images, responses = batch[:2]
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
@@ -34,7 +35,7 @@ def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadc
     # Forward unique images once:
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
-            output = model(unique_images.to(device), data_key=data_key).detach().cpu()
+            output = model(unique_images.to(device), data_key=data_key, **batch._asdict()).detach().cpu()
     
     output = output.numpy()   
         
@@ -53,13 +54,14 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     """
 
     target, output = torch.empty(0), torch.empty(0)
-    for images, responses in dataloader:
+    for batch in dataloader:
+        images, responses = batch[:2]
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
         with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
             with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
-                output = torch.cat((output, (model(images.to(device), data_key=data_key).detach().cpu())), dim=0)
+                output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
 
     return target.numpy(), output.numpy()

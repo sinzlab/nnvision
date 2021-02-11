@@ -1,7 +1,7 @@
 # helper functions concerning the ANN architecture
 
 import torch
-from mlutils.training import eval_state
+from neuralpredictors.training import eval_state
 import numpy as np
 import random
 
