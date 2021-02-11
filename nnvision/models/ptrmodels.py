@@ -7,7 +7,7 @@ from neuralpredictors.layers.legacy import Gaussian2d
 from neuralpredictors.layers.readouts import PointPooled2d
 from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 
-from ..legacy.nnfabrik.utility.nn_helpers import get_module_output
+from neuralpredictors.utils import get_module_output
 from torch import nn
 from torch.nn import functional as F
 
