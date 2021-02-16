@@ -1,17 +1,11 @@
 import torch
 
 from torch import nn
-from nnfabrik.utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
-from collections import OrderedDict, Iterable
-import numpy as np
-import warnings
+from neuralpredictors.utils import get_module_output
 from torch.nn import Parameter
-from torch.nn import functional as F
-from torch.nn import ModuleDict
-from neuralpredictors.constraints import positive
-from neuralpredictors.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
-from neuralpredictors import regularizers
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear
+from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
+
+
 from neuralpredictors.layers.legacy import Gaussian2d
 
 
@@ -155,3 +149,171 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
         else:
             return self[data_key].feature_l1(average=False) * self.gamma_readout
 
+
+class MultipleRemappedGaussian2d(MultiReadout, torch.nn.ModuleDict):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, remap_layers, remap_kernel, max_remap_amplitude,
+                 init_mu_range, init_sigma, bias, gamma_readout,
+                 gauss_type, grid_mean_predictor, grid_mean_predictor_type, source_grids,
+                 share_features, share_grid, shared_match_ids, ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+
+            source_grid = None
+            shared_grid = None
+            shared_transform = None
+            if grid_mean_predictor is not None:
+                if grid_mean_predictor_type == 'cortex':
+                    source_grid = source_grids[k]
+                else:
+                    raise KeyError('grid mean predictor {} does not exist'.format(grid_mean_predictor_type))
+
+            elif share_grid:
+                shared_grid = {
+                    'match_ids': shared_match_ids[k],
+                    'shared_grid': None if i == 0 else self[k0].shared_grid
+                }
+
+            if share_features:
+                shared_features = {
+                    'match_ids': shared_match_ids[k],
+                    'shared_features': None if i == 0 else self[k0].shared_features
+                }
+            else:
+                shared_features = None
+
+            self.add_module(k, RemappedGaussian2d(
+                in_shape=in_shape,
+                outdims=n_neurons,
+                remap_layers=remap_layers,
+                remap_kernel=remap_kernel,
+                max_remap_amplitude=max_remap_amplitude,
+                init_mu_range=init_mu_range,
+                init_sigma=init_sigma,
+                bias=bias,
+                gauss_type=gauss_type,
+                grid_mean_predictor=grid_mean_predictor,
+                shared_features=shared_features,
+                shared_grid=shared_grid,
+                source_grid=source_grid,
+            )
+                            )
+        self.gamma_readout = gamma_readout
+
+
+class MultipleAttention2d(MultiReadout, torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        attention_layers,
+        attention_kernel,
+        bias,
+        gamma_readout,
+    ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+
+            self.add_module(
+                k,
+                AttentionReadout(
+                    in_shape=in_shape,
+                    outdims=n_neurons,
+                    attention_layers=attention_layers,
+                    attention_kernel=attention_kernel,
+                    bias=bias
+                ),
+            )
+        self.gamma_readout = gamma_readout
+
+
+class DenseReadout(nn.Module):
+    """
+    Fully connected readout layer.
+    """
+
+    def __init__(self, in_shape, outdims, bias, init_noise=1e-3):
+        super().__init__()
+        self.in_shape = in_shape
+        self.outdims = outdims
+        self.init_noise = init_noise
+        c, w, h = in_shape
+
+        self.linear = torch.nn.Linear(in_features=c*w*h,
+                                      out_features=outdims,
+                                      bias=False)
+        if bias:
+            bias = Parameter(torch.Tensor(outdims))
+            self.register_parameter("bias", bias)
+        else:
+            self.register_parameter("bias", None)
+
+        self.initialize()
+
+    @property
+    def features(self):
+        return next(iter(self.linear.parameters()))
+
+    def feature_l1(self, average=False):
+        if average:
+            return self.features.abs().mean()
+        else:
+            return self.features.abs().sum()
+
+    def initialize(self):
+        self.features.data.normal_(0, self.init_noise)
+
+    def forward(self, x):
+
+        b, c, w, h = x.shape
+
+        x = x.view(b, c * w * h)
+        y = self.linear(x)
+        if self.bias is not None:
+            y = y + self.bias
+        return y
+
+    def __repr__(self):
+        return self.__class__.__name__ + \
+               ' (' + '{} x {} x {}'.format(*self.in_shape) + ' -> ' + str(
+            self.outdims) + ')'
+
+
+class MultipleDense(MultiReadout, torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        bias,
+        gamma_readout,
+        init_noise,
+    ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+
+            self.add_module(
+                k,
+                DenseReadout(
+                    in_shape=in_shape,
+                    outdims=n_neurons,
+                    bias=bias,
+                    init_noise=init_noise,
+                ),
+            )
+        self.gamma_readout = gamma_readout

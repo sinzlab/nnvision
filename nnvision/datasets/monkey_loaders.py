@@ -9,9 +9,10 @@ import os
 from pathlib import Path
 from neuralpredictors.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images, get_crop_from_stimulus_location
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
+from neuralpredictors.utils import get_module_output
 from nnfabrik.utility.dj_helpers import make_hash
-
+import scipy
 
 def monkey_static_loader(dataset,
                          neuronal_data_files,
@@ -29,7 +30,11 @@ def monkey_static_loader(dataset,
                          store_data_info=True,
                          image_frac=1.,
                          image_selection_seed=None,
-                         randomize_image_selection=True):
+                         randomize_image_selection=True,
+                         img_mean=None,
+                         img_std=None,
+                         stimulus_location=None,
+                         monitor_scaling_factor=4.57):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -41,7 +46,7 @@ def monkey_static_loader(dataset,
         in each dict_of_loaders, there will be  one dataloader per data-key (refers to a unique session ID)
         with the format:
             {'data-key1': torch.utils.data.DataLoader,
-             'data-key2': torch.utils.data.DataLoader, ... }
+             'data-key2': torch.utils.da.DataLoader, ... }
 
     requires the types of input files:
         - the neuronal data files. A list of pickle files, with one file per session
@@ -81,6 +86,9 @@ def monkey_static_loader(dataset,
     if isinstance(crop, int):
         crop = [(crop, crop), (crop, crop)]
 
+    if stimulus_location is not None:
+        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+
     if not isinstance(image_frac, Iterable):
         image_frac = [image_frac for i in neuronal_data_files]
 
@@ -103,13 +111,18 @@ def monkey_static_loader(dataset,
         # Initialize cache
         cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
     else:
-        # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False) 
-        
-        # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
-        cache.zscore_images(update_stats=True)
-        img_mean = cache.img_mean
-        img_std  = cache.img_std
+
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std  = cache.img_std
     
     
     n_images = len(cache)
@@ -228,7 +241,8 @@ def monkey_mua_sua_loader(dataset,
                          image_file=None,
                          return_data_info=False,
                          store_data_info=True,
-                         mua_selector=None):
+                         mua_selector=None,
+                         add_eye_movement=None):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -341,6 +355,21 @@ def monkey_mua_sua_loader(dataset,
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
+        if add_eye_movement:
+            if "avg_horizontal_eye_position_training_images" in raw_data:
+                eye_pos_h_train = raw_data["avg_horizontal_eye_position_training_images"].astype(np.float32)
+                eye_pos_v_train = raw_data["avg_vertical_eye_position_training_images"].astype(np.float32)
+                eye_pos_h_test = raw_data["avg_horizontal_eye_position_testing_images"].astype(np.float32)
+                eye_pos_v_test = raw_data["avg_vertical_eye_position_testing_images"].astype(np.float32)
+
+                eye_pos_train = np.vstack([eye_pos_h_train, eye_pos_v_train]).T
+                eye_pos_train = scipy.stats.zscore(eye_pos_train)
+                eye_pos_test = np.vstack([eye_pos_h_test, eye_pos_v_test]).T
+                eye_pos_test = scipy.stats.zscore(eye_pos_test)
+            else:
+                raise(FileNotFoundError, "Eye movement data is not found in the pickle file.")
+
+
         for mua_data_path in mua_data_files:
             with open(mua_data_path, "rb") as mua_pkl:
                 mua_data = pickle.load(mua_pkl)
@@ -363,6 +392,10 @@ def monkey_mua_sua_loader(dataset,
                 raise ValueError("Training image IDs do not match between the spike sorted data and mua data")
             if not np.array_equal(testing_image_ids, mua_testing_image_ids):
                 raise ValueError("Testing image IDs do not match between the spike sorted data and mua data")
+
+            if len(responses_train.shape) < 3:
+                responses_train = responses_train[None, ...]
+                responses_test = responses_test[None, ...]
             responses_train = np.concatenate([responses_train, mua_responses_train], axis=0)
             responses_test = np.concatenate([responses_test, mua_responses_test], axis=0)
 
@@ -380,18 +413,34 @@ def monkey_mua_sua_loader(dataset,
 
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]
+        if add_eye_movement:
+            eye_pos_val = eye_pos_train[val_idx]
+            eye_pos_train = eye_pos_train[train_idx]
 
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids,
-                                        responses_test,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=cache,
-                                        repeat_condition=testing_image_ids)
+        if add_eye_movement:
+            train_loader = get_cached_loader(training_image_ids, responses_train, eye_pos_train, batch_size=batch_size,
+                                             image_cache=cache)
+            val_loader = get_cached_loader(validation_image_ids, responses_val, eye_pos_val, batch_size=batch_size,
+                                           image_cache=cache)
+            test_loader = get_cached_loader(testing_image_ids,
+                                            responses_test,
+                                            eye_pos_test,
+                                            batch_size=None,
+                                            shuffle=None,
+                                            image_cache=cache,
+                                            repeat_condition=testing_image_ids)
+        else:
+            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
+            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+            test_loader = get_cached_loader(testing_image_ids,
+                                            responses_test,
+                                            batch_size=None,
+                                            shuffle=None,
+                                            image_cache=cache,
+                                            repeat_condition=testing_image_ids)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
@@ -399,7 +448,7 @@ def monkey_mua_sua_loader(dataset,
 
     if store_data_info and not os.path.exists(stats_path):
 
-        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}

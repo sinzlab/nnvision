@@ -25,9 +25,24 @@ schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 resolve_target_fn = partial(resolve_fn, default_base='targets')
 
 
+
 @schema
 class Method(mixins.MEIMethodMixin, dj.Lookup):
     seed_table = MEISeed
+
+
+    def generate_mei(self, dataloaders: Dataloaders, model: Module, key: Key, seed: int) -> Dict[str, Any]:
+        method_fn, method_config = (self & key).fetch1("method_fn", "method_config")
+        self.insert_key_in_ops(method_config=method_config, key=key)
+        method_fn = self.import_func(method_fn)
+        mei, score, output = method_fn(dataloaders, model, method_config, seed)
+        return dict(key, mei=mei, score=score, output=output)
+
+    def insert_key_in_ops(self, method_config, key):
+        for k, v in method_config.items():
+            if 'kwargs' in v:
+                if "key" in v["kwargs"]:
+                    v["kwargs"]["key"] = key
 
 
 @schema

@@ -261,7 +261,7 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cache=None, repeat_condition=None):
+def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, repeat_condition=None, names=('inputs', 'targets')):
     """
 
     Args:
@@ -274,9 +274,15 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
     Returns: a PyTorch DataLoader object
     """
 
-    image_ids = torch.tensor(image_ids.astype(np.int32))
-    responses = torch.tensor(responses).to(torch.float)
-    dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
+    image_ids = torch.tensor(args[0].astype(np.int32))
+    responses = torch.tensor(args[1]).to(torch.float)
+    tensors = [image_ids, responses]
+    if len(args) > 2:
+        eye_position = torch.tensor(args[2]).to(torch.float)
+        if 'eye_position' not in names:
+            names = names + ('eye_position',)
+        tensors.append(eye_position)
+    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names)
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
