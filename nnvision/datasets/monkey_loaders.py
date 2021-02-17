@@ -270,13 +270,17 @@ def monkey_static_loader(dataset,
                                          num_workers=num_workers, pin_memory=pin_memory,)
         val_loader = get_cached_loader(val_data, names=names, batch_size=batch_size, image_cache=cache, transform=transform_val,
                                        num_workers=num_workers, pin_memory=pin_memory,)
-        test_loader = get_cached_loader(test_data,
-                                        names=names,num_workers=num_workers, pin_memory=pin_memory,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=cache,
-                                        repeat_condition=testing_image_ids, transform=transform_val)
 
+        if dataset in ["CSRF19_V1", "CSRF19_V4"]:
+            test_loader = get_cached_loader(test_data,
+                                            names=names,num_workers=num_workers, pin_memory=pin_memory,
+                                            batch_size=None,
+                                            shuffle=None,
+                                            image_cache=cache,
+                                            repeat_condition=testing_image_ids, transform=transform_val)
+        else:
+            test_loader = get_cached_loader(test_data, names=names, batch_size=batch_size, image_cache=cache, transform=transform_val,
+                                       num_workers=num_workers, pin_memory=pin_memory,)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
