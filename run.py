@@ -15,10 +15,12 @@ schema = dj.schema('nnfabrik_toy_V4')
 
 # copy data from QB to $SCRATCH volume
 os.makedirs('/data/monkey/toliaslab/')
+os.makedir('/data/torch/')
+
 source = '/sinz_shared/monkey/toliaslab/monkey_data.tar.gz'
 destination = '/data/monkey/toliaslab/monkey_data.tar.gz'
-
 copyfile(source, destination)
+
 tf = tarfile.open('/data/monkey/toliaslab/monkey_data.tar.gz')
 tf.extractall('/data/monkey/toliaslab/')
 
