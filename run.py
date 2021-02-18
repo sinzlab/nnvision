@@ -31,7 +31,7 @@ print("time spent unzipping monkey data: ", end - start)
 
 # verify extraction
 print("... content of monkey data ... ")
-print(os.listdir('/data/monkey/toliaslab/CSRF19_V1/'))
+print(os.listdir('/data/monkey/toliaslab/'))
 
 
 # project specific imports
