@@ -18,22 +18,17 @@ os.makedirs('/data/monkey/toliaslab/')
 source = '/sinz_shared/monkey/toliaslab/monkey_data.tar.gz'
 destination = '/data/monkey/toliaslab/monkey_data.tar.gz'
 
-start = time.time()
 copyfile(source, destination)
-end = time.time()
-print("time spent copying: ", end - start)
-
-start = time.time()
 tf = tarfile.open('/data/monkey/toliaslab/monkey_data.tar.gz')
 tf.extractall('/data/monkey/toliaslab/')
-end = time.time()
-print("time spent unzipping monkey data: ", end - start)
-
-# verify extraction
-print("... content of monkey data ... ")
-print(os.listdir('/data/monkey/toliaslab/'))
-
 
 # project specific imports
 from nnvision.tables.from_nnfabrik import TrainedModel
-print("Entries in TrainedModel table", len(TrainedModel()))
+
+pop_key = [{'dataset_hash': '8740d18cb1951608c573ceda09d47aef',
+            'trainer_fn': 'nnvision.training.trainers.nnvision_trainer',
+            'trainer_hash': '7eba3d5e8d426d6bbcd3f248565f8cfb'},
+           [{'model_hash': 'ade1c26ff74aef5479499079a219474e'},
+            {'model_hash': 'ea5ee15d1e4431417f3f01f5d4bca191'}]]
+
+TrainedModel().populate(pop_key, display_progress=True, reserve_jobs=True)
