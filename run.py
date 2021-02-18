@@ -11,6 +11,6 @@ keys = {}
 
 import os
 
-os.listdir('/sinz_shared')
+print(os.listdir('/sinz_shared'))
 
 print("Entries in TrainedModel table", len(TrainedModel()))
