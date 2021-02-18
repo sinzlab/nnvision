@@ -8,4 +8,4 @@ schema = dj.schema('nnfabrik_schema')
 from nnvision.tables.from_nnfabrik import TrainedModel
 
 keys = {}
-print("Entries icat n TrainedModel table", len(TrainedModel))
+print("Entries icat n TrainedModel table", len(TrainedModel()))
