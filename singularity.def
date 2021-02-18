@@ -9,6 +9,7 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     python -m pip install neuralpredictors
     git clone https://github.com/sinzlab/nnfabrik.git
     git clone -b readout_position_regularizer https://github.com/KonstantinWilleke/neuralpredictors
+    git clone -b konsti_monkey_experiments https://github.com/sinzlab/mei
 
 %environment
     
