@@ -9,6 +9,8 @@ from nnvision.tables.from_nnfabrik import TrainedModel
 
 keys = {}
 
-import nnvision
-print("importing nnvision")
+import os
+
+os.listdir('/sinz_shared')
+
 print("Entries in TrainedModel table", len(TrainedModel()))
