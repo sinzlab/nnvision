@@ -70,11 +70,11 @@ singularity run \
 --nv \
 --env-file .env \
 --no-home  \
---bind $SCRATCH:/data/,$HOME/projects/:$HOME/projects/  \
+--bind $SCRATCH:/data/,/home/sinz/_shared/:/sinz_shared,$HOME/projects/:$HOME/projects/  \
 singularity_img.sif  \
 ./run.py
         """
-
+        fail_here
         return cmd_string
 
     @property
