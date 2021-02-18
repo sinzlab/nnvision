@@ -8,4 +8,7 @@ schema = dj.schema('nnfabrik_toy_V4')
 from nnvision.tables.from_nnfabrik import TrainedModel
 
 keys = {}
+
+import nnvision
+print("importing nnvision")
 print("Entries in TrainedModel table", len(TrainedModel()))

@@ -11,6 +11,7 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     python -m pip install -e ./nnfabrik
     python -m pip install -e ./mei
     python -m pip install -e ./neuralpredictors
+    python -m pip install -e .
 %environment
     
 %startscript
