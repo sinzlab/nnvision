@@ -25,7 +25,7 @@ print("time spent copying: ", end - start)
 
 start = time.time()
 tf = tarfile.open('/data/monkey/toliaslab/monkey_data.tar.gz')
-tf.extractall()
+tf.extractall('/data/monkey/toliaslab/')
 end = time.time()
 print("time spent unzipping monkey data: ", end - start)
 
