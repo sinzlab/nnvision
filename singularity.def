@@ -8,7 +8,6 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     python -m pip install nnfabrik
     python -m pip install neuralpredictors
     git clone https://github.com/sinzlab/nnfabrik.git
-    git config credential.helper store
     git clone -b readout_position_regularizer https://github.com/KonstantinWilleke/neuralpredictors
 
 %environment
