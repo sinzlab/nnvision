@@ -74,7 +74,6 @@ singularity run \
 singularity_img.sif  \
 ./run.py
         """
-        fail_here
         return cmd_string
 
     @property
