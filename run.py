@@ -26,11 +26,9 @@ tf.extractall('/data/monkey/toliaslab/')
 
 # project specific imports
 from nnvision.tables.from_nnfabrik import TrainedModel
+from nnvision.tables.from_mei import MEI, Method
 
-pop_key = dj.AndList([{'dataset_hash': '8740d18cb1951608c573ceda09d47aef',
-            'trainer_fn': 'nnvision.training.trainers.nnvision_trainer',
-            'trainer_hash': '7eba3d5e8d426d6bbcd3f248565f8cfb'},
-           [{'model_hash': 'ade1c26ff74aef5479499079a219474e'},
-            {'model_hash': 'ea5ee15d1e4431417f3f01f5d4bca191'}]])
-
-TrainedModel().populate(pop_key, display_progress=True, reserve_jobs=True)
+unit_key = dict(unit_type=1, mei_seed=10, ensemble_hash='ce92f09b67d6e154676af577bb9488d5')
+method_hashes = (Method & "method_ts > '2021-02-15'" & "method_ts < '2021-02-17'").fetch("method_hash", as_dict=True)
+mei_keys = dj.AndList([unit_key,method_hashes])
+MEI.populate(mei_keys, display_progress=True, reserve_jobs=True, order="random")
