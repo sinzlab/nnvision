@@ -23,3 +23,5 @@ secrets/
 .env*
 *.env
 .env/
+*.sif
+logs/
