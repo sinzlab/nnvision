@@ -8,7 +8,7 @@ from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainabl
 from .utility import DataCache
 from .from_nnfabrik import MeasuresBaseNeuronType
 from .main import Recording
-from nnfabrik.templates import SummaryMeasuresBase
+from .templates import SummaryMeasuresBase
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.builder import resolve_model
 
