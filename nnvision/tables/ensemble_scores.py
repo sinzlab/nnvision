@@ -2,7 +2,6 @@ import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from nnfabrik.utility.nnf_helper import FabrikCache
 from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import ScoringBase, SummaryScoringBase
 from .main import Recording
 from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
 from .from_nnfabrik import TrainedModel, TrainedTransferModel
@@ -13,7 +12,7 @@ from .legacy.from_mei import TrainedEnsembleModel
 
 EnsembleModelCache = FabrikCache(base_table=Ensemble, cache_size_limit=1)
 EnsembleModelCache_legacy = FabrikCache(base_table=TrainedEnsembleModel, cache_size_limit=1)
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 
@@ -49,5 +48,15 @@ class TestCorrelationEnsembleScore(ScoringBaseNeuronType):
     measure_function = staticmethod(get_correlations)
     measure_dataset = "test"
     measure_attribute = "test_correlation"
+    data_cache = DataCache
+    model_cache = EnsembleModelCache
+
+
+@schema
+class CorrelationToAverageEnsembleScore(ScoringBaseNeuronType):
+    trainedmodel_table = Ensemble
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_avg_correlations)
+    measure_attribute = "avg_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache

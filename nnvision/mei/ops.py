@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from scipy import signal
 
 from mei.legacy.utils import varargin
+from ..utility.measure_helpers import get_cosine_mask
 
 
 class BlurAndCut:
@@ -77,3 +78,102 @@ class ChangeNormAndClip:
         x_norm = torch.norm(x.view(len(x), -1), dim=-1)
         renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1))
         return torch.clamp(renorm, self.x_min, self.x_max)
+
+
+class ChangeNormClipSetBackground:
+    """ Change the norm of the input.
+
+    Arguments:
+        norm (float or tensor): Desired norm. If tensor, it should be the same length as
+            x.
+    """
+
+    def __init__(self, norm, x_min, x_max, background):
+        self.norm = norm
+        self.x_min = x_min
+        self.x_max = x_max
+        self.background = background
+
+    @varargin
+    def __call__(self, x, iteration=None):
+        x_norm = torch.norm((x + self.background).view(len(x), -1), dim=-1)
+        renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1)) + self.background
+        return torch.clamp(renorm, self.x_min, self.x_max)
+
+
+class MaskChangeNormClip:
+    """ Change the norm of the input.
+
+    Arguments:
+        norm (float or tensor): Desired norm. If tensor, it should be the same length as
+            x.
+    """
+
+    def __init__(self, norm, x_min, x_max, mask_width, mask_height, ppd, fade_start_degrees):
+
+        self.mask = get_cosine_mask(mask_width, mask_height, ppd, fade_start_degrees)
+        self.norm = norm
+        self.x_min = x_min
+        self.x_max = x_max
+
+
+
+    @varargin
+    def __call__(self, x, iteration=None):
+
+        mask = torch.as_tensor(self.mask, device=x.device, dtype=x.dtype)
+        x = x * mask
+        x_norm = torch.norm(x.view(len(x), -1), dim=-1)
+        renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1))
+        return torch.clamp(renorm, self.x_min, self.x_max)
+
+
+class BatchedCropsPadded:
+    """ Create a batch of crops of the original image.
+
+    Arguments:
+        height (int): Height of the crop
+        width (int): Width of the crop
+        step_size (int or tuple): Number of pixels in y, x to step for each crop.
+        sigma (float or tuple): Sigma in y, x for the gaussian mask applied to each batch.
+            None to avoid masking
+
+    Note:
+        Increasing the stride of every convolution to stride * step_size produces the same
+        effect in a much more memory efficient way but it will be architecture dependent
+        and may not play nice with the rest of transforms.
+    """
+
+    def __init__(self, height, width, step_size, sigma=None, padding=0):
+        self.height = height
+        self.width = width
+        self.padding = padding
+        self.step_size = step_size if isinstance(step_size, tuple) else (step_size,) * 2
+        self.sigma = sigma if sigma is None or isinstance(sigma, tuple) else (sigma,) * 2
+
+        # If needed, create gaussian mask
+        if sigma is not None:
+            y_gaussian = signal.gaussian(height, std=self.sigma[0])
+            x_gaussian = signal.gaussian(width, std=self.sigma[1])
+            self.mask = y_gaussian[:, None] * x_gaussian
+
+    @varargin
+    def __call__(self, x, iteration=None):
+        if len(x) > 1:
+            raise ValueError("x can only have one example.")
+        if x.shape[-2] < self.height or x.shape[-1] < self.width:
+            raise ValueError("x should be larger than the expected crop")
+
+        # Take crops
+        crops = []
+        for i in range(0 + self.padding, x.shape[-2] - self.height + 1 - self.padding, self.step_size[0]):
+            for j in range(0 + self.padding, x.shape[-1] - self.width + 1 - self.padding, self.step_size[1]):
+                crops.append(x[..., i : i + self.height, j : j + self.width])
+        crops = torch.cat(crops, dim=0)
+
+        # Multiply by a gaussian mask if needed
+        if self.sigma is not None:
+            mask = torch.as_tensor(self.mask, device=crops.device, dtype=crops.dtype)
+            crops = crops * mask
+
+        return crops
