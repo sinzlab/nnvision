@@ -15,7 +15,7 @@ from torch.nn import functional as F
 
 from .encoders import Encoder, EncoderPNL
 from .cores import SE2dCore, TransferLearningCore
-from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d, MultipleGaussian2d, MultipleAttention2d, MultipleDense
+from .readouts import MultiplePointPooled2d, MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d, MultipleGaussian2d, MultipleAttention2d, MultipleDense
 from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 try:

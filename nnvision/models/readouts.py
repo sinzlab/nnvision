@@ -9,23 +9,7 @@ from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, Spat
 from neuralpredictors.layers.legacy import Gaussian2d
 
 
-class MultiplePointPooled2d(torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
-        # super init to get the _module attribute
-        super().__init__()
-        for k in n_neurons_dict:
-            in_shape = get_module_output(core, in_shape_dict[k])[1:]
-            n_neurons = n_neurons_dict[k]
-            self.add_module(k, PointPooled2d(
-                in_shape,
-                n_neurons,
-                pool_steps=pool_steps,
-                pool_kern=pool_kern,
-                bias=bias,
-                init_range=init_range)
-                            )
-        self.gamma_readout = gamma_readout
-
+class MultiReadout:
     def forward(self, *args, data_key=None, **kwargs):
         if data_key is None and len(self) == 1:
             data_key = list(self.keys())[0]
@@ -33,6 +17,23 @@ class MultiplePointPooled2d(torch.nn.ModuleDict):
 
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
+
+
+class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
+        # super init to get the _module attribute
+        super().__init__()
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(
+                k,
+                PointPooled2d(
+                    in_shape, n_neurons, pool_steps=pool_steps, pool_kern=pool_kern, bias=bias, init_range=init_range
+                ),
+            )
+        self.gamma_readout = gamma_readout
+
 
 
 class MultipleGaussian2d(torch.nn.ModuleDict):
@@ -50,17 +51,6 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
                 bias=bias)
                             )
         self.gamma_readout = gamma_readout
-
-    def forward(self, *args, data_key=None, **kwargs):
-        if data_key is None and len(self) == 1:
-            data_key = list(self.keys())[0]
-        return self[data_key](*args, **kwargs)
-
-    def regularizer(self, data_key):
-        return self[data_key].feature_l1(average=False) * self.gamma_readout
-
-
-class MultiReadout:
 
     def forward(self, *args, data_key=None, **kwargs):
         if data_key is None and len(self) == 1:
