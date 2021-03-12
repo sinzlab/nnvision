@@ -816,3 +816,257 @@ def monkey_static_loader_closed_loop(dataset,
             pickle.dump(data_info, pkl)
 
     return dataloaders if not return_data_info else data_info
+
+
+
+
+def monkey_static_loader_mua_cl(dataset,
+                                     neuronal_data_files,
+                                     image_cache_path,
+                                     batch_size=64,
+                                     seed=None,
+                                     train_frac=0.8,
+                                     subsample=1,
+                                     crop=((96, 96), (96, 96)),
+                                     scale=1.,
+                                     time_bins_sum=tuple(range(12)),
+                                     avg=False,
+                                     image_file=None,
+                                     return_data_info=False,
+                                     store_data_info=True,
+                                     image_frac=1.,
+                                     image_selection_seed=None,
+                                     randomize_image_selection=True,
+                                     stimulus_location=None,
+                                     img_mean=None,
+                                     img_std=None,
+                                ):
+    """
+    Function that returns cached dataloaders for monkey ephys experiments.
+
+     creates a nested dictionary of dataloaders in the format
+            {'train' : dict_of_loaders,
+             'validation'   : dict_of_loaders,
+            'test'  : dict_of_loaders, }
+
+        in each dict_of_loaders, there will be  one dataloader per data-key (refers to a unique session ID)
+        with the format:
+            {'data-key1': torch.utils.data.DataLoader,
+             'data-key2': torch.utils.data.DataLoader, ... }
+
+    requires the types of input files:
+        - the neuronal data files. A list of pickle files, with one file per session
+        - the image file. The pickle file that contains all images.
+        - individual image files, stored as numpy array, in a subfolder
+
+    Args:
+        dataset: a string, identifying the Dataset:
+            'PlosCB19_V1', 'CSRF19_V1', 'CSRF19_V4'
+            This string will be parsed by a datajoint table
+
+        neuronal_data_files: a list paths that point to neuronal data pickle files
+        image_file: a path that points to the image file
+        image_cache_path: The path to the cached images
+        batch_size: int - batch size of the dataloaders
+        seed: int - random seed, to calculate the random split
+        train_frac: ratio of train/validation images
+        subsample: int - downsampling factor
+        crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
+            if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
+        scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
+        time_bins_sum: sums the responses over x time bins.
+        avg: Boolean - Sums oder Averages the responses across bins.
+
+    Returns: nested dictionary of dataloaders
+    """
+
+    dataset_config = locals()
+
+    # Set Dataset Specific Parameters
+    train_test_split = 1
+    image_id_offset = 0
+
+
+    # initialize dataloaders as empty dict
+    dataloaders = {'test': {},
+                   'natural_imgs': {},
+                   'noise_mei_resnet': {},
+                   'noise_mei_cnn': {},
+                   'natural_mei_resnet': {},
+                   'natural_mei_cnn': {},}
+
+
+    if not isinstance(time_bins_sum, Iterable):
+        time_bins_sum = tuple(range(time_bins_sum))
+
+    if isinstance(crop, int):
+        crop = [(crop, crop), (crop, crop)]
+
+    if not isinstance(image_frac, Iterable):
+        image_frac = [image_frac for i in neuronal_data_files]
+
+    if not isinstance(stimulus_location, Iterable):
+        stimulus_location = [stimulus_location for i in neuronal_data_files]
+
+    # clean up image path because of legacy folder structure
+    image_cache_path = image_cache_path.split('individual')[0]
+
+    # Load image statistics if present
+    stats_filename = make_hash(dataset_config)
+
+    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+
+    # Get mean and std
+    if os.path.exists(stats_path):
+        with open(stats_path, "rb") as pkl:
+            data_info = pickle.load(pkl)
+        if return_data_info:
+            return data_info
+        img_mean = list(data_info.values())[0]["img_mean"]
+        img_std = list(data_info.values())[0]["img_std"]
+
+        # Initialize cache
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                           img_std=img_std, transform=True, normalize=True)
+    else:
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
+
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
+                               normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std = cache.img_std
+
+    n_images = len(cache)
+    data_info = {}
+    if stimulus_location is not None:
+        TestImageCaches = {}
+
+    # cycling through all datafiles to fill the dataloaders with an entry per session
+    for i, datapath in enumerate(neuronal_data_files):
+
+        with open(datapath, "rb") as pkl:
+            raw_data = pickle.load(pkl)
+
+        subject_ids = raw_data["subject_id"]
+        data_key = str(raw_data["session_id"])
+
+        test_image_responses = raw_data["test_image_responses"].astype(np.float32)
+        natural_image_responses = raw_data["natural_image_responses"].astype(np.float32)
+        noise_mei_resnet_responses = raw_data["noise_mei_resnet_responses"].astype(np.float32)
+        noise_mei_cnn_responses = raw_data["noise_mei_cnn_responses"].astype(np.float32)
+        natural_mei_resnet_responses = raw_data["natural_mei_resnet_responses"].astype(np.float32)
+        natural_mei_cnn_responses = raw_data["natural_mei_cnn_responses"].astype(np.float32)
+
+        test_image_ids = raw_data["test_image_ids"].astype(np.int64)
+
+        natural_image_ids = raw_data["natural_image_ids"].astype(np.int64)
+        noise_mei_resnet_ids = raw_data["noise_mei_resnet_ids"].astype(np.int64)
+        noise_mei_cnn_ids = raw_data["noise_mei_cnn_ids"].astype(np.int64)
+        natural_mei_resnet_ids = raw_data["natural_mei_resnet_ids"].astype(np.int64)
+        natural_mei_cnn_ids = raw_data["natural_mei_cnn_ids"].astype(np.int64)
+
+        test_image_responses = test_image_responses.transpose((2, 0, 1))
+        natural_image_responses = natural_image_responses.transpose((2, 0, 1))
+        noise_mei_resnet_responses = noise_mei_resnet_responses.transpose((2, 0, 1))
+        noise_mei_cnn_responses = noise_mei_cnn_responses.transpose((2, 0, 1))
+        natural_mei_resnet_responses = natural_mei_resnet_responses.transpose((2, 0, 1))
+        natural_mei_cnn_responses = natural_mei_cnn_responses.transpose((2, 0, 1))
+
+        if time_bins_sum is not None:  # then average over given time bins
+            test_image_responses = (np.mean if avg else np.sum)(test_image_responses[:, :, time_bins_sum], axis=-1)
+            natural_image_responses = (np.mean if avg else np.sum)(natural_image_responses[:, :, time_bins_sum], axis=-1)
+            noise_mei_resnet_responses = (np.mean if avg else np.sum)(noise_mei_resnet_responses[:, :, time_bins_sum], axis=-1)
+            noise_mei_cnn_responses = (np.mean if avg else np.sum)(noise_mei_cnn_responses[:, :, time_bins_sum], axis=-1)
+            natural_mei_resnet_responses = (np.mean if avg else np.sum)(natural_mei_resnet_responses[:, :, time_bins_sum], axis=-1)
+            natural_mei_cnn_responses = (np.mean if avg else np.sum)(natural_mei_cnn_responses[:, :, time_bins_sum], axis=-1)
+
+
+        #training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
+        #test_crop = crop - np.clip(training_crop, -999, 0)
+
+        #TestImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=test_crop, scale=scale,
+        #                                       img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+
+        TestImageCaches[data_key] = cache
+
+        test_loader = get_cached_loader(test_image_ids,
+                                        test_image_responses,
+                                        batch_size=None,
+                                        shuffle=None,
+                                        image_cache=TestImageCaches[data_key],
+                                        repeat_condition=test_image_ids)
+
+        natural_img_loader = get_cached_loader(natural_image_ids,
+                                        natural_image_responses,
+                                        batch_size=None,
+                                        shuffle=None,
+                                        image_cache=TestImageCaches[data_key],
+                                        repeat_condition=natural_image_ids)
+
+        noise_mei_resnet_loader = get_cached_loader(noise_mei_resnet_ids,
+                                                 noise_mei_resnet_responses,
+                                                 batch_size=None,
+                                                 shuffle=None,
+                                                 image_cache=TestImageCaches[data_key],
+                                                 repeat_condition=noise_mei_resnet_ids)
+
+        noise_mei_cnn_loader = get_cached_loader(noise_mei_cnn_ids,
+                                                     noise_mei_cnn_responses,
+                                                     batch_size=None,
+                                                     shuffle=None,
+                                                     image_cache=TestImageCaches[data_key],
+                                                     repeat_condition=noise_mei_cnn_ids)
+
+        natural_mei_resnet_loader = get_cached_loader(natural_mei_resnet_ids,
+                                               natural_mei_resnet_responses,
+                                               batch_size=None,
+                                               shuffle=None,
+                                               image_cache=TestImageCaches[data_key],
+                                               repeat_condition=natural_mei_resnet_ids)
+
+        natural_mei_cnn_loader = get_cached_loader(natural_mei_cnn_ids,
+                                                   natural_mei_cnn_responses,
+                                                   batch_size=None,
+                                                   shuffle=None,
+                                                   image_cache=TestImageCaches[data_key],
+                                                   repeat_condition=natural_mei_cnn_ids)
+
+        dataloaders["test"][data_key] = test_loader
+        dataloaders["natural_imgs"][data_key] = natural_img_loader
+        dataloaders["noise_mei_resnet"][data_key] = noise_mei_resnet_loader
+        dataloaders["noise_mei_cnn"][data_key] = noise_mei_cnn_loader
+        dataloaders["natural_mei_resnet"][data_key] = natural_mei_resnet_loader
+        dataloaders["natural_mei_cnn"][data_key] = natural_mei_cnn_loader
+
+
+    if store_data_info and not os.path.exists(stats_path):
+
+        in_name, out_name = next(iter(list(dataloaders["test"].values())[0]))._fields
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders["test"])
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
+
+        for data_key in session_shape_dict:
+            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
+                                       input_channels=input_channels[data_key],
+                                       output_dimension=n_neurons_dict[data_key],
+                                       img_mean=img_mean,
+                                       img_std=img_std)
+
+        stats_path_base = str(Path(stats_path).parent)
+        if not os.path.exists(stats_path_base):
+            os.mkdir(stats_path_base)
+        with open(stats_path, "wb") as pkl:
+            pickle.dump(data_info, pkl)
+
+    return dataloaders if not return_data_info else data_info

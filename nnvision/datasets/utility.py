@@ -250,7 +250,7 @@ class CachedTensorDataset(utils.Dataset):
         if type(index) == int:
             key = self.tensors[0][index].item()
         else:
-            key = self.tensors[0][index].numpy().astype(np.int32)
+            key = self.tensors[0][index].numpy().astype(np.int64)
 
         tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
                             for pos, tensor in enumerate(self.tensors)]
@@ -274,7 +274,7 @@ def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, re
     Returns: a PyTorch DataLoader object
     """
 
-    image_ids = torch.tensor(args[0].astype(np.int32))
+    image_ids = torch.from_numpy(args[0].astype(np.int64))
     responses = torch.tensor(args[1]).to(torch.float)
     tensors = [image_ids, responses]
     if len(args) > 2:
