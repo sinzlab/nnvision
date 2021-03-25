@@ -38,7 +38,7 @@ def monkey_static_loader(dataset,
                          image_frac=1.,
                          image_selection_seed=None, load_all_in_memory=True,
                          randomize_image_selection=True, num_workers=1, pin_memory=True,
-                         target_types=["neural"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
+                         target_types=["v1"], stats={}, apply_augmentation=None, input_size=64, apply_grayscale=True,
                          add_fly_corrupted_test={}, resize=0, individual_image_paths=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
@@ -169,7 +169,7 @@ def monkey_static_loader(dataset,
     names = tuple(['inputs'])
     if "img_classification" in target_types:
         names += ('labels',)
-    if "neural" in target_types:
+    if "v1" in target_types or "v4" in target_types:
         names += ('responses',)
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
@@ -222,7 +222,7 @@ def monkey_static_loader(dataset,
             train_data['labels'] = labels_train
             val_data['labels'] = labels_val
             test_data['labels'] = labels_test
-        if "neural" in target_types:
+        if "v1" in target_types or "v4" in target_types:
             responses_val = responses_train[val_idx]
             responses_train = responses_train[train_idx]
             train_data['responses'] = responses_train
@@ -355,7 +355,7 @@ def monkey_static_loader(dataset,
                 dataloaders["fly_c_test"] = fly_test_loaders
 
 
-    if (not stats) and store_data_info and (not os.path.exists(stats_path)) and ("neural" in target_types):
+    if (not stats) and store_data_info and (not os.path.exists(stats_path)) and ("v1" in target_types or "v4" in target_types):
         if 'labels' in names:
             in_name, _, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
         else:
