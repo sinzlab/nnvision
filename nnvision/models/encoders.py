@@ -57,7 +57,7 @@ class EncoderShifter(nn.Module):
             shift = self.shifter[data_key](eye_position)
 
         sample = kwargs["sample"] if 'sample' in kwargs else None
-        x = self.readout(x, data_key=data_key, sample=sample, shift=shift)
+        x = self.readout(x, data_key=data_key, sample=sample, shift=shift, **kwargs)
         return F.elu(x + self.offset) + 1
 
     def regularizer(self, data_key):
