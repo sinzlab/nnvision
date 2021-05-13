@@ -20,6 +20,10 @@ class MultiReadout:
 
 
 class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
+    base_r = PointPooled2d
+
+
+class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, pool_steps, pool_kern, bias, init_range, gamma_readout):
         # super init to get the _module attribute
         super().__init__()
@@ -135,7 +139,7 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
     def regularizer(self, data_key):
         if hasattr(FullGaussian2d, 'mu_dispersion'):
             return self[data_key].feature_l1(average=False) * self.gamma_readout \
-                   + self[data_key].mu_dispersion() * self.gamma_grid_dispersion
+                   + self[data_key].mu_dispersion * self.gamma_grid_dispersion
         else:
             return self[data_key].feature_l1(average=False) * self.gamma_readout
 
