@@ -34,7 +34,9 @@ def monkey_static_loader(dataset,
                          img_mean=None,
                          img_std=None,
                          stimulus_location=None,
-                         monitor_scaling_factor=4.57):
+                         monitor_scaling_factor=4.57,
+                         train_shuffle=True,
+                         validation_shuffle=False):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -71,6 +73,8 @@ def monkey_static_loader(dataset,
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
+        train_shuffle (bool): Use shuffling for train loader. Defaults to True
+        validation_shuffle (bool): Use shuffling for validation loader. Defaults to False.
 
     Returns: nested dictionary of dataloaders
     """
@@ -187,8 +191,8 @@ def monkey_static_loader(dataset,
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache, shuffle=True)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache, shuffle=False)
+        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache, shuffle=train_shuffle)
+        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache, shuffle=validation_shuffle)
         test_loader = get_cached_loader(testing_image_ids,
                                         responses_test,
                                         batch_size=None,
