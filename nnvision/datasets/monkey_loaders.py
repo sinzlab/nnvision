@@ -36,7 +36,7 @@ def monkey_static_loader(dataset,
                          stimulus_location=None,
                          monitor_scaling_factor=4.57,
                          train_shuffle=True,
-                         validation_shuffle=False):
+                         validation_shuffle=True):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
