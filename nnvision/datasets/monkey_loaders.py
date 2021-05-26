@@ -187,12 +187,12 @@ def monkey_static_loader(dataset,
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
+        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache, shuffle=True)
+        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache, shuffle=False)
         test_loader = get_cached_loader(testing_image_ids,
                                         responses_test,
                                         batch_size=None,
-                                        shuffle=None,
+                                        shuffle=False,
                                         image_cache=cache,
                                         repeat_condition=testing_image_ids)
 
