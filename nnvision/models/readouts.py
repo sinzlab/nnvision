@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from neuralpredictors.utils import get_module_output
 from torch.nn import Parameter
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
+from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout, SelfAttention2d
 
 
 from neuralpredictors.layers.legacy import Gaussian2d
@@ -39,7 +39,6 @@ class MultiplePointPooled2d(MultiReadout, torch.nn.ModuleDict):
         self.gamma_readout = gamma_readout
 
 
-
 class MultipleGaussian2d(torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma_range, bias, gamma_readout):
         # super init to get the _module attribute
@@ -63,6 +62,31 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
 
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_readout
+
+
+class MultipleSelfAttention2d(torch.nn.ModuleDict):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, bias, gamma_features=0, gamma_query=0):
+        # super init to get the _module attribute
+        super().__init__()
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(k, SelfAttention2d(
+                in_shape=in_shape,
+                outdims=n_neurons,
+                bias=bias)
+                            )
+        self.gamma_features = gamma_features
+        self.gamma_query = gamma_query
+
+    def forward(self, *args, data_key=None, **kwargs):
+        if data_key is None and len(self) == 1:
+            data_key = list(self.keys())[0]
+        return self[data_key](*args, **kwargs)
+
+    def regularizer(self, data_key):
+        return self[data_key].feature_l1(average=False) * self.gamma_features + self[data_key].query_l1(average=False) * self.gamma_query
+
 
 
 class MultipleSpatialXFeatureLinear(MultiReadout, torch.nn.ModuleDict):
