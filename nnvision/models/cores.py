@@ -2,9 +2,11 @@ from collections import OrderedDict, Iterable
 import torch
 from torch import nn as nn
 
-from mlutils.layers.attention import AttentionConv
-from mlutils.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
-from mlutils import regularizers
+from neuralpredictors.layers.attention import AttentionConv
+from neuralpredictors.layers.cores.base import Core2d
+from neuralpredictors.layers.conv import DepthSeparableConv2d
+from neuralpredictors.layers.cores.conv2d import Stacked2dCore
+from neuralpredictors import regularizers
 from .architectures import SQ_EX_Block
 
 from torch.nn import functional as F

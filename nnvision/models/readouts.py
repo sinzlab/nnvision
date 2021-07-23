@@ -1,18 +1,16 @@
 import torch
 
 from torch import nn
-from nnfabrik.utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import get_io_dims, set_random_seed, get_dims_for_loader_dict
+from neuralpredictors.utils import get_module_output
 from collections import OrderedDict, Iterable
 import numpy as np
 import warnings
 from torch.nn import Parameter
 from torch.nn import functional as F
 from torch.nn import ModuleDict
-from mlutils.constraints import positive
-from mlutils.layers.cores import DepthSeparableConv2d, Core2d, Stacked2dCore
-from mlutils import regularizers
-from mlutils.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear
-from mlutils.layers.legacy import Gaussian2d
+from neuralpredictors.layers.readouts.old_readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear
+from neuralpredictors.layers.readouts.gaussian import Gaussian2d
 
 
 class MultiplePointPooled2d(torch.nn.ModuleDict):

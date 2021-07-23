@@ -2,17 +2,17 @@ import numpy as np
 import torch
 import copy
 
-from mlutils.layers.cores import Stacked2dCore
 from mlutils.layers.legacy import Gaussian2d
-from mlutils.layers.readouts import PointPooled2d
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from neuralpredictors.layers.readouts.old_readouts import PointPooled2d
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
+from neuralpredictors.utils import get_module_output
 from torch import nn
 from torch.nn import functional as F
 
 from .readouts import MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear
 from .utility import unpack_data_info
 
-from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
+#from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
 
 
 class Encoder(nn.Module):

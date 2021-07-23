@@ -8,7 +8,8 @@ from nnvision.tables.legacy.from_mei import TrainedEnsembleModel
 from nnvision.tables.utility import DataCache, TrainedModelCache
 from nnvision.tables.ensemble_scores import EnsembleModelCache_legacy, EnsembleModelCache
 from nnfabrik.utility.dj_helpers import CustomSchema
-from nnfabrik.template import ScoringBase, SummaryScoringBase
+from nnfabrik.templates import ScoringBase
+from nnfabrik.templates.scoring import SummaryScoringBase
 
 schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
 

@@ -6,7 +6,8 @@ from nnvision.utility.dj_helpers import get_default_args
 from nnvision.utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, \
     get_avg_correlations, get_oracles_corrected, get_model_rf_size
 from nnvision.tables.utility import DataCache
-from nnfabrik.template import ScoringBase, MeasuresBase, SummaryMeasuresBase
+from nnfabrik.templates import ScoringBase
+from nnfabrik.templates.scoring import MeasuresBase, SummaryMeasuresBase
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.builder import resolve_model
 

@@ -6,9 +6,11 @@ import torch
 from scipy import stats
 from tqdm import tqdm
 
-from mlutils import measures
-from mlutils.measures import *
-from mlutils.training import early_stopping, MultipleObjectiveTracker, eval_state, cycle_datasets, Exhauster, LongCycler
+from neuralpredictors import measures
+from neuralpredictors.measures.modules import *
+from neuralpredictors.training import early_stopping, MultipleObjectiveTracker, eval_state
+from neuralpredictors.measures.np_functions import corr
+from neuralpredictors.training.cyclers import cycle_datasets, Exhauster, LongCycler
 from ..utility.nn_helpers import set_random_seed
 
 from ..utility import metrics

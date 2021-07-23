@@ -1,19 +1,14 @@
 import torch
-import torch.utils.data as utils
-import numpy as np
 import pickle
 #from retina.retina import warp_image
 from collections import namedtuple, Iterable
-import os
-from mlutils.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
 from nnvision.datasets.utility import Rescale, Crop
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
 from torchvision import transforms
-from bias_transfer.trainer.main_loop_modules import NoiseAugmentation
+from nntransfer.trainer.main_loop_modules import NoiseAugmentation
 from functools import partial
-from torchvision import datasets
 from imagecorruptions import corrupt
 from imagecorruptions.corruptions import *
 from nnvision.datasets.utility import convert_to_np

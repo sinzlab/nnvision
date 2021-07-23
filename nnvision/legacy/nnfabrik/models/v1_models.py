@@ -2,9 +2,9 @@ import numpy as np
 from torch import nn as nn
 from torch.nn import functional as F
 
-from mlutils.layers.readouts import PointPooled2d
-from mlutils.layers.cores import Stacked2dCore
-from mlutils.training import eval_state
+from neuralpredictors.layers.readouts.old_readouts import PointPooled2d
+from neuralpredictors.layers.cores import Stacked2dCore
+from neuralpredictors.training import eval_state
 
 from .pretrained_models import TransferLearningCore
 from ..utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict

@@ -2,13 +2,12 @@ import numpy as np
 import torch
 import copy
 
-from mlutils.layers.cores import Stacked2dCore
-from mlutils.layers.legacy import Gaussian2d
-from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
-from mlutils.layers.activations import MultiplePiecewiseLinearExpNonlinearity
+from neuralpredictors.layers.cores import Stacked2dCore
+from neuralpredictors.layers.readouts.old_readouts import FullGaussian2d
+from neuralpredictors.layers.activations import MultiplePiecewiseLinearExpNonlinearity
 
 from nnfabrik.builder import get_model
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 from torch import nn
 from torch.nn import functional as F
 

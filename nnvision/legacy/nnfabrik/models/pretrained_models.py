@@ -1,5 +1,4 @@
-from mlutils.layers.readouts import PointPooled2d
-from mlutils.layers.cores import Core2d, Core
+from neuralpredictors.layers.cores.base import Core2d, Core
 from ..utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
 
 from itertools import count

@@ -1,8 +1,5 @@
 import torch
 import copy
-import mlutils
-from mlutils.layers.readouts import PointPooled2d, FullGaussian2d
-from mlutils.layers.legacy import Gaussian2d
 
 
 def unpack_data_info(data_info):

@@ -9,7 +9,7 @@ except:
     from nnfabrik.templates.scoring import MeasuresBase
 
 from nnfabrik.utility.dj_helpers import gitlog, make_hash
-from nnfabrik.template import DataInfoBase
+from nnfabrik.templates import DataInfoBase
 from nnfabrik.builder import resolve_data
 from nnfabrik.utility.dj_helpers import CustomSchema
 import os
