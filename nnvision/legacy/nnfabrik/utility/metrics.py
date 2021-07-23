@@ -4,20 +4,23 @@ import numpy as np
 import torch
 from scipy import stats
 
-from mlutils.measures import PoissonLoss, corr
-from mlutils.training import eval_state
+from neuralpredictors.measures import PoissonLoss, corr
+from neuralpredictors.training import eval_state
 
 
 def model_predictions(loader, model, data_key, device):
     """
-        computes model predictions for a given dataloader and a model
-        Returns:
-            target: ground truth, i.e. neuronal firing rates of the neurons
-            output: responses as predicted by the network
-        """
+    computes model predictions for a given dataloader and a model
+    Returns:
+        target: ground truth, i.e. neuronal firing rates of the neurons
+        output: responses as predicted by the network
+    """
     target, output = torch.empty(0), torch.empty(0)
     for images, responses in loader[data_key]:
-        output = torch.cat((output, (model(images.to(device), data_key=data_key).detach().cpu())), dim=0)
+        output = torch.cat(
+            (output, (model(images.to(device), data_key=data_key).detach().cpu())),
+            dim=0,
+        )
         target = torch.cat((target, responses.detach().cpu()), dim=0)
 
     return target.numpy(), output.numpy()

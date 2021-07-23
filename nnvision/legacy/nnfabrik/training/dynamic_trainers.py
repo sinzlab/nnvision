@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-from mlutils.measures import PoissonLoss3d
+from neuralpredictors.measures.modules import PoissonLoss3d
 
 
 def slice_iter(n, step):
@@ -29,8 +29,12 @@ def corr(y1, y2, axis=-1, eps=1e-8, **kwargs):
     Returns: correlation vector
 
     """
-    y1 = (y1 - y1.mean(axis=axis, keepdims=True)) / (y1.std(axis=axis, keepdims=True, ddof=1) + eps)
-    y2 = (y2 - y2.mean(axis=axis, keepdims=True)) / (y2.std(axis=axis, keepdims=True, ddof=1) + eps)
+    y1 = (y1 - y1.mean(axis=axis, keepdims=True)) / (
+        y1.std(axis=axis, keepdims=True, ddof=1) + eps
+    )
+    y2 = (y2 - y2.mean(axis=axis, keepdims=True)) / (
+        y2.std(axis=axis, keepdims=True, ddof=1) + eps
+    )
     return (y1 * y2).mean(axis=axis, **kwargs)
 
 
@@ -53,19 +57,38 @@ def ptcorr(y1, y2, axis=-1, eps=1e-8, **kwargs):
     return (y1 * y2).mean(dim=axis, **kwargs)
 
 
-def compute_predictions(loader, model, readout_key, reshape=True, stack=True, subsamp_size=None, return_lag=False):
+def compute_predictions(
+    loader,
+    model,
+    readout_key,
+    reshape=True,
+    stack=True,
+    subsamp_size=None,
+    return_lag=False,
+):
     y, y_hat = [], []
     if subsamp_size is not None:
         loader = tqdm(loader)
     for x_val, beh_val, eye_val, y_val in loader:
         neurons = y_val.size(-1)
         if subsamp_size is None:
-            y_mod = model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val).detach().cpu().numpy()
+            y_mod = (
+                model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val)
+                .detach()
+                .cpu()
+                .numpy()
+            )
         else:
             y_mod = []
             for subs_idx in slice_iter(neurons, subsamp_size):
                 y_mod.append(
-                    model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val, subs_idx=subs_idx)
+                    model(
+                        x_val,
+                        readout_key,
+                        eye_pos=eye_val,
+                        behavior=beh_val,
+                        subs_idx=subs_idx,
+                    )
                     .detach()
                     .cpu()
                     .numpy()
@@ -91,7 +114,14 @@ def correlation_closure(mod, loaders, avg=True, subsamp_size=None):
     train = mod.training
     mod.eval()
     for readout_key, loader in loaders.items():
-        y, y_hat = compute_predictions(loader, mod, readout_key, reshape=True, stack=True, subsamp_size=subsamp_size)
+        y, y_hat = compute_predictions(
+            loader,
+            mod,
+            readout_key,
+            reshape=True,
+            stack=True,
+            subsamp_size=subsamp_size,
+        )
         co = corr(y, y_hat, axis=0)
         print(readout_key + "correlation: {:.4f}".format(co.mean()))
         ret.append(co)
@@ -129,20 +159,30 @@ def dynamic_model_trainer(
 
     criterion = PoissonLoss3d()
     if len(trainloaders) > 1:
-        raise BadConfigException("TrainConfig.SingleScan only accepts single scan datasets")
+        raise BadConfigException(
+            "TrainConfig.SingleScan only accepts single scan datasets"
+        )
 
     def objective(model, readout_key, inputs, beh, eye_pos, targets):
         outputs = model(inputs, readout_key, eye_pos=eye_pos, behavior=beh)
         return (
             criterion(outputs, targets)
-            + (model.core.regularizer() if not model.readout[readout_key].stop_grad else 0)
+            + (
+                model.core.regularizer()
+                if not model.readout[readout_key].stop_grad
+                else 0
+            )
             + model.readout.regularizer(readout_key).cuda(0)
             + (model.shifter.regularizer(readout_key) if model.shift else 0)
             + (model.modulator.regularizer(readout_key) if model.modulate else 0)
         )
 
     def run(model, objective, optimizer, stop_closure, trainloaders, epoch=0):
-        log.info("Training models with {} and state {}".format(optimizer.__class__.__name__, repr(model.state)))
+        log.info(
+            "Training models with {} and state {}".format(
+                optimizer.__class__.__name__, repr(model.state)
+            )
+        )
         optimizer.zero_grad()
         iteration = 0
 
@@ -158,7 +198,8 @@ def dynamic_model_trainer(
             restore_best=True,
         ):
             for batch_no, (readout_key, data) in tqdm(
-                enumerate(cycle_datasets(trainloaders)), desc=self.__class__.__name__ + "  | Epoch {}".format(epoch)
+                enumerate(cycle_datasets(trainloaders)),
+                desc=self.__class__.__name__ + "  | Epoch {}".format(epoch),
             ):
                 obj = objective(model, readout_key, *data)
                 obj.backward()
@@ -181,7 +222,12 @@ def dynamic_model_trainer(
         optimizer = opt(model.parameters(), lr=lr)
 
         model, epoch = run(
-            model, objective, optimizer, partial(correlation_closure, loaders=valloaders), trainloaders, epoch=epoch
+            model,
+            objective,
+            optimizer,
+            partial(correlation_closure, loaders=valloaders),
+            trainloaders,
+            epoch=epoch,
         )
     model.eval()
 
@@ -193,7 +239,9 @@ def dynamic_model_trainer(
             y, y_hat = compute_predictions(testloader, model, readout_key, **kwargs)
             perf_scores = compute_scores(y, y_hat)
 
-            member_key = (MovieMultiDataset.Member() & key & dict(name=readout_key)).fetch1(dj.key)
+            member_key = (
+                MovieMultiDataset.Member() & key & dict(name=readout_key)
+            ).fetch1(dj.key)
             member_key.update(key)
 
             unit_ids = testloader.dataset.neurons.unit_ids
@@ -201,7 +249,12 @@ def dynamic_model_trainer(
             member_key["pearson"] = perf_scores.pearson.mean()
 
             scores.append(member_key)
-            unit_scores.extend([dict(member_key, unit_id=u, pearson=c) for u, c in zip(unit_ids, perf_scores.pearson)])
+            unit_scores.extend(
+                [
+                    dict(member_key, unit_id=u, pearson=c)
+                    for u, c in zip(unit_ids, perf_scores.pearson)
+                ]
+            )
         return scores, unit_scores
 
     stop_closure = partial(correlation_closure, loaders=valloaders)

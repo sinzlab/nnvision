@@ -1,6 +1,6 @@
 from pprint import pformat
 
-from mlutils.layers.readouts import SpatialTransformerPooled3d
+from neuralpredictors.layers.readouts.old_readouts import SpatialTransformerPooled3d
 from torch.nn import ModuleDict
 
 from . import logger as log
@@ -8,14 +8,17 @@ from . import logger as log
 
 class Readout:
     def initialize(self, *args, **kwargs):
-        raise NotImplementedError("initialize is not implemented for ", self.__class__.__name__)
+        raise NotImplementedError(
+            "initialize is not implemented for ", self.__class__.__name__
+        )
 
     def __repr__(self):
         s = super().__repr__()
         s += " [{} regularizers: ".format(self.__class__.__name__)
         ret = []
         for attr in filter(
-            lambda x: not x.startswith("_") and ("gamma" in x or "pool" in x or "positive" in x or "component" in x),
+            lambda x: not x.startswith("_")
+            and ("gamma" in x or "pool" in x or "positive" in x or "component" in x),
             dir(self),
         ):
             ret.append("{} = {}".format(attr, getattr(self, attr)))
@@ -36,7 +39,8 @@ class PooledReadout(Readout):
     def initialize(self, mu_dict, grid=True):
         log.info(
             "Initializing with mu_dict: {}. Initialize grid={}".format(
-                ", ".join(["{}: {}".format(k, len(m)) for k, m in mu_dict.items()]), grid
+                ", ".join(["{}: {}".format(k, len(m)) for k, m in mu_dict.items()]),
+                grid,
             )
         )
         for k, mu in mu_dict.items():
@@ -59,9 +63,21 @@ class PooledReadout(Readout):
 
 class STPool3dReadout(PooledReadout, ModuleDict):
     def __init__(
-        self, in_shape, neurons, positive=False, gamma_features=0, pool_steps=0, stride=2, kernel_size=2, **kwargs
+        self,
+        in_shape,
+        neurons,
+        positive=False,
+        gamma_features=0,
+        pool_steps=0,
+        stride=2,
+        kernel_size=2,
+        **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
 
         self.in_shape = in_shape
@@ -75,7 +91,12 @@ class STPool3dReadout(PooledReadout, ModuleDict):
             self.add_module(
                 k,
                 SpatialTransformerPooled3d(
-                    in_shape, neur, positive=positive, pool_steps=pool_steps, stride=stride, kernel_size=kernel_size
+                    in_shape,
+                    neur,
+                    positive=positive,
+                    pool_steps=pool_steps,
+                    stride=stride,
+                    kernel_size=kernel_size,
                 ),
             )
 
@@ -134,9 +155,21 @@ class STPool3dReadout(PooledReadout, ModuleDict):
 
 class STPool3dSharedGridReadout(PooledReadout, ModuleDict):
     def __init__(
-        self, in_shape, neurons, positive=False, gamma_features=0, pool_steps=0, stride=2, kernel_size=2, **kwargs
+        self,
+        in_shape,
+        neurons,
+        positive=False,
+        gamma_features=0,
+        pool_steps=0,
+        stride=2,
+        kernel_size=2,
+        **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
 
         self.in_shape = in_shape
@@ -174,7 +207,11 @@ class STPool3dSharedGridStopGradReadout(PooledReadout, ModuleDict):
         stride=2,
         **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
 
         self.in_shape = in_shape
@@ -185,7 +222,11 @@ class STPool3dSharedGridStopGradReadout(PooledReadout, ModuleDict):
         old_neur = -1
         for ro_index, (k, neur) in enumerate(neurons.items()):
             if old_neur != neur:
-                log.info("Neuron change detected from {} to {}! Resetting grid!".format(old_neur, neur))
+                log.info(
+                    "Neuron change detected from {} to {}! Resetting grid!".format(
+                        old_neur, neur
+                    )
+                )
                 grid = None
             old_neur = neur
 

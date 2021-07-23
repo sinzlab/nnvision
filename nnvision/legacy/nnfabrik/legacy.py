@@ -3,7 +3,7 @@ import tempfile
 import warnings
 import os
 
-from . import config
+# from . import config
 from . import utility
 from . import datasets
 from . import training
@@ -71,13 +71,19 @@ class Model(dj.Manual):
         model_config = cleanup_numpy_scalar(model_config)
         return model_fn, model_config
 
-    def add_entry(self, configurator, config_object, model_architect=None, model_comment=""):
+    def add_entry(
+        self, configurator, config_object, model_architect=None, model_comment=""
+    ):
         """
         configurator -- name of the function/class that's callable
         config_object -- actual Python object
         """
         module_path, class_name = split_module_name(configurator)
-        config_fn = dynamic_import(module_path, class_name) if module_path else eval("models." + configurator)
+        config_fn = (
+            dynamic_import(module_path, class_name)
+            if module_path
+            else eval("models." + configurator)
+        )
         try:
             callable(config_fn)
         except NameError:
@@ -123,7 +129,9 @@ class Dataset(dj.Manual):
         dataset_config = cleanup_numpy_scalar(dataset_config)
         return dataset_loader, dataset_config
 
-    def add_entry(self, dataset_loader, dataset_config, dataset_architect=None, dataset_comment=""):
+    def add_entry(
+        self, dataset_loader, dataset_config, dataset_architect=None, dataset_comment=""
+    ):
         """
         inserts one new entry into the Dataset Table
         dataset_loader -- name of dataset function/class that's callable
@@ -131,11 +139,17 @@ class Dataset(dj.Manual):
         """
 
         module_path, class_name = split_module_name(dataset_loader)
-        dataset_fn = dynamic_import(module_path, class_name) if module_path else eval("datasets." + dataset_loader)
+        dataset_fn = (
+            dynamic_import(module_path, class_name)
+            if module_path
+            else eval("datasets." + dataset_loader)
+        )
         try:
             callable(dataset_fn)
         except NameError:
-            warnings.warn("dataset_loader function does not exist. Table entry rejected")
+            warnings.warn(
+                "dataset_loader function does not exist. Table entry rejected"
+            )
             return
 
         if dataset_architect is None:
@@ -191,11 +205,19 @@ class Trainer(dj.Manual):
 
     @property
     def fn_config(self):
-        training_function, training_config = self.fetch1("training_function", "training_config")
+        training_function, training_config = self.fetch1(
+            "training_function", "training_config"
+        )
         training_config = cleanup_numpy_scalar(training_config)
         return training_function, training_config
 
-    def add_entry(self, training_function, training_config, trainer_architect=None, trainer_comment=""):
+    def add_entry(
+        self,
+        training_function,
+        training_config,
+        trainer_architect=None,
+        trainer_comment="",
+    ):
         """
         inserts one new entry into the Trainer Table
         training_function -- name of trainer function/class that's callable
@@ -203,11 +225,17 @@ class Trainer(dj.Manual):
         """
 
         module_path, class_name = split_module_name(training_function)
-        trainer_fn = dynamic_import(module_path, class_name) if module_path else eval("training." + training_function)
+        trainer_fn = (
+            dynamic_import(module_path, class_name)
+            if module_path
+            else eval("training." + training_function)
+        )
         try:
             callable(trainer_fn)
         except NameError:
-            warnings.warn("dataset_loader function does not exist. Table entry rejected")
+            warnings.warn(
+                "dataset_loader function does not exist. Table entry rejected"
+            )
             return
 
         training_config_hash = make_hash(training_config)
@@ -305,12 +333,17 @@ class TrainedModel(dj.Computed):
 
     def make(self, key):
 
-        commits_info = {name: info for name, info in [check_repo_commit(repo) for repo in config["repos"]]}
+        commits_info = {
+            name: info
+            for name, info in [check_repo_commit(repo) for repo in config["repos"]]
+        }
         assert len(commits_info) == len(config["repos"])
 
         if any(["error_msg" in name for name in commits_info.keys()]):
             err_msgs = ["You have uncommited changes."]
-            err_msgs.extend([info for name, info in commits_info.items() if "error_msg" in name])
+            err_msgs.extend(
+                [info for name, info in commits_info.items() if "error_msg" in name]
+            )
             err_msgs.append("\nPlease commit the changes before running populate.\n")
             raise RuntimeError("\n".join(err_msgs))
 
@@ -342,4 +375,6 @@ class TrainedModel(dj.Computed):
                 # add the git info to the part table
                 if commits_info:
                     key["info"] = commits_info
-                    self.GitLog().insert1(key, skip_duplicates=True, ignore_extra_fields=True)
+                    self.GitLog().insert1(
+                        key, skip_duplicates=True, ignore_extra_fields=True
+                    )

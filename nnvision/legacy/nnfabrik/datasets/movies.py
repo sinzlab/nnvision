@@ -1,14 +1,26 @@
 # Mouse Movie Datasets
 import torch
-from mlutils.data.datasets import MovieSet
-from mlutils.data.transforms import Subsequence, Subsample, Normalizer, ToTensor
+from neuralpredictors.data.datasets import MovieSet
+from neuralpredictors.data.transforms import (
+    Subsequence,
+    Subsample,
+    Normalizer,
+    ToTensor,
+)
 from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import DataLoader
 import numpy as np
 
 
 def load_movie_dataset(
-    data_path, batch_size, stats_source="all", seq_len=30, area="V1", layer="L2/3", normalize=False, tier="train"
+    data_path,
+    batch_size,
+    stats_source="all",
+    seq_len=30,
+    area="V1",
+    layer="L2/3",
+    normalize=False,
+    tier="train",
 ):
 
     field_names = ["inputs", "behavior", "eye_position", "responses"]
@@ -48,10 +60,21 @@ def load_movie_dataset(
 
 
 def load_movie_set(
-    data_path, batch_size, stats_source="all", seq_len=30, area="V1", layer="L2/3", normalize=False, tiers_map=None
+    data_path,
+    batch_size,
+    stats_source="all",
+    seq_len=30,
+    area="V1",
+    layer="L2/3",
+    normalize=False,
+    tiers_map=None,
 ):
     if tiers_map is None:
-        tiers_map = {"train_loader": "train", "val_loader": "validation", "test_loader": "test"}
+        tiers_map = {
+            "train_loader": "train",
+            "val_loader": "validation",
+            "test_loader": "test",
+        }
 
     data_loaders = {}
 

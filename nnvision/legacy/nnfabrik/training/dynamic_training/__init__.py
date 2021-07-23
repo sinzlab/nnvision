@@ -1,4 +1,4 @@
-from mlutils.measures import PoissonLoss3d
+from neuralpredictors.measures.modules import PoissonLoss3d
 from .utils import (
     corr,
     ptcorr,
@@ -8,7 +8,8 @@ from .utils import (
     correlation_closure,
     compute_scores,
 )
-from mlutils.training import cycle_datasets, early_stopping
+from neuralpredictors.training import early_stopping
+from neuralpredictors.training.cyclers import cycle_datasets
 from tqdm import tqdm
 from logging import getLogger
 from itertools import product, repeat
@@ -37,20 +38,30 @@ def dynamic_model_trainer(
 
     criterion = PoissonLoss3d()
     if len(trainloaders) > 1:
-        raise BadConfigException("TrainConfig.SingleScan only accepts single scan datasets")
+        raise BadConfigException(
+            "TrainConfig.SingleScan only accepts single scan datasets"
+        )
 
     def objective(model, readout_key, inputs, beh, eye_pos, targets):
         outputs = model(inputs, readout_key, eye_pos=eye_pos, behavior=beh)
         return (
             criterion(outputs, targets)
-            + (model.core.regularizer() if not model.readout[readout_key].stop_grad else 0)
+            + (
+                model.core.regularizer()
+                if not model.readout[readout_key].stop_grad
+                else 0
+            )
             + model.readout.regularizer(readout_key).cuda(0)
             + (model.shifter.regularizer(readout_key) if model.shift else 0)
             + (model.modulator.regularizer(readout_key) if model.modulate else 0)
         )
 
     def run(model, objective, optimizer, stop_closure, trainloaders, epoch=0):
-        log.info("Training models with {} and state {}".format(optimizer.__class__.__name__, repr(model.state)))
+        log.info(
+            "Training models with {} and state {}".format(
+                optimizer.__class__.__name__, repr(model.state)
+            )
+        )
         optimizer.zero_grad()
         iteration = 0
 
@@ -89,7 +100,12 @@ def dynamic_model_trainer(
         optimizer = opt(model.parameters(), lr=lr)
 
         model, epoch = run(
-            model, objective, optimizer, partial(correlation_closure, loaders=valloaders), trainloaders, epoch=epoch
+            model,
+            objective,
+            optimizer,
+            partial(correlation_closure, loaders=valloaders),
+            trainloaders,
+            epoch=epoch,
         )
     model.eval()
 
@@ -101,7 +117,9 @@ def dynamic_model_trainer(
             y, y_hat = compute_predictions(testloader, model, readout_key, **kwargs)
             perf_scores = compute_scores(y, y_hat)
 
-            member_key = (MovieMultiDataset.Member() & key & dict(name=readout_key)).fetch1(dj.key)
+            member_key = (
+                MovieMultiDataset.Member() & key & dict(name=readout_key)
+            ).fetch1(dj.key)
             member_key.update(key)
 
             unit_ids = testloader.dataset.neurons.unit_ids
@@ -109,7 +127,12 @@ def dynamic_model_trainer(
             member_key["pearson"] = perf_scores.pearson.mean()
 
             scores.append(member_key)
-            unit_scores.extend([dict(member_key, unit_id=u, pearson=c) for u, c in zip(unit_ids, perf_scores.pearson)])
+            unit_scores.extend(
+                [
+                    dict(member_key, unit_id=u, pearson=c)
+                    for u, c in zip(unit_ids, perf_scores.pearson)
+                ]
+            )
         return scores, unit_scores
 
     stop_closure = partial(correlation_closure, loaders=valloaders)

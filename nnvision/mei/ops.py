@@ -8,7 +8,7 @@ from mei.legacy.utils import varargin
 
 
 class BlurAndCut:
-    """ Blur an image with a Gaussian window.
+    """Blur an image with a Gaussian window.
 
     Arguments:
         sigma (float or tuple): Standard deviation in y, x used for the gaussian blurring.
@@ -20,7 +20,9 @@ class BlurAndCut:
             'constant', 'reflect' and 'replicate'
     """
 
-    def __init__(self, sigma, decay_factor=None, truncate=4, pad_mode="reflect", cut_channel=None):
+    def __init__(
+        self, sigma, decay_factor=None, truncate=4, pad_mode="reflect", cut_channel=None
+    ):
         self.sigma = sigma if isinstance(sigma, tuple) else (sigma,) * 2
         self.decay_factor = decay_factor
         self.truncate = truncate
@@ -48,9 +50,17 @@ class BlurAndCut:
         x_gaussian = torch.as_tensor(x_gaussian, device=x.device, dtype=x.dtype)
 
         # Blur
-        padded_x = F.pad(x, pad=(x_halfsize, x_halfsize, y_halfsize, y_halfsize), mode=self.pad_mode)
-        blurred_x = F.conv2d(padded_x, y_gaussian.repeat(num_channels, 1, 1)[..., None], groups=num_channels)
-        blurred_x = F.conv2d(blurred_x, x_gaussian.repeat(num_channels, 1, 1, 1), groups=num_channels)
+        padded_x = F.pad(
+            x, pad=(x_halfsize, x_halfsize, y_halfsize, y_halfsize), mode=self.pad_mode
+        )
+        blurred_x = F.conv2d(
+            padded_x,
+            y_gaussian.repeat(num_channels, 1, 1)[..., None],
+            groups=num_channels,
+        )
+        blurred_x = F.conv2d(
+            blurred_x, x_gaussian.repeat(num_channels, 1, 1, 1), groups=num_channels
+        )
         final_x = blurred_x / (y_gaussian.sum() * x_gaussian.sum())  # normalize
 
         if self.cut_channel is not None:
@@ -60,7 +70,7 @@ class BlurAndCut:
 
 
 class ChangeNormAndClip:
-    """ Change the norm of the input.
+    """Change the norm of the input.
 
     Arguments:
         norm (float or tensor): Desired norm. If tensor, it should be the same length as

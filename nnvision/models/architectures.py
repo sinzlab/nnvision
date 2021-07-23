@@ -1,4 +1,3 @@
-
 from torch import nn as nn
 
 
@@ -11,7 +10,7 @@ class SQ_EX_Block(nn.Module):
             nn.Linear(in_ch, in_ch // reduction),
             nn.ReLU(inplace=True),
             nn.Linear(in_ch // reduction, in_ch),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
