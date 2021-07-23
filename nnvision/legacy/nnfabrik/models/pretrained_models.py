@@ -1,5 +1,10 @@
 from neuralpredictors.layers.cores.base import Core2d, Core
-from ..utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
+from ..utility.nn_helpers import (
+    get_io_dims,
+    get_module_output,
+    set_random_seed,
+    get_dims_for_loader_dict,
+)
 
 from itertools import count
 import numpy as np
@@ -41,7 +46,11 @@ class TransferLearningCore(Core2d, nn.Module):
             fine_tune: boolean, sets all weights to trainable if True
             **kwargs:
         """
-        print("Ignoring input {} when creating {}".format(repr(kwargs), self.__class__.__name__))
+        print(
+            "Ignoring input {} when creating {}".format(
+                repr(kwargs), self.__class__.__name__
+            )
+        )
         super().__init__()
 
         # getattr(self, tr_model_fn)
@@ -64,7 +73,9 @@ class TransferLearningCore(Core2d, nn.Module):
         self.features.add_module("TransferLearning", tr_features)
         print(self.features)
         if final_batchnorm:
-            self.features.add_module("OutBatchNorm", nn.BatchNorm2d(self.outchannels, momentum=momentum))
+            self.features.add_module(
+                "OutBatchNorm", nn.BatchNorm2d(self.outchannels, momentum=momentum)
+            )
         if final_nonlinearity:
             self.features.add_module("OutNonlin", nn.ReLU(inplace=True))
 

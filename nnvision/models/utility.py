@@ -13,7 +13,9 @@ def unpack_data_info(data_info):
 def purge_state_dict(state_dict, purge_key=None, survival_key=None):
 
     if (purge_key is None) and (survival_key is None):
-        raise ValueError("purge_key and survival_key can not both be None. At least one key has to be defined")
+        raise ValueError(
+            "purge_key and survival_key can not both be None. At least one key has to be defined"
+        )
 
     purged_state_dict = copy.deepcopy(state_dict)
 
