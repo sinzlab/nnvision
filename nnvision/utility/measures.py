@@ -248,7 +248,7 @@ def compute_explainable_var(outputs, eps=1e-9):
     return explainable_var
 
 
-def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, threshold=None):
+def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_unit=True, threshold=None):
     """
     Computes the fraction of explainable variance explained (FEVe) per Neuron, given a model and a dictionary of dataloaders.
     The dataloaders will have to return batches of identical images, with the corresponing neuronal responses.
@@ -279,7 +279,7 @@ def get_FEV(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, th
                 fev, feve = compute_FEV(targets=targets, outputs=outputs, return_exp_var=True)
                 FEV[data_key] = feve[fev>threshold]
     if not as_dict:
-        FEV = np.hstack([v for v in FEV.values()]) if per_neuron else np.mean(np.hstack([v for v in FEV.values()]))
+        FEV = np.hstack([v for v in FEV.values()]) if per_unit else np.mean(np.hstack([v for v in FEV.values()]))
     return FEV
 
 
