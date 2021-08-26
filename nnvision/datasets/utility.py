@@ -6,7 +6,7 @@ import numpy as np
 from skimage.transform import rescale
 from collections import namedtuple, Iterable
 import os
-from mlutils.data.samplers import RepeatsBatchSampler
+from neuralpredictors.data.samplers import RepeatsBatchSampler
 
 
 def get_oracle_dataloader(dat,
