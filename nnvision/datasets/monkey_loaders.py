@@ -176,7 +176,6 @@ def monkey_static_loader(dataset,
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
 
-
     if store_data_info and not os.path.exists(stats_path):
 
         in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
