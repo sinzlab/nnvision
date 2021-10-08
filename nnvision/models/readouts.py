@@ -1,7 +1,7 @@
 import torch
 
 from torch import nn
-from nnvision.legacy.nnfabrik.utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
+from ..legacy.nnfabrik.utility.nn_helpers import get_io_dims, get_module_output, set_random_seed, get_dims_for_loader_dict
 from collections import OrderedDict, Iterable
 import numpy as np
 import warnings

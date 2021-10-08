@@ -5,7 +5,7 @@ from neuralpredictors.measures import corr
 from neuralpredictors.training import eval_state, device_state
 import types
 import contextlib
-from nnvision.utility.measure_helpers import is_ensemble_function
+from submodules.nnvision.nnvision.utility.measure_helpers import is_ensemble_function
 import warnings
 from .measure_helpers import get_subset_of_repeats
 
