@@ -88,6 +88,7 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
     if not as_dict:
         correlations = np.hstack([v for v in correlations.values()]) if per_neuron else np.mean(np.hstack([v for v in correlations.values()]))
+    # print(dataloaders[dataloaders.keys()[0]].__getitem__.cache_info())
     return correlations
 
 
