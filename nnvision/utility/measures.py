@@ -88,15 +88,18 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
     if not as_dict:
         correlations = np.hstack([v for v in correlations.values()]) if per_neuron else np.mean(np.hstack([v for v in correlations.values()]))
-    # print(dataloaders[dataloaders.keys()[0]].__getitem__.cache_info())
+
     return correlations
 
 
 def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     correlations = {}
+
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+            print('target:', target)
+            print('output:', output)
             correlations[k] = corr(target, output, axis=0)
 
             if np.any(np.isnan(correlations[k])):

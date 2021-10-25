@@ -106,6 +106,7 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
         # super init to get the _module attribute
         super().__init__()
         k0 = None
+
         for i, k in enumerate(n_neurons_dict):
             k0 = k0 or k
             in_shape = get_module_output(core, in_shape_dict[k])[1:]

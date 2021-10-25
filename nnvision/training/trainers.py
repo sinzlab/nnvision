@@ -74,13 +74,14 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     model.to(device)
     set_random_seed(seed)
     model.train()
+    loss_value = None
 
     criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
     stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr_init)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr_init, weight_decay=0.01)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max' if maximize else 'min',
                                                            factor=lr_decay_factor, patience=patience,
                                                            threshold=tolerance,
@@ -121,9 +122,11 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
 
             loss = full_objective(model, dataloaders["train"], data_key, *data)
             loss.backward()
+            loss_value = loss
             if (batch_no + 1) % optim_step_count == 0:
                 optimizer.step()
                 optimizer.zero_grad()
+        print(f'loss value: {loss_value}')
 
     ##### Model evaluation ####################################################################################################
     model.eval()
@@ -132,7 +135,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     # Compute avg validation and test correlation
     validation_correlation = get_correlations(model, dataloaders["validation"], device=device, as_dict=False, per_neuron=False)
     test_correlation = get_correlations(model, dataloaders["test"], device=device, as_dict=False, per_neuron=False)
-
+    print(f'loss value: {loss_value}')
     # return the whole tracker output as a dict
     output = {k: v for k, v in tracker.log.items()} if track_training else {}
     output["validation_corr"] = validation_correlation
