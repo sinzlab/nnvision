@@ -123,6 +123,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
             loss = full_objective(model, dataloaders["train"], data_key, *data)
             loss.backward()
             loss_value = loss
+            # print(f'grad: {model.readout._modules[list(model.readout._modules.keys())[0]].conv.weight.grad[0, 0, :10, :10]}')
             if (batch_no + 1) % optim_step_count == 0:
                 optimizer.step()
                 optimizer.zero_grad()
