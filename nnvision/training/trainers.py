@@ -76,7 +76,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     model.train()
     loss_value = None
 
-    criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
+    criterion = getattr(mlmeasures, loss_function)(avg=avg_loss, per_neuron=False)
     stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
@@ -121,7 +121,9 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
                                                desc="Epoch {}".format(epoch)):
 
             loss = full_objective(model, dataloaders["train"], data_key, *data)
+            # loss = torch.sum(loss)
             loss.backward()
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1, norm_type=2)
             loss_value = loss
             # print(f'grad: {model.readout._modules[list(model.readout._modules.keys())[0]].conv.weight.grad[0, 0, :10, :10]}')
             if (batch_no + 1) % optim_step_count == 0:
