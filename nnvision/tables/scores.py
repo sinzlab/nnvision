@@ -65,6 +65,17 @@ class FEVeScore(ScoringBaseNeuronType):
     data_cache = DataCache
     model_cache = TrainedModelCache
 
+@schema
+class FEVe_thresholded(ScoringBaseNeuronType):
+    trainedmodel_table = TrainedModel
+    unit_table = Recording.Units
+    measure_function = staticmethod(get_FEV)
+    function_kwargs = dict(threshold=0.15, )
+    measure_dataset = "test"
+    measure_attribute = "feve"
+    data_cache = DataCache
+    model_cache = TrainedModelCache
+
 
 @schema
 class TrainPoissonLoss(ScoringBaseNeuronType):
@@ -216,19 +227,6 @@ class ValidationCorrelationScoreEnsemble(ScoringBaseNeuronType):
     data_cache = DataCache
     model_cache = EnsembleModelCache
 
-
-# ============================= SUMMARY SCORES =============================
-
-
-@schema
-class FEVe_thresholded(SummaryScoringBase):
-    trainedmodel_table = TrainedModel
-    measure_function = staticmethod(get_FEV)
-    function_kwargs = dict(threshold=0.15, per_neuron=False)
-    measure_dataset = "test"
-    measure_attribute = "feve"
-    data_cache = DataCache
-    model_cache = TrainedModelCache
 
 # ============================= TransferTrainedModel SCORES =============================
 
