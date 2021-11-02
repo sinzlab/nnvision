@@ -1,11 +1,13 @@
 import warnings
-
 import torch
 import torch.nn.functional as F
 from scipy import signal
+import random
 
 from mei.legacy.utils import varargin
+
 from ..utility.measure_helpers import get_cosine_mask
+from ..tables.from_nnfabrik import Dataset
 
 
 class BlurAndCut:
@@ -177,3 +179,59 @@ class BatchedCropsPadded:
             crops = crops * mask
 
         return crops
+
+
+class ClipNormInAllChannel:
+    """ When need add transparency to visualization, change the norm of the input for different channel separately (i.e. color channel & transparent channel)
+    Arguments:
+        norm (float or tensor): Desired norm. If tensor, it should be the same length as
+            x.
+    """
+
+    def __init__(self, channel1, norm_ch1,channel2=None,norm_ch2=None, x_min_ch1=None, x_max_ch1=None,
+                 x_min_ch2=None, x_max_ch2=None):
+        self.channel1 = channel1
+        self.norm_ch1 = norm_ch1
+        self.x_min_ch1 = x_min_ch1
+        self.x_max_ch1 = x_max_ch1
+
+        self.channel2 = channel2
+        if self.channel2 is not None:
+            self.norm_ch2 = norm_ch2
+            self.x_min_ch2 = x_min_ch2
+            self.x_max_ch2 = x_max_ch2
+
+    @varargin
+    def __call__(self, x, iteration=None):
+        x_norm_ch1 = torch.norm(x[:, self.channel1, ...])
+        x_norm_ch2 = torch.norm(x[:, self.channel2, ...])
+
+        if x_norm_ch1 > self.norm_ch1:
+            x[:, self.channel1, ...] = x[:, self.channel1, ...] * (self.norm_ch1 / x_norm_ch1)
+
+        if self.x_min_ch1 or self.x_max_ch1 is not None:
+            x[:, self.channel1, ...] = torch.clamp(x[:, self.channel1, ...], self.x_min_ch1, self.x_max_ch1)
+
+        # when there is transparent channel
+        if self.channel2 is not None:
+            if self.norm_ch2 is not None:
+                if x_norm_ch2 > self.norm_ch2:
+                    x[:, self.channel2, ...] = x[:, self.channel2, ...] * (self.norm_ch2 / x_norm_ch2)
+
+            x[:, self.channel2, ...] = torch.clamp(x[:, self.channel2, ...], self.x_min_ch2, self.x_max_ch2)
+        return x
+
+
+class NatImgBackgroundHighNorm():
+    def __init__(self,key=None,):
+        dataloaders = (Dataset & key).get_dataloader()
+        data_key = list(dataloaders["train"].keys())[0]
+        images = []
+        for tier in ['train','test','validation']:
+            for b in dataloaders[tier][data_key]:
+                images.append(b.inputs.squeeze())
+        self.images = torch.vstack(images)
+
+    def __call__(self, x,iteration=None):
+        bg=random.choice(self.images)
+        return bg
