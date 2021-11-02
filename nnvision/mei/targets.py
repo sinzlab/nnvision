@@ -18,3 +18,12 @@ def mean_of_random_output_sample(output, n=26):
     output_units = output.shape[1]
     sampled_units = np.random.choice(np.arange(output_units), n, replace=False)
     return torch.mean(output[:, sampled_units])
+
+
+def gauss_loss(output, responses, mean=False):
+    loss = (
+        -torch.sum((output - responses) ** 2)
+        if mean is False
+        else -torch.mean((output - responses) ** 2)
+    )
+    return loss
