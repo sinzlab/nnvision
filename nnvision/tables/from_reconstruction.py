@@ -172,9 +172,10 @@ class ReconTargetUnit(dj.Manual):
     definition = """
     -> Dataset
     unit_hash:                      varchar(64)    # hash the list of unit IDs and data_key
-    data_key:                       varchar(64)    # 
 
     ---
+    data_key:                       longblob    # 
+
     unit_ids:                       longblob       # list of unit_ids 
     unit_comment:                   varchar(128)
     """
@@ -212,15 +213,7 @@ class ReconTargetUnit(dj.Manual):
             data_key=data_key,
             unit_comment=unit_comment,
         )
-        existing = self.proj() & key
-        if existing:
-            if skip_duplicates:
-                warnings.warn("Corresponding entry found. Skipping...")
-                key = (self & (existing)).fetch1()
-            else:
-                raise ValueError("Corresponding entry already exists")
-        else:
-            self.insert1(key)
+        self.insert1(key)
 
         return key
 
@@ -261,16 +254,17 @@ class ReconObjective(dj.Computed):
     def get_output_selected_model(
         self,
         model: Module,
-        target_fn: Callable,
-        unit_indices: List,
-        data_key: Union(List, str),
+        target_fn: Callable = None,
+        unit_indices: List = None,
+        data_key: Union(List, str) = None,
+        forward_kwargs: Dict = {},
     ) -> constrained_output_model:
 
         # if multiple data_keys:
         if not isinstance(data_key, str):
-            model = augment_ensemble_model(model=model,
-                                          data_keys=data_key,
-                                          unit_indices=unit_indices)
+            model = augment_ensemble_model(
+                model=model, data_keys=data_key, unit_indices=unit_indices
+            )
             data_key = "augmentation"
             unit_indices = None
 
@@ -278,7 +272,7 @@ class ReconObjective(dj.Computed):
             model,
             constraint=unit_indices,
             target_fn=target_fn,
-            forward_kwargs=dict(data_key=data_key),
+            forward_kwargs=dict(data_key=data_key, **forward_kwargs),
         )
 
 
@@ -304,10 +298,7 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
     target_unit_table = ReconTargetUnit
     method_table = ReconMethod
     recon_type_table = ReconType
-
-    # Create New Table: Stack it with the 10 best images
     base_image_table = ReconImage
-
     seed_table = MEISeed
     storage = "minio"
     database = ""  # hack to supress DJ error
@@ -329,77 +320,24 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
     def get_model_responses(
         self,
         model,
-        key,
         image,
         device="cuda",
         forward_kwargs=None,
         constraint=None,
     ):
-        model.eval()
-        model.to(device)
+        model.to(device).eval()
         forward_kwargs = dict() if forward_kwargs is None else forward_kwargs
         with torch.no_grad():
             responses = model(
                 image.to(device),
-                data_key=key["data_key"],
                 **forward_kwargs,
             )
-        return (
-            responses
-            if constraint is None or len(constraint) == 0
-            else responses[:, constraint]
-        )
+        return responses
 
-    def get_neuronal_responses(
+    def get_original_image(
         self,
-        dataloaders,
         key,
-        method_config,
-        return_behavior=False,
-        return_image=False,
     ):
-        data_key = (self.target_unit_table & key).fetch1("data_key")
-        dat = dataloaders["train"][data_key].dataset
-        image_class, image_id = (self.base_image_table & key).fetch1(
-            "image_class", "image_id"
-        )
-        image_repeat = method_config.get("image_repeat", None)
-        if return_behavior:
-            behavior_keys = get_image_data_from_dataset(
-                dat,
-                image_class,
-                image_id,
-                return_behavior=True,
-                image_repeat=image_repeat,
-            )
-
-        if return_image:
-            image = get_image_data_from_dataset(
-                dat,
-                image_class,
-                image_id,
-                return_behavior=False,
-                image_repeat=image_repeat,
-                return_image=return_image,
-            )
-
-        responses = get_image_data_from_dataset(
-            dat,
-            image_class,
-            image_id,
-            return_behavior=False,
-            image_repeat=image_repeat,
-        )
-
-        ret = [responses]
-        if return_behavior:
-            ret.append(behavior_keys)
-        if return_image:
-            ret.append(image)
-        return ret
-
-
-    def get_original_image(self, key,):
         image = (self.base_image_table & key).fetch1("image")
         image = torch.from_numpy(image[None, None]).cuda()
         return image
@@ -422,39 +360,30 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
             "unit_ids", "data_key"
         )
 
-
+        response_model = self.selector_table().get_output_selected_model(
+            model=model,
+            unit_indices=unit_ids,
+            data_key=data_key,
+        )
+        response_model.eval().cuda()
         if recon_type == "neurons":
-            raise NotImplementedError("Reconstructions from real neuronal responses is not yet possible")
+            raise NotImplementedError(
+                "Reconstructions from real neuronal responses is not yet possible"
+            )
         else:
-            image = self.get_original_image(
-                key, img_statistics=(img_mean, img_std), dataloaders=dataloaders
-            )
-            initial_img = get_initial_image(
-                dataloaders=dataloaders,
-                method_config=method_config,
-                data_key=key["data_key"],
-            )
-            image = process_image(initial_img=initial_img, image=image)
-
-            constraint = (self.target_unit_table & key).fetch1("unit_ids")
-
             responses = self.get_model_responses(
-                model=model,
-                key=key,
+                model=response_model,
                 image=image,
                 forward_kwargs=method_config.get("model_forward_kwargs", None),
-                constraint=constraint,
             )
-
         target_fn = (self.target_fn_table & key).get_target_fn(responses=responses)
-
-
         output_selected_model = self.selector_table().get_output_selected_model(
             model=model,
             target_fn=target_fn,
-            unit_ids=unit_ids,
+            unit_indices=unit_ids,
             data_key=data_key,
         )
+        output_selected_model.eval().cuda()
         mei_entity = self.method_table().generate_mei(
             dataloaders, output_selected_model, key, seed
         )
@@ -462,8 +391,7 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
         reconstructed_image = mei_entity["mei"]
         # TODO: fix bug when using a constraint in the SelectorTable.
         reconstructed_responses = self.get_model_responses(
-            model=model,
-            key=key,
+            model=response_model,
             image=reconstructed_image,
             forward_kwargs=method_config.get("model_forward_kwargs", None),
         )
