@@ -57,3 +57,32 @@ def get_cosine_mask(width, height, pixelsPerDegree, fadeStartDegrees):
 
     return blendingMask
 
+
+def get_cosine_mask_px(width, height, radius, fadeout):
+    """
+    Creates a [0, 1] mask with a central disc and a cosine fade-out
+    Args:
+        width(int): image width in pixels
+        height(int):  image height in pixels
+        radius(int): size of the central disc in pixels
+        fadeout(int): size of the additional fadeout beyond the disc
+
+    Returns: mask(nd-array): the mask of size (height, width), in the range of [0, 1]
+
+    """
+
+    widthBegin, widthEnd = (-(width / 2), (width / 2))
+    heightBegin, heightEnd = (-(height / 2), (height / 2))
+
+    radius = radius / 2
+    fadeout = fadeout / 2
+
+    x, y = np.meshgrid(np.arange(widthBegin, widthEnd), np.arange(heightBegin, heightEnd))
+    normXY = np.sqrt(np.square(x) + np.square(y))
+
+    disk = (np.array((normXY >= radius) & (normXY <= (radius + fadeout))).astype(np.float32))
+    filled_disc = disk * (normXY - radius) / fadeout if fadeout > 0 else disk
+    surround = np.array(normXY >= (radius + fadeout)).astype(np.float32)
+    finalDisk = (math.pi) / 2 * (filled_disc + surround)
+    mask = np.cos(finalDisk).clip(0,1)
+    return mask
