@@ -3,10 +3,10 @@ import torch
 from torch import nn
 from neuralpredictors.utils import get_module_output
 from torch.nn import Parameter
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout, SelfAttention2d
+from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
 
-
-from neuralpredictors.layers.legacy import Gaussian2d
+# from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout, SelfAttention2d
+#from neuralpredictors.layers.legacy import Gaussian2d
 
 
 class MultiReadout:

@@ -1,31 +1,34 @@
 import numpy as np
 import torch
 import copy
+try:
+    from nnfabrik.builder import get_model
+    from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
+    from torch import nn
+    from torch.nn import functional as F
 
-from neuralpredictors.layers.cores import Stacked2dCore
-from neuralpredictors.layers.legacy import Gaussian2d
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d
-from neuralpredictors.layers.activations import MultiplePiecewiseLinearExpNonlinearity
-
-from nnfabrik.builder import get_model
-from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
-from neuralpredictors.utils import get_module_output
-from torch import nn
-from torch.nn import functional as F
-
-from .encoders import Encoder, EncoderPNL
-from .cores import SE2dCore, TransferLearningCore
-from .readouts import MultiplePointPooled2d, MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d, MultipleGaussian2d, MultipleAttention2d, MultipleDense, MultipleSelfAttention2d
-from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
+    from .encoders import Encoder, EncoderPNL
+    from .cores import SE2dCore, TransferLearningCore
+    from .readouts import MultiplePointPooled2d, MultipleFullGaussian2d, MultiReadout, MultipleSpatialXFeatureLinear, MultipleRemappedGaussian2d, MultipleGaussian2d, MultipleAttention2d, MultipleDense, MultipleSelfAttention2d
+    from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
+except (ImportError, ModuleNotFoundError):
+    print("wtf")
 
 try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
     from ..tables.main import Recording
     from nnfabrik.main import Model
 except ModuleNotFoundError:
-    pass
-except:
     print("dj database connection could not be established. no access to pretrained models available.")
+
+try:
+    from neuralpredictors.layers.cores import Stacked2dCore
+    from neuralpredictors.layers.legacy import Gaussian2d
+    from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d
+    from neuralpredictors.layers.activations import MultiplePiecewiseLinearExpNonlinearity
+    from neuralpredictors.utils import get_module_output
+except (ImportError, ModuleNotFoundError):
+    print("omg")
 
 
 def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
