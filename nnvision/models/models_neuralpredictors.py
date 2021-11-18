@@ -1,12 +1,10 @@
-#from neuralpredictors.layers.readouts import MultipleFullGaussian2d, MultipleFullGaussian2d_2
-from .readouts import MultipleFullGaussian2d
+from neuralpredictors.layers.readouts import MultipleFullGaussian2d
 from neuralpredictors.layers.cores import Stacked2dCore, SE2dCore, RotationEquivariant2dCore
 from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 import torch
 from torch import nn
 from torch.nn import functional as F
 from neuralpredictors.layers.encoders import FiringRateEncoder
-#from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 
 def se_core_full_gauss_readout(dataloaders,
@@ -81,7 +79,7 @@ def se_core_full_gauss_readout(dataloaders,
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
-        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name][1:] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
@@ -130,7 +128,8 @@ def se_core_full_gauss_readout(dataloaders,
                     linear=linear,
                     attention_conv=attention_conv)
 
-    readout = MultipleFullGaussian2d(core, in_shape_dict=in_shapes_dict,
+    readout = MultipleFullGaussian2d(in_shape_dict=in_shapes_dict,
+                                     loader=dataloaders,
 
                                      n_neurons_dict=n_neurons_dict,
                                      init_mu_range=init_mu_range,
