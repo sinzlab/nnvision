@@ -10,10 +10,14 @@ from ..tables.main import Recording
 from ..tables.from_mei import MEI
 from nnfabrik.main import Dataset
 from nnfabrik import builder
-from mei.initial import InitialGuessCreator
-
+from mei.initial import InitialGuessCreator, RandomNormal
 
 fetch_download_path = os.environ.get('FETCH_DOWNLOAD_PATH', '/data/fetched_from_attach')
+
+
+def AllGray(RandomNormal):
+    _create_random_tensor = torch.zeros
+
 
 def natural_image_initial(*args, key, img_tier="train", top_index=0, device="cuda"):
     print("finding best natural stimulus as initial image ...")
