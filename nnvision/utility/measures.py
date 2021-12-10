@@ -35,7 +35,8 @@ def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadc
     # Forward unique images once:
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
-            output = model(unique_images.to(device), data_key=data_key, **batch._asdict()).detach().cpu()
+            with torch.no_grad():
+                output = model(unique_images.to(device), data_key=data_key, **batch._asdict()).detach().cpu()
     
     output = output.numpy()   
         
@@ -61,7 +62,8 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
             responses = responses.squeeze(dim=0)
         with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
             with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
-                output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0)
+                with torch.no_grad():
+                    output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
 
     return target.numpy(), output.numpy()
