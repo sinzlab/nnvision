@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 from scipy import signal
 import random
+from collections import Iterable
 
 from mei.legacy.utils import varargin
 
@@ -235,3 +236,25 @@ class NatImgBackgroundHighNorm():
     def __call__(self, x,iteration=None):
         bg=random.choice(self.images)
         return bg
+
+
+class CollapseChannel:
+    """ Collapsing.
+
+    Arguments:
+        height (int): Height of the crop.
+        width (int): Width of the crop
+    """
+
+    def __init__(self, channel, ):
+        self.channel = channel if isinstance(channel, Iterable) else [channel]
+
+
+    @varargin
+    def __call__(self, x, iteration=None):
+
+        y = torch.zeros_like(x).to(x.device)
+        for channel in self.channel:
+            y[:, channel] += x[:, channel].mean()
+
+        return y
