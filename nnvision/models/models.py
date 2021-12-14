@@ -1864,7 +1864,7 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
                           readout_bias=True,
                           elu_offset=0, stack=None, se_reduction=32, n_se_blocks=0,
                           depth_separable=False, linear=False, data_info=None,
-                          gamma_features=3, gamma_query=1,
+                          gamma_features=3, gamma_query=1,position_encoding=True,
                           ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -1942,7 +1942,8 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
                                  n_neurons_dict=n_neurons_dict,
                                  bias=readout_bias,
                                  gamma_features=gamma_features,
-                                 gamma_query=gamma_query)
+                                 gamma_query=gamma_query,
+                                 position_encoding=position_encoding,)
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
@@ -1965,6 +1966,7 @@ def transfer_core_selfattention_readout(dataloaders,
                                     elu_offset=0,
                                     data_info=None,
                                     readout_bias=True,
+                                    position_encoding=True,
                                     ):
 
     if data_info is not None:
@@ -1999,7 +2001,9 @@ def transfer_core_selfattention_readout(dataloaders,
                                       n_neurons_dict=n_neurons_dict,
                                       bias=readout_bias,
                                       gamma_features=gamma_features,
-                                      gamma_query=gamma_query)
+                                      gamma_query=gamma_query,
+                                      position_encoding=position_encoding,
+                                      )
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:

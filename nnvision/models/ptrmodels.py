@@ -238,6 +238,7 @@ def custom_task_core_selfattention_readout(dataloaders, seed,
                                    shifter = None, shifter_type = 'MLP', input_channels_shifter = 2,
                                    hidden_channels_shifter = 5,
                                    shift_layers = 3, gamma_shifter = 0, shifter_bias = True,
+                                           position_encoding=True,
                                    ):
     """
     A Model class of a predefined core (using models from ptrnets). Can be initialized pretrained or random.
@@ -294,6 +295,7 @@ def custom_task_core_selfattention_readout(dataloaders, seed,
                                      bias=readout_bias,
                                      gamma_query=gamma_query,
                                      gamma_features=gamma_features,
+                                     position_encoding=position_encoding,
                                      )
 
 
