@@ -35,6 +35,7 @@ def monkey_static_loader(dataset,
                          img_std=None,
                          stimulus_location=None,
                          monitor_scaling_factor=4.57,
+                         include_prev_image=False,
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
@@ -157,6 +158,13 @@ def monkey_static_loader(dataset,
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
+        if include_prev_image and not "training_prior_image_ids" in raw_data:
+            raise ValueError("No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
+
+        if include_prev_image:
+            prev_training_image_ids = raw_data["training_prior_image_ids"] - image_id_offset
+            prev_testing_image_ids = raw_data["testing_prior_image_ids"] - image_id_offset
+
         if dataset != 'PlosCB19_V1':
             if len(responses_test.shape) != 3:
                 responses_test = responses_test[None, ...]
@@ -188,10 +196,17 @@ def monkey_static_loader(dataset,
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-        test_loader = get_cached_loader(testing_image_ids,
-                                        responses_test,
+        if include_prev_image:
+            prev_validation_image_ids = prev_training_image_ids[val_idx]
+            prev_training_image_ids = prev_training_image_ids[train_idx]
+
+        args_train = [training_image_ids, prev_training_image_ids, responses_train] if include_prev_image else [training_image_ids, responses_train]
+        args_val = [validation_image_ids, prev_validation_image_ids, responses_val] if include_prev_image else [validation_image_ids, responses_val]
+        args_test = [testing_image_ids, prev_testing_image_ids, responses_test] if include_prev_image else [testing_image_ids, responses_test]
+
+        train_loader = get_cached_loader(*args_train, batch_size=batch_size, image_cache=cache)
+        val_loader = get_cached_loader(*args_val, batch_size=batch_size, image_cache=cache)
+        test_loader = get_cached_loader(*args_test,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,

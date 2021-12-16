@@ -234,9 +234,7 @@ class CachedTensorDataset(utils.Dataset):
     def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
-        if not len(tensors) == len(names):
-            raise ValueError('Number of tensors and names provided have to match.  If there are more than two tensors,'
-                             'names have to be passed to the TensorDataset')
+
         self.tensors = tensors
         self.input_position = names.index("inputs")
         self.DataPoint = namedtuple('DataPoint', names)
@@ -246,14 +244,31 @@ class CachedTensorDataset(utils.Dataset):
         """
         retrieves the inputs (= tensors[0]) from the image cache. If the image ID is not present in the cache,
             the cache is updated to load the corresponding image into memory.
-        """
-        if type(index) == int:
-            key = self.tensors[0][index].item()
-        else:
-            key = self.tensors[0][index].numpy().astype(np.int64)
 
-        tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
+        Also has the functionality to include the previous image. In that case, len(tensors) will be 3
+        """
+
+        if len(self.tensors) == 2:
+            if type(index) == int:
+                key = self.tensors[0][index].item()
+            else:
+                key = self.tensors[0][index].numpy().astype(np.int64)
+            tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
                             for pos, tensor in enumerate(self.tensors)]
+
+        elif len(self.tensors) == 3:
+            if type(index) == int:
+                key_img = self.tensors[0][index].item()
+                key_prev_img = self.tensors[1][index].item()
+            else:
+                key_img = self.tensors[0][index].numpy().astype(np.int64)
+                key_prev_img = self.tensors[1][index].numpy().astype(np.int64)
+            targets = self.tensors[2][index]
+
+            img = torch.stack(list(self.image_cache[key_img]))
+            prev_img = torch.stack(list(self.image_cache[key_prev_img]))
+            full_img = torch.cat([img, prev_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img], dim=0)
+            tensors_expanded = [full_img, targets]
 
         return self.DataPoint(*tensors_expanded)
 
@@ -275,12 +290,19 @@ def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, re
     """
 
     image_ids = torch.from_numpy(args[0].astype(np.int64))
-    responses = torch.tensor(args[1]).to(torch.float)
-    tensors = [image_ids, responses]
-    if len(args) > 2:
+
+    tensors = [image_ids]
+
+    if len(args) > 2 and "eye_position" not in names:
+        prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
+        tensors.append(prev_image_ids)
+        responses = torch.tensor(args[2]).to(torch.float)
+    else:
+        responses = torch.tensor(args[1]).to(torch.float)
+
+    tensors.append(responses)
+    if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
-        if 'eye_position' not in names:
-            names = names + ('eye_position',)
         tensors.append(eye_position)
     dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names)
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
