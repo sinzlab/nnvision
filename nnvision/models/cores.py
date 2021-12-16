@@ -106,6 +106,7 @@ class SE2dCore(Core2d, nn.Module):
             gamma_input=0.0,
             skip=0,
             final_nonlinearity=True,
+            final_batch_norm=True,
             bias=False,
             momentum=0.1,
             pad_input=True,
@@ -213,7 +214,7 @@ class SE2dCore(Core2d, nn.Module):
                     bias=bias,
                     dilation=hidden_dilation,
                 )
-            if batch_norm:
+            if (final_batch_norm or l < self.layers - 1) and batch_norm:
                 layer["norm"] = nn.BatchNorm2d(hidden_channels, momentum=momentum)
 
             if (final_nonlinearity or l < self.layers - 1) and not linear:
