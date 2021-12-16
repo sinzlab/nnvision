@@ -1863,7 +1863,7 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
                                   readout_bias=True,
                                   elu_offset=0, stack=None, se_reduction=32, n_se_blocks=0,
                                   depth_separable=False, linear=False, data_info=None,
-                                  gamma_features=3, gamma_query=1,
+                                  gamma_features=3, gamma_query=1,final_batch_norm=True,
                                   ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -1935,7 +1935,8 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
                     se_reduction=se_reduction,
                     n_se_blocks=n_se_blocks,
                     depth_separable=depth_separable,
-                    linear=linear)
+                    linear=linear,
+                    final_batch_norm=final_batch_norm,)
 
     readout = MultipleSelfAttention2d(core, in_shape_dict=in_shapes_dict,
                                       n_neurons_dict=n_neurons_dict,
@@ -1962,6 +1963,7 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
                                         readout_bias=True,
                                         elu_offset=0, stack=None, se_reduction=32, n_se_blocks=0,
                                         depth_separable=False, linear=False, data_info=None,
+                                        final_batch_norm=True,
                                         gamma_features=3, # start of readout kwargs
                                         gamma_query=1,
                                         use_pos_enc=True,
@@ -2044,7 +2046,8 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
                     se_reduction=se_reduction,
                     n_se_blocks=n_se_blocks,
                     depth_separable=depth_separable,
-                    linear=linear)
+                    linear=linear,
+                    final_batch_norm=final_batch_norm)
 
     readout = MultipleMultiHeadAttention2d(core, in_shape_dict=in_shapes_dict,
                                            n_neurons_dict=n_neurons_dict,
