@@ -139,7 +139,7 @@ class ImageCache:
             return self.cache[key]
         else:
             filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
-            image = np.load(filename)
+            image = np.load(filename, allow_pickle=True)
             image = self.transform_image(image) if self.transform else image
             image = self.normalize_image(image) if self.normalize else image
             image = torch.tensor(image).to(torch.float)
