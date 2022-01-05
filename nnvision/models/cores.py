@@ -339,6 +339,7 @@ class TaskDrivenCore3(Core2d, nn.Module):
 
     def forward(self, input_):
         # If model is designed for RBG input but input is greyscale, repeat the same input 3 times
+        #TODO Add what to do if two channels are passed in (i.e. the previous image)
         if self.input_channels == 1:
             input_ = input_.repeat(1, 3, 1, 1)
 

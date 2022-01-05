@@ -1998,7 +1998,7 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -2015,7 +2015,8 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
             self.readout = readout
             self.offset = elu_offset
 
-        def forward(self, x, data_key=None, **kwargs):
+        def forward(self, *args, data_key=None, **kwargs):
+            x = args[0]
             x = self.core(x)
 
             sample = kwargs["sample"] if 'sample' in kwargs else None
@@ -2067,7 +2068,7 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)

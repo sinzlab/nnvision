@@ -295,7 +295,6 @@ def custom_task_core_selfattention_readout(dataloaders, seed,
                                      bias=readout_bias,
                                      gamma_query=gamma_query,
                                      gamma_features=gamma_features,
-                                     position_encoding=position_encoding,
                                      )
 
 
