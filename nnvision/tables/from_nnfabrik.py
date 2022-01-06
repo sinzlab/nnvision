@@ -23,7 +23,8 @@ dj.config['stores']['minio'] = {  # store in s3
     'bucket': 'nnfabrik',
     'location': 'dj-store',
     'access_key': os.environ.get('MINIO_ACCESS_KEY', 'FAKEKEY'),
-    'secret_key': os.environ.get('MINIO_SECRET_KEY', 'FAKEKEY')
+    'secret_key': os.environ.get('MINIO_SECRET_KEY', 'FAKEKEY'),
+    'secure': True,
 }
 
 
