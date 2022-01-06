@@ -28,6 +28,7 @@ dj.config['stores']['minio'] = {  # store in s3
 }
 
 
+
 @schema
 class DataInfo(DataInfoBase):
 

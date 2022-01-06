@@ -240,6 +240,21 @@ def get_explainable_var(dataloaders, as_dict=False, per_neuron=True, repeat_limi
 
 
 def compute_explainable_var(outputs, eps=1e-9):
+    """
+
+   Args:
+       outputs (list): Neuronal responses (ground truth) to image repeats. Dimensions: [num_images] np.array(num_reaps, num_neurons).
+                       Expects either a 3D numpy array of shape (N images, N repeats, N neurons),
+                       or a list of numpy arrays. with one list per test image, for example:
+                            outputs = [np.array(20, 100), np.array(19, 100), np.array(20, 100), ...]
+                        - in this example, there are as many images as there are list entries.
+                        - and in each array, there are the number of responses
+                            (20 repeats, or less, depending on the number of valid trials)
+                            times the number of neurons (N=100 in this example)
+   Returns:
+       explainable_var (np.array): the fraction of explainable variance per neuron (0.0 - 1.0)
+
+   """
     ImgVariance = []
     TotalVar = np.var(np.vstack(outputs), axis=0, ddof=1)
     for out in outputs:
@@ -384,3 +399,27 @@ def get_targets(model, dataloaders, device='cpu', as_dict=True, per_neuron=True,
     if not as_dict:
         responses = [v for v in responses.values()]
     return responses
+
+
+def get_avg_firing(dataloaders, as_dict=False, per_neuron=True):
+    """
+    Returns average firing rate across the whole dataset
+    """
+
+    avg_firing = {}
+    for k, dataloader in dataloaders.items():
+        target = torch.empty(0)
+        for batch in dataloader:
+            images, responses = batch[:2]
+            if len(images.shape) == 5:
+                responses = responses.squeeze(dim=0)
+            target = torch.cat((target, responses.detach().cpu()), dim=0)
+        avg_firing[k] = target.mean(0).numpy()
+
+    if not as_dict:
+        avg_firing = (
+            np.hstack([v for v in avg_firing.values()])
+            if per_neuron
+            else np.mean(np.hstack([v for v in avg_firing.values()]))
+        )
+    return avg_firing

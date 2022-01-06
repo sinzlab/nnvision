@@ -3,9 +3,9 @@ import torch
 from torch import nn
 from neuralpredictors.utils import get_module_output
 from torch.nn import Parameter
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout, SelfAttention2d
+from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
 from neuralpredictors.layers.legacy import Gaussian2d
-
+from neuralpredictors.layers.attention_readout import Attention2d, MultiHeadAttention2d
 
 class MultiReadout:
     def forward(self, *args, data_key=None, **kwargs):
@@ -69,7 +69,7 @@ class MultipleSelfAttention2d(torch.nn.ModuleDict):
         for k in n_neurons_dict:
             in_shape = get_module_output(core, in_shape_dict[k])[1:]
             n_neurons = n_neurons_dict[k]
-            self.add_module(k, SelfAttention2d(
+            self.add_module(k, Attention2d(
                 in_shape=in_shape,
                 outdims=n_neurons,
                 bias=bias)
@@ -84,6 +84,51 @@ class MultipleSelfAttention2d(torch.nn.ModuleDict):
 
     def regularizer(self, data_key):
         return self[data_key].feature_l1(average=False) * self.gamma_features + self[data_key].query_l1(average=False) * self.gamma_query
+
+
+
+class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
+    def __init__(self, core, in_shape_dict, n_neurons_dict, bias, gamma_features=0, gamma_query=0,
+                 use_pos_enc=True,
+                 learned_pos=False,
+                 heads=1,
+                 scale = False,
+                 key_embedding = False,
+                 value_embedding =False,
+                 temperature=(False,1.0),  # (learnable-per-neuron, value)
+                 dropout_pos=0.1,
+                 layer_norm=False,):
+
+        # super init to get the _module attribute
+        super().__init__()
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(k, MultiHeadAttention2d(
+                in_shape=in_shape,
+                outdims=n_neurons,
+                bias=bias,
+                use_pos_enc=use_pos_enc,
+                learned_pos=learned_pos,
+                heads=heads,
+                scale = scale,
+                key_embedding = key_embedding,
+                value_embedding =value_embedding,
+                temperature=temperature,  # (learnable-per-neuron, value)
+                dropout_pos=dropout_pos,
+                layer_norm=layer_norm,)
+                            )
+        self.gamma_features = gamma_features
+        self.gamma_query = gamma_query
+
+    def forward(self, *args, data_key=None, **kwargs):
+        if data_key is None and len(self) == 1:
+            data_key = list(self.keys())[0]
+        return self[data_key](*args, **kwargs)
+
+    def regularizer(self, data_key):
+        return self[data_key].feature_l1(average=False) * self.gamma_features + self[data_key].query_l1(average=False) * self.gamma_query
+
 
 
 
@@ -223,14 +268,14 @@ class MultipleRemappedGaussian2d(MultiReadout, torch.nn.ModuleDict):
 
 class MultipleAttention2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(
-        self,
-        core,
-        in_shape_dict,
-        n_neurons_dict,
-        attention_layers,
-        attention_kernel,
-        bias,
-        gamma_readout,
+            self,
+            core,
+            in_shape_dict,
+            n_neurons_dict,
+            attention_layers,
+            attention_kernel,
+            bias,
+            gamma_readout,
     ):
         # super init to get the _module attribute
         super().__init__()
@@ -307,13 +352,13 @@ class DenseReadout(nn.Module):
 
 class MultipleDense(MultiReadout, torch.nn.ModuleDict):
     def __init__(
-        self,
-        core,
-        in_shape_dict,
-        n_neurons_dict,
-        bias,
-        gamma_readout,
-        init_noise,
+            self,
+            core,
+            in_shape_dict,
+            n_neurons_dict,
+            bias,
+            gamma_readout,
+            init_noise,
     ):
         # super init to get the _module attribute
         super().__init__()
