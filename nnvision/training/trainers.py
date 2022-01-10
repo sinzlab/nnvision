@@ -22,7 +22,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
                                 max_iter=100, maximize=True, tolerance=1e-6,
                                 restore_best=True, lr_decay_steps=3,
                                 lr_decay_factor=0.3, min_lr=0.0001,  # lr scheduler args
-                                cb=None, track_training=False, return_test_score=False, **kwargs):
+                                cb=None, track_training=False, return_test_score=False, batchping=1000,**kwargs):
     """
 
     Args:
@@ -125,6 +125,9 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
             if (batch_no + 1) % optim_step_count == 0:
                 optimizer.step()
                 optimizer.zero_grad()
+            if batch_no % batchping == 0:
+                cb()
+
 
     ##### Model evaluation ####################################################################################################
     model.eval()
