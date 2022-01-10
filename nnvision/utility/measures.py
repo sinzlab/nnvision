@@ -10,16 +10,86 @@ import warnings
 from .measure_helpers import get_subset_of_repeats
 
 
-def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadcast_to_target=False):
+def model_predictions_repeats(
+        model, dataloader, data_key, device="cuda", broadcast_to_target=False
+):
     """
     Computes model predictions for a dataloader that yields batches with identical inputs along the first dimension.
     Unique inputs will be forwarded only once through the model
     Returns:
         target: ground truth, i.e. neuronal firing rates of the neurons as a list: [num_images][num_reaps, num_neurons]
-        output: responses as predicted by the network for the unique images. If broadcast_to_target, returns repeated 
+        output: responses as predicted by the network for the unique images. If broadcast_to_target, returns repeated
                 outputs of shape [num_images][num_reaps, num_neurons] else (default) returns unique outputs of shape [num_images, num_neurons]
     """
-    
+    target, output = [], []
+    unique_images = torch.empty(0).to(device)
+    for batch in dataloader:
+        images, responses = batch[:2]
+
+        if len(images.shape) == 5:
+            images = images.squeeze(dim=0)
+            responses = responses.squeeze(dim=0)
+
+        assert torch.all(
+            torch.eq(
+                images[-1, :1, ...],
+                images[0, :1, ...],
+            )
+        ), "All images in the batch should be equal"
+        unique_images = torch.cat(
+            (
+                unique_images,
+                images[
+                0:1,
+                ].to(device),
+            ),
+            dim=0,
+        )
+        target.append(responses.detach().cpu().numpy())
+
+        if images.shape[0] > 1:
+            with eval_state(model) if not is_ensemble_function(
+                    model
+            ) else contextlib.nullcontext():
+                with device_state(model, device) if not is_ensemble_function(
+                        model
+                ) else contextlib.nullcontext():
+                    output.append(
+                        model(images.to(device), data_key=data_key, **batch._asdict())
+                            .detach()
+                            .cpu()
+                            .numpy()
+                    )
+
+    # Forward unique images once
+    if len(output) == 0:
+        with eval_state(model) if not is_ensemble_function(
+                model
+        ) else contextlib.nullcontext():
+            with device_state(model, device) if not is_ensemble_function(
+                    model
+            ) else contextlib.nullcontext():
+                output = (
+                    model(unique_images.to(device), data_key=data_key).detach().cpu()
+                )
+
+            output = output.numpy()
+
+    if broadcast_to_target:
+        output = [np.broadcast_to(x, target[idx].shape) for idx, x in enumerate(output)]
+    return target, output
+
+
+def model_predictions_repeats_legacy(model, dataloader, data_key, device='cuda', broadcast_to_target=False):
+    """
+    Computes model predictions for a dataloader that yields batches with identical inputs along the first dimension.
+    Unique inputs will be forwarded only once through the model
+    Returns:
+        target: ground truth, i.e. neuronal firing rates of the neurons as a list: [num_images][num_reaps, num_neurons]
+        output: responses as predicted by the network for the unique images. If broadcast_to_target, returns repeated
+                outputs of shape [num_images][num_reaps, num_neurons] else (default) returns unique outputs of shape [num_images, num_neurons]
+    """
+
     target = []
     unique_images = torch.empty(0)
     for batch in dataloader:
@@ -27,22 +97,22 @@ def model_predictions_repeats(model, dataloader, data_key, device='cuda', broadc
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
-        
+
         assert torch.all(torch.eq(images[-1,], images[0,],)), "All images in the batch should be equal"
         unique_images = torch.cat((unique_images, images[0:1,]), dim=0)
         target.append(responses.detach().cpu().numpy())
-    
+
     # Forward unique images once:
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
             with torch.no_grad():
                 output = model(unique_images.to(device), data_key=data_key, **batch._asdict()).detach().cpu()
-    
-    output = output.numpy()   
-        
+
+    output = output.numpy()
+
     if broadcast_to_target:
         output = [np.broadcast_to(x, target[idx].shape) for idx, x in enumerate(output)]
-    
+
     return target, output
     
 
@@ -82,8 +152,10 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
         # Compute correlation with average targets
         target, output = model_predictions_repeats(dataloader=loader, model=model, data_key=k, device=device, broadcast_to_target=False)
-        target_mean = np.array([t.mean(axis=0) for t in target])
-        correlations[k] = corr(target_mean, output, axis=0)
+        if target[0].shape[0] == output[0].shape[0]:
+            output = np.array([t.mean(axis=0) for t in output])
+        target = np.array([t.mean(axis=0) for t in target])
+        correlations[k] = corr(target, output, axis=0)
         
         # Check for nans
         if np.any(np.isnan(correlations[k])):
