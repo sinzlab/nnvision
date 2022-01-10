@@ -246,6 +246,29 @@ class RandomNormalSurround(InitialGuessCreator):
         return f"{self.__class__.__qualname__}()"
 
 
+class RandomNormalSelectChannels(InitialGuessCreator):
+    """Used to create an initial guess tensor filled with values distributed according to a normal distribution."""
 
+    _create_random_tensor = randn
 
+    def __init__(self, selected_channels, selected_values):
+        if not isinstance(selected_channels, Iterable):
+            selected_channels = selected_channels
+
+        if not isinstance(selected_values, Iterable):
+            selected_values = selected_values
+
+        self.selected_channels = selected_channels
+        self.selected_values = selected_values
+
+    def __call__(self, *shape):
+        """Creates a random initial guess from which to start the MEI optimization process given a shape."""
+        inital = self._create_random_tensor(*shape)
+        for channel, value in zip(self.selected_channels, self.selected_values):
+            inital[:, channel, ...] = value
+
+        return inital
+
+    def __repr__(self):
+        return f"{self.__class__.__qualname__}()"
 
