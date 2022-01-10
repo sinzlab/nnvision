@@ -110,10 +110,11 @@ class ScoringBase(dj.Computed):
                 self.Units.insert1(key, ignore_extra_fields=True)
 
     def make(self, key):
-
+        self.connection.ping()
         dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(
             key=key)
         model = self.get_model(key=key)
+        self.connection.ping()
         unit_measures_dict = self.measure_function(model=model,
                                                  dataloaders=dataloaders,
                                                  device='cuda',
@@ -121,8 +122,10 @@ class ScoringBase(dj.Computed):
                                                  per_neuron=True,
                                                  **self.function_kwargs)
 
+        self.connection.ping()
         key[self.measure_attribute] = self.get_avg_of_unit_dict(unit_measures_dict)
         self.insert1(key, ignore_extra_fields=True)
+        self.connection.ping()
         self.insert_unit_measures(key=key, unit_measures_dict=unit_measures_dict)
 
 
