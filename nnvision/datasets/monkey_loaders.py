@@ -36,6 +36,7 @@ def monkey_static_loader(dataset,
                          stimulus_location=None,
                          monitor_scaling_factor=4.57,
                          include_prev_image=False,
+                         include_trial_id=False,
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
@@ -200,17 +201,34 @@ def monkey_static_loader(dataset,
             prev_validation_image_ids = prev_training_image_ids[val_idx]
             prev_training_image_ids = prev_training_image_ids[train_idx]
 
-        args_train = [training_image_ids, prev_training_image_ids, responses_train] if include_prev_image else [training_image_ids, responses_train]
-        args_val = [validation_image_ids, prev_validation_image_ids, responses_val] if include_prev_image else [validation_image_ids, responses_val]
-        args_test = [testing_image_ids, prev_testing_image_ids, responses_test] if include_prev_image else [testing_image_ids, responses_test]
+        if include_trial_id:
+            test_trial_ids = scipy.stats.zscore(range(len(testing_image_ids)))
+            all_train_trial_ids = scipy.stats.zscore(range(len(training_image_ids) + len(validation_image_ids)))
+            train_trial_ids = all_train_trial_ids[train_idx]
+            val_trial_ids = all_train_trial_ids[val_idx]
 
-        train_loader = get_cached_loader(*args_train, batch_size=batch_size, image_cache=cache)
-        val_loader = get_cached_loader(*args_val, batch_size=batch_size, image_cache=cache)
+        args_train = [training_image_ids, responses_train]
+        args_val = [validation_image_ids, responses_val]
+        args_test = [testing_image_ids, responses_test]
+
+        if include_prev_image:
+            args_train.insert(1, prev_training_image_ids)
+            args_val.insert(1, prev_validation_image_ids)
+            args_test.insert(1, prev_testing_image_ids)
+
+        if include_trial_id:
+            args_train.insert(1 + include_prev_image, train_trial_ids)
+            args_val.insert(1 + include_prev_image, val_trial_ids)
+            args_test.insert(1 + include_prev_image, test_trial_ids)
+
+        train_loader = get_cached_loader(*args_train, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id)
+        val_loader = get_cached_loader(*args_val, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id)
         test_loader = get_cached_loader(*args_test,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
-                                        repeat_condition=testing_image_ids)
+                                        repeat_condition=testing_image_ids,
+                                        include_trial_id=include_trial_id)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader

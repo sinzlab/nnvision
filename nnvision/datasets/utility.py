@@ -256,18 +256,27 @@ class CachedTensorDataset(utils.Dataset):
             tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
                             for pos, tensor in enumerate(self.tensors)]
 
-        elif len(self.tensors) == 3:
+        elif len(self.tensors) > 2:
             if type(index) == int:
                 key_img = self.tensors[0][index].item()
                 key_prev_img = self.tensors[1][index].item()
             else:
                 key_img = self.tensors[0][index].numpy().astype(np.int64)
                 key_prev_img = self.tensors[1][index].numpy().astype(np.int64)
-            targets = self.tensors[2][index]
+
 
             img = torch.stack(list(self.image_cache[key_img]))
             prev_img = torch.stack(list(self.image_cache[key_prev_img]))
-            full_img = torch.cat([img, prev_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img], dim=0)
+
+            if len(self.tensors) ==3:
+                targets = self.tensors[2][index]
+                full_img = torch.cat([img, prev_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img], dim=0)
+            else:
+                trial_id = self.tensors[2][index]
+                targets = self.tensors[3][index]
+                trial_id_img= torch.ones_like(img).to(img.dtype)*trial_id
+                full_img = torch.cat([img, prev_img, trial_id_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img, trial_id_img], dim=0)
+
             tensors_expanded = [full_img, targets]
 
         return self.DataPoint(*tensors_expanded)
@@ -276,7 +285,7 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, repeat_condition=None, names=('inputs', 'targets')):
+def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, repeat_condition=None, names=('inputs', 'targets'), include_trial_id=False):
     """
 
     Args:
@@ -290,13 +299,17 @@ def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, re
     """
 
     image_ids = torch.from_numpy(args[0].astype(np.int64))
-
+    #breakhere
     tensors = [image_ids]
 
     if len(args) > 2 and "eye_position" not in names:
         prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
         tensors.append(prev_image_ids)
-        responses = torch.tensor(args[2]).to(torch.float)
+        if len(args) == 4:
+            tensors.append(torch.from_numpy(args[2]).to(torch.float))
+            responses = torch.tensor(args[3]).to(torch.float)
+        else:
+            responses = torch.tensor(args[2]).to(torch.float)
     else:
         responses = torch.tensor(args[1]).to(torch.float)
 
