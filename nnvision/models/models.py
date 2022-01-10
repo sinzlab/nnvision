@@ -2074,3 +2074,62 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
     model = Encoder(core, readout, elu_offset)
 
     return model
+
+
+def transfer_core_selfattention_readout(dataloaders,
+                                        seed,
+                                        transfer_key=dict(),
+                                        core_transfer_table=None,
+                                        freeze_core=True,
+                                        gamma_features=3,
+                                        gamma_query=1,
+                                        elu_offset=0,
+                                        data_info=None,
+                                        readout_bias=True,
+                                        ):
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    set_random_seed(seed)
+
+    core_model = simple_core_transfer(dataloaders=dataloaders,
+                                      seed=seed,
+                                      transfer_key=transfer_key,
+                                      core_transfer_table=core_transfer_table,
+                                      freeze_core=freeze_core,
+                                      data_info=data_info,
+                                      )
+
+    core = core_model.core
+
+    readout = MultipleSelfAttention2d(core, in_shape_dict=in_shapes_dict,
+                                      n_neurons_dict=n_neurons_dict,
+                                      bias=readout_bias,
+                                      gamma_features=gamma_features,
+                                      gamma_query=gamma_query)
+
+    # initializing readout bias to mean response
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))[:2]
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core=core,
+                    readout=readout,
+                    elu_offset=elu_offset,
+                    )
+    return model
