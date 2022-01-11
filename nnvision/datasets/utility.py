@@ -324,13 +324,10 @@ def get_cached_loader(*args,
             tensors.append(prev_image_ids)
         if include_trial_id and include_prev_image:
             tensors.append(torch.from_numpy(args[2]).to(torch.float))
-            responses = torch.tensor(args[3]).to(torch.float)
         if include_trial_id and not include_prev_image:
             tensors.append(torch.from_numpy(args[1]).to(torch.float))
-            responses = torch.tensor(args[2]).to(torch.float)
-    else:
-        responses = torch.tensor(args[1]).to(torch.float)
 
+    responses = torch.tensor(args[-1]).to(torch.float)
     tensors.append(responses)
     if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
