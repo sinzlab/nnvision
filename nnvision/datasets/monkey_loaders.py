@@ -221,13 +221,14 @@ def monkey_static_loader(dataset,
             args_val.insert(1 + include_prev_image, val_trial_ids)
             args_test.insert(1 + include_prev_image, test_trial_ids)
 
-        train_loader = get_cached_loader(*args_train, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id)
-        val_loader = get_cached_loader(*args_val, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id)
+        train_loader = get_cached_loader(*args_train, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id, include_prev_image=include_prev_image,)
+        val_loader = get_cached_loader(*args_val, batch_size=batch_size, image_cache=cache, include_trial_id=include_trial_id,include_prev_image=include_prev_image,)
         test_loader = get_cached_loader(*args_test,
                                         batch_size=None,
                                         shuffle=None,
                                         image_cache=cache,
                                         repeat_condition=testing_image_ids,
+                                        include_prev_image=include_prev_image,
                                         include_trial_id=include_trial_id)
 
         dataloaders["train"][data_key] = train_loader

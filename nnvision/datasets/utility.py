@@ -231,7 +231,7 @@ class CachedTensorDataset(utils.Dataset):
         *tensors (Tensor): tensors that have the same size of the first dimension.
     """
 
-    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None):
+    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None, prev_img=None, trial_id=None):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
 
@@ -239,6 +239,8 @@ class CachedTensorDataset(utils.Dataset):
         self.input_position = names.index("inputs")
         self.DataPoint = namedtuple('DataPoint', names)
         self.image_cache = image_cache
+        self.prev_img = prev_img
+        self.trial_id = trial_id
 
     def __getitem__(self, index):
         """
@@ -259,18 +261,25 @@ class CachedTensorDataset(utils.Dataset):
         elif len(self.tensors) > 2:
             if type(index) == int:
                 key_img = self.tensors[0][index].item()
-                key_prev_img = self.tensors[1][index].item()
+                if self.prev_img:
+                    key_prev_img = self.tensors[1][index].item()
             else:
                 key_img = self.tensors[0][index].numpy().astype(np.int64)
-                key_prev_img = self.tensors[1][index].numpy().astype(np.int64)
-
+                if self.prev_img:
+                    key_prev_img = self.tensors[1][index].numpy().astype(np.int64)
 
             img = torch.stack(list(self.image_cache[key_img]))
-            prev_img = torch.stack(list(self.image_cache[key_prev_img]))
+            if self.prev_img:
+                prev_img = torch.stack(list(self.image_cache[key_prev_img]))
 
-            if len(self.tensors) ==3:
+            if len(self.tensors) == 3:
+                if self.trial_id:
+                    trial_id = self.tensors[1][index]
+                    trial_id_img = torch.ones_like(img).to(img.dtype)*trial_id
+
+                img_channel_2 = prev_img if self.prev_img else trial_id_img
                 targets = self.tensors[2][index]
-                full_img = torch.cat([img, prev_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img], dim=0)
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
             else:
                 trial_id = self.tensors[2][index]
                 targets = self.tensors[3][index]
@@ -285,7 +294,14 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, repeat_condition=None, names=('inputs', 'targets'), include_trial_id=False):
+def get_cached_loader(*args,
+                      batch_size=None,
+                      shuffle=True,
+                      image_cache=None,
+                      repeat_condition=None,
+                      names=('inputs', 'targets'),
+                      include_prev_image=False,
+                      include_trial_id=False):
     """
 
     Args:
@@ -303,12 +319,14 @@ def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, re
     tensors = [image_ids]
 
     if len(args) > 2 and "eye_position" not in names:
-        prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
-        tensors.append(prev_image_ids)
-        if len(args) == 4:
+        if include_prev_image:
+            prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
+            tensors.append(prev_image_ids)
+        if include_trial_id and include_prev_image:
             tensors.append(torch.from_numpy(args[2]).to(torch.float))
             responses = torch.tensor(args[3]).to(torch.float)
-        else:
+        if include_trial_id and not include_prev_image:
+            tensors.append(torch.from_numpy(args[1]).to(torch.float))
             responses = torch.tensor(args[2]).to(torch.float)
     else:
         responses = torch.tensor(args[1]).to(torch.float)
@@ -317,7 +335,7 @@ def get_cached_loader(*args, batch_size=None, shuffle=True, image_cache=None, re
     if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
         tensors.append(eye_position)
-    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names)
+    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id, )
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
