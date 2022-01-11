@@ -2076,6 +2076,83 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
     return model
 
 
+def transfer_core_multihead_attention_readout(dataloaders,
+                                             seed,
+                                             transfer_key=dict(),
+                                             core_transfer_table=None,
+                                             freeze_core=True,
+                                             gamma_features=3,
+                                             gamma_query=1,
+                                             elu_offset=0,
+                                             data_info=None,
+                                              use_pos_enc=True,
+                                              learned_pos=False,
+                                              heads=1,
+                                              scale = False,
+                                              key_embedding = False,
+                                              value_embedding =False,
+                                              temperature=(False,1.0),  # (learnable-per-neuron, value)
+                                              dropout_pos=0.1,
+                                              layer_norm=False,
+                                              readout_bias=True,
+                                              ):
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
+
+    set_random_seed(seed)
+
+    core_model = simple_core_transfer(dataloaders=dataloaders,
+                                      seed=seed,
+                                      transfer_key=transfer_key,
+                                      core_transfer_table=core_transfer_table,
+                                      freeze_core=freeze_core,
+                                      data_info=data_info,
+                                      )
+
+    core = core_model.core
+
+    readout = MultipleMultiHeadAttention2d(core, in_shape_dict=in_shapes_dict,
+                                           n_neurons_dict=n_neurons_dict,
+                                           bias=readout_bias,
+                                           gamma_features=gamma_features,
+                                           gamma_query=gamma_query,
+                                           use_pos_enc=use_pos_enc,
+                                           learned_pos=learned_pos,
+                                           heads=heads,
+                                           scale=scale,
+                                           key_embedding=key_embedding,
+                                           value_embedding=value_embedding,
+                                           temperature=temperature,
+                                           dropout_pos=dropout_pos,
+                                           layer_norm=layer_norm,)
+
+    # initializing readout bias to mean response
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))[:2]
+            readout[key].bias.data = targets.mean(0)
+
+    model = Encoder(core=core,
+                    readout=readout,
+                    elu_offset=elu_offset,
+                    )
+    return model
+
+
 def transfer_core_selfattention_readout(dataloaders,
                                         seed,
                                         transfer_key=dict(),
