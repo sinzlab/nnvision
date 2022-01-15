@@ -307,8 +307,6 @@ class TaskDrivenCore3(Core2d, nn.Module):
 
         self.model_probe = self.probe_model()
 
-        print("using custom core")
-
         # Remove the bias of the last conv layer if not :bias:
         if not bias and not self.use_probe:
             if 'bias' in model_clipped[-1]._parameters:
@@ -342,6 +340,8 @@ class TaskDrivenCore3(Core2d, nn.Module):
         #TODO Add what to do if two channels are passed in (i.e. the previous image)
         if self.input_channels == 1:
             input_ = input_.repeat(1, 3, 1, 1)
+        elif self.input_channels == 2:
+            input_ = input_.repeat((1, 2, 1, 1))[:,:-1, ...]
 
         if self.use_probe:
             input_ = self.model_probe(input_)
