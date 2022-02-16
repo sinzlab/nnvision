@@ -1,11 +1,14 @@
 import torch
+from torch import nn
+from einops import rearrange
 
 from torch import nn
 from neuralpredictors.utils import get_module_output
 from torch.nn import Parameter
 from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d, SpatialXFeatureLinear, RemappedGaussian2d, AttentionReadout
 from neuralpredictors.layers.legacy import Gaussian2d
-from neuralpredictors.layers.attention_readout import Attention2d, MultiHeadAttention2d
+from neuralpredictors.layers.attention_readout import Attention2d, MultiHeadAttention2d, SharedMultiHeadAttention2d
+from neuralpredictors.utils import PositionalEncoding2D
 
 class MultiReadout:
     def forward(self, *args, data_key=None, **kwargs):
@@ -86,7 +89,6 @@ class MultipleSelfAttention2d(torch.nn.ModuleDict):
         return self[data_key].feature_l1(average=False) * self.gamma_features + self[data_key].query_l1(average=False) * self.gamma_query
 
 
-
 class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, bias, gamma_features=0, gamma_query=0,
                  use_pos_enc=True,
@@ -97,7 +99,9 @@ class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
                  value_embedding =False,
                  temperature=(False,1.0),  # (learnable-per-neuron, value)
                  dropout_pos=0.1,
-                 layer_norm=False,):
+                 layer_norm=False,
+                 stack_pos_encoding=False,
+                 n_pos_channels=None):
 
         # super init to get the _module attribute
         super().__init__()
@@ -116,7 +120,10 @@ class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
                 value_embedding =value_embedding,
                 temperature=temperature,  # (learnable-per-neuron, value)
                 dropout_pos=dropout_pos,
-                layer_norm=layer_norm,)
+                layer_norm=layer_norm,
+                stack_pos_encoding=stack_pos_encoding,
+                n_pos_channels=n_pos_channels,
+            )
                             )
         self.gamma_features = gamma_features
         self.gamma_query = gamma_query
@@ -130,6 +137,131 @@ class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
         return self[data_key].feature_l1(average=False) * self.gamma_features + self[data_key].query_l1(average=False) * self.gamma_query
 
 
+class MultipleSharedMultiHeadAttention2d(torch.nn.ModuleDict):
+    def __init__(self,
+                 core, #
+                 in_shape_dict,
+                 n_neurons_dict,
+                 bias,
+                 gamma_features=0,
+                 gamma_query=0,
+                 gamma_embedding=0,
+                 use_pos_enc=True,
+                 learned_pos=False,
+                 heads=1,
+                 scale=False,
+                 key_embedding = False,
+                 value_embedding =False,
+                 temperature=(False,1.0),  # (learnable-per-neuron, value)
+                 dropout_pos=0.1,
+                 layer_norm=False,
+                 stack_pos_encoding=False,
+                 n_pos_channels=None,
+                 embed_out_dim=None,
+                 ):
+
+        if (bool(n_pos_channels) ^ bool(stack_pos_encoding)):
+            raise ValueError("when stacking the position embedding, the number of channels must be specified."
+                             "Similarly, when not stacking the position embedding, n_pos_channels must be None")
+
+
+        super().__init__()
+        self.n_data_keys = len(n_neurons_dict.keys())
+        self.heads = heads
+        self.key_embedding = key_embedding
+        self.value_embedding = value_embedding
+        self.use_pos_enc = use_pos_enc
+
+        # get output of first dim
+        k = list(in_shape_dict.keys())[0]
+        in_shape = get_module_output(core, in_shape_dict[k])[1:]
+
+        c, w, h = in_shape
+        if n_pos_channels and stack_pos_encoding:
+            c = c + n_pos_channels
+        c_out = c if not embed_out_dim else embed_out_dim
+
+        d_model = n_pos_channels if n_pos_channels else c
+        if self.use_pos_enc:
+            self.position_embedding = PositionalEncoding2D(
+                d_model=d_model, width=w, height=h, learned=learned_pos, dropout=dropout_pos,
+                stack_channels=stack_pos_encoding,
+            )
+
+        if layer_norm:
+            self.norm = nn.LayerNorm((c, w * h))
+        else:
+            self.norm = None
+
+        if self.key_embedding and self.value_embedding:
+            self.to_kv = nn.Linear(c, c_out * 2, bias=False)
+        elif self.key_embedding:
+            self.to_key = nn.Linear(c, c_out, bias=False)
+
+        # super init to get the _module attribute
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(k, SharedMultiHeadAttention2d(
+                in_shape=in_shape,
+                outdims=n_neurons,
+                bias=bias,
+                use_pos_enc=False,
+                key_embedding=key_embedding,
+                value_embedding=value_embedding,
+                heads=heads,
+                scale=scale,
+                temperature=temperature,  # (learnable-per-neuron, value)
+                layer_norm=layer_norm,
+                stack_pos_encoding=stack_pos_encoding,
+                n_pos_channels=n_pos_channels,
+                embed_out_dim=embed_out_dim,
+                )
+                            )
+        self.gamma_features = gamma_features
+        self.gamma_query = gamma_query
+        self.gamma_embedding = gamma_embedding
+
+    def forward(self, x, data_key=None, **kwargs):
+
+        i, c, w, h = x.size()
+        x = x.flatten(2, 3)  # [Images, Channels, w*h]
+        if self.use_pos_enc:
+            x_embed = self.position_embedding(x)  # -> [Images, Channels, w*h]
+        else:
+            x_embed = x
+
+        if self.norm is not None:
+            x_embed = self.norm(x_embed)
+
+        if self.key_embedding and self.value_embedding:
+            key, value = self.to_kv(rearrange(x_embed, "i c s -> (i s) c")).chunk(2, dim=-1)
+            key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+            value = rearrange(value, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+        elif self.key_embedding:
+            key = self.to_key(rearrange(x_embed, "i c s -> (i s) c"))
+            key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+            value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+        else:
+            key = rearrange(x_embed, "i (h d) s -> i h d s", h=self.heads)
+            value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+
+        if data_key is None and len(self) == 1:
+            data_key = list(self.keys())[0]
+        return self[data_key](key, value, **kwargs)
+
+    def embedding_l1(self, ):
+        if self.key_embedding and self.value_embedding:
+            return self.to_kv.weight.abs().mean()
+        elif self.key_embedding:
+            return self.to_key.weight.abs().mean()
+        else:
+            return 0
+
+    def regularizer(self, data_key):
+        return self[data_key].feature_l1(average=False) * self.gamma_features \
+               + self[data_key].query_l1(average=False) * self.gamma_query \
+               + self.embedding_l1() * self.gamma_embedding
 
 
 class MultipleSpatialXFeatureLinear(MultiReadout, torch.nn.ModuleDict):
