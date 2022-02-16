@@ -125,7 +125,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
             if (batch_no + 1) % optim_step_count == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-            if batch_no % batchping == 0:
+            if (batch_no % batchping == 0) and (cb is not None):
                 cb()
 
 
@@ -135,7 +135,8 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
 
     # Compute avg validation and test correlation
     validation_correlation = get_correlations(model, dataloaders["validation"], device=device, as_dict=False, per_neuron=False)
-    test_correlation = get_correlations(model, dataloaders["test"], device=device, as_dict=False, per_neuron=False)
+    if return_test_score:
+        test_correlation = get_correlations(model, dataloaders["test"], device=device, as_dict=False, per_neuron=False)
 
     # return the whole tracker output as a dict
     output = {k: v for k, v in tracker.log.items()} if track_training else {}
