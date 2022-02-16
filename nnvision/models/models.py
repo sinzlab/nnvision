@@ -1975,6 +1975,8 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
                                         temperature=(False,1.0),  # (learnable-per-neuron, value)
                                         dropout_pos=0.1,
                                         layer_norm=False,
+                                        gamma_hidden=0.0,
+                                        first_layer_stride=1,
                                         ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -2048,7 +2050,9 @@ def se_core_multihead_attention_readout(dataloaders, seed, hidden_channels=32, i
                     n_se_blocks=n_se_blocks,
                     depth_separable=depth_separable,
                     linear=linear,
-                    final_batch_norm=final_batch_norm)
+                    final_batch_norm=final_batch_norm,
+                    gamma_hidden=gamma_hidden,
+                    first_layer_stride=first_layer_stride,)
 
     readout = MultipleMultiHeadAttention2d(core, in_shape_dict=in_shapes_dict,
                                            n_neurons_dict=n_neurons_dict,
