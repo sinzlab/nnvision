@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+from einops import rearrange
 
 class Encoder(nn.Module):
 
@@ -41,7 +41,7 @@ class EncoderPNL(nn.Module):
 
 class EncoderShifter(nn.Module):
 
-    def __init__(self, core, readout, shifter, elu_offset):
+    def __init__(self, core, readout, shifter, elu_offset, stack_prev_image=False,):
         super().__init__()
         self.core = core
         self.readout = readout
@@ -50,7 +50,6 @@ class EncoderShifter(nn.Module):
 
 
     def forward(self, *args, data_key=None, eye_position=None, shift=None, **kwargs):
-
         x = self.core(args[0])
         if eye_position is not None and self.shifter is not None:
             eye_position = eye_position.to(x.device).to(dtype=x.dtype)
@@ -62,3 +61,4 @@ class EncoderShifter(nn.Module):
 
     def regularizer(self, data_key):
         return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
+
