@@ -1,3 +1,5 @@
+import os
+
 from collections import OrderedDict, Iterable
 import warnings
 import torch
@@ -10,6 +12,7 @@ from .architectures import SQ_EX_Block
 
 from torch.nn import functional as F
 from torchvision.models import vgg16, alexnet, vgg19, vgg19_bn
+from einops import rearrange
 
 try:
     import ptrnets
@@ -104,6 +107,7 @@ class SE2dCore(Core2d, nn.Module):
             hidden_kern,
             layers=3,
             gamma_input=0.0,
+            gamma_hidden=0.0,
             skip=0,
             final_nonlinearity=True,
             final_batch_norm=True,
@@ -120,6 +124,7 @@ class SE2dCore(Core2d, nn.Module):
             depth_separable=False,
             attention_conv=False,
             linear=False,
+            first_layer_stride=1,
     ):
         """
         Args:
@@ -163,7 +168,9 @@ class SE2dCore(Core2d, nn.Module):
         self._input_weights_regularizer = regularizers.__dict__[input_regularizer](**regularizer_config)
 
         self.layers = layers
+        self.depth_separable = depth_separable
         self.gamma_input = gamma_input
+        self.gamma_hidden = gamma_hidden
         self.input_channels = input_channels
         self.hidden_channels = hidden_channels
         self.skip = skip
@@ -177,7 +184,12 @@ class SE2dCore(Core2d, nn.Module):
         # --- first layer
         layer = OrderedDict()
         layer["conv"] = nn.Conv2d(
-            input_channels, hidden_channels, input_kern, padding=input_kern // 2 if pad_input else 0, bias=bias
+            input_channels,
+            hidden_channels,
+            input_kern,
+            padding=input_kern // 2 if pad_input else 0,
+            bias=bias,
+            stride=first_layer_stride,
         )
         if batch_norm:
             layer["norm"] = nn.BatchNorm2d(hidden_channels, momentum=momentum)
@@ -239,8 +251,18 @@ class SE2dCore(Core2d, nn.Module):
     def laplace(self):
         return self._input_weights_regularizer(self.features[0].conv.weight)
 
+    def group_sparsity(self):
+        ret = 0
+        for l in range(1, self.layers):
+            if self.depth_separable:
+                for ds_i in range(3):
+                    ret = ret + self.features[l].ds_conv[ds_i].weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+            else:
+                ret = ret + self.features[l].conv.weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+        return ret / ((self.layers - 1) if self.layers > 1 else 1)
+
     def regularizer(self):
-        return self.gamma_input * self.laplace()
+        return self.gamma_input * self.laplace() + self.gamma_hidden * self.group_sparsity()
 
     @property
     def outchannels(self):
@@ -260,6 +282,7 @@ class TaskDrivenCore3(Core2d, nn.Module):
             final_nonlinearity=True,
             momentum=0.1,
             fine_tune=False,
+            replace_downsampling=False,
             **kwargs
     ):
         """
@@ -282,6 +305,9 @@ class TaskDrivenCore3(Core2d, nn.Module):
             )
         super().__init__()
 
+        if not "resnet" in model_name and (replace_conv_stride or replace_pooling):
+            raise ValueError("replacing conv or pooling layers is only implemented for the ResNet")
+
         self.input_channels = input_channels
         self.momentum = momentum
         self.use_probe = False
@@ -290,13 +316,30 @@ class TaskDrivenCore3(Core2d, nn.Module):
 
         # Download model and cut after specified layer
         self.model = getattr(ptrnets, model_name)(pretrained=pretrained)
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if replace_downsampling:
+            torch.save(self.model.state_dict(), 'model_weights')
 
+            self.model.conv1 = nn.Conv2d(3,64,7, padding=(3, 3), bias=False, dilation=2)
+            self.model.layer2[0].conv2 = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
+            self.model.layer3[0].conv2 = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
+            self.model.layer4[0].conv2 = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
+
+            self.model.layer2[0].downsample[0] = nn.Conv2d(256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            self.model.layer3[0].downsample[0] = nn.Conv2d(512, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            self.model.layer4[0].downsample[0] = nn.Conv2d(1024, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
+            self.model.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1, dilation=1, ceil_mode=False)
+
+            self.model.load_state_dict(torch.load("model_weights"), strict=True)
+            os.remove("model_weights")
+
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
 
         # Decide whether to probe the model with a forward hook or to clip the model by replicating architecture of the model up to layer :layer_name:
 
         x = torch.randn(1,3,224,224).to(self.device)
+        #model_clipped = clip_model(self.model, self.layer_name)
+        #clip_out = model_clipped(x)
         try:
             self.model.eval();
             model_clipped = clip_model(self.model, self.layer_name)
@@ -338,33 +381,24 @@ class TaskDrivenCore3(Core2d, nn.Module):
     def forward(self, input_):
         # If model is designed for RBG input but input is greyscale, repeat the same input 3 times
         #TODO Add what to do if two channels are passed in (i.e. the previous image)
+
+        if len(input_.shape) == 3:
+            input_ = input_[:, None, ...]
+
         if self.input_channels == 1:
             input_ = input_.repeat(1, 3, 1, 1)
-        elif self.input_channels == 2:
-            input_ = input_.repeat((1, 2, 1, 1))[:,:-1, ...]
+
+        if self.input_channels == 2:
+            input_ = rearrange(input_, "i (c cp) w h -> (i cp) c w h", c=1, cp=2)
+            input_ = input_.repeat(1, 3, 1, 1)
 
         if self.use_probe:
             input_ = self.model_probe(input_)
 
         input_ = self.features(input_)
+        if self.input_channels == 2:
+            input_ = rearrange(input_, "(i cp) c w h -> i (cp c) w h", cp=2)
         return input_
-
-    def regularizer(self):
-        return 0   # useful for final loss
-
-
-    def probe_model(self):
-
-        assert self.layer_name in [n for n,_ in self.model.named_modules()], 'No module named {}'.format(self.layer_name)
-        hook = hook_model_module(self.model, self.layer_name)
-        def func(x):
-            try:
-                self.model(x);
-            except:
-                pass
-            return hook(self.layer_name)
-
-        return func
 
     @property
     def outchannels(self):
@@ -379,6 +413,22 @@ class TaskDrivenCore3(Core2d, nn.Module):
         else:
             outch = self.features.TaskDriven(x).shape[1]
         return outch
+
+    def regularizer(self):
+        return 0   # useful for final loss
+
+    def probe_model(self):
+
+        assert self.layer_name in [n for n,_ in self.model.named_modules()], 'No module named {}'.format(self.layer_name)
+        hook = hook_model_module(self.model, self.layer_name)
+        def func(x):
+            try:
+                self.model(x);
+            except:
+                pass
+            return hook(self.layer_name)
+
+        return func
 
     def initialize(self, cuda=False):
         # Overwrite parent class's initialize function
