@@ -12,6 +12,8 @@ from skimage import morphology
 from skimage.transform import rescale
 from scipy.io import savemat
 import scipy.io as sio
+from mei.legacy.ops import ChangeNorm
+from scipy.ndimage import center_of_mass, shift
 
 
 def rescale_image(image, scale):
@@ -37,10 +39,7 @@ def rescale_image(image, scale):
     return image
 
 
-from scipy.ndimage import center_of_mass, shift
-
-
-def shift_image_based_on_masks(img, masks):
+def shift_image_based_on_masks(img, original_mask, masks):
     """
     takes a single image as an input, as well as n masks, and returns a list of images, each shifted to a particular location
 
@@ -49,10 +48,13 @@ def shift_image_based_on_masks(img, masks):
     """
     h, w = img.shape
 
+    com = center_of_mass(original_mask, labels=None, index=None)
+    centered_image = shift(img, (h//2 - int(com[0]), w//2 - int(com[1])))
+
     shifted_images = []
     for mask in masks:
         com = center_of_mass(mask, labels=None, index=None)
-        shifted_image = shift(img, (h - int(com[0]), w - int(com[1])))
+        shifted_image = shift(centered_image, (int(com[0]) - h//2, int(com[1]) - w//2))
         shifted_images.append(shifted_image)
     return shifted_images
 
