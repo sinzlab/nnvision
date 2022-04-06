@@ -1135,7 +1135,8 @@ def monkey_v4_cl(dataset,
                 img_mean=None,
                 img_std=None,
                 dataloader_keys=None,
-                zscore_images=True,):
+                zscore_images=True,
+                 test_image_path=None,):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -1213,17 +1214,24 @@ def monkey_v4_cl(dataset,
 
         # Initialize cache
         cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=True)
+                           img_std=img_std, transform=True, normalize=zscore_images)
+        if test_image_path is not None:
+            oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                                          img_std=img_std, transform=True, normalize=zscore_images)
     else:
         if img_mean is not None:
             cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+                               img_std=img_std, transform=True, normalize=zscore_images)
+            if test_image_path is not None:
+                oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                                   img_std=img_std, transform=True, normalize=zscore_images)
         else:
-
             # Initialize cache with no normalization
             cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
                                normalize=False)
-
+            if test_image_path is not None:
+                oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                                          img_std=img_std, transform=True, normalize=False)
             if zscore_images:
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
                 cache.zscore_images(update_stats=True)
@@ -1233,7 +1241,7 @@ def monkey_v4_cl(dataset,
     n_images = len(cache)
     data_info = {}
     if stimulus_location is not None:
-        TestImageCaches = {}
+        TestImageCaches, OracleImageCaches = {}, {}
 
     dataloaders = {k:{} for k in dataloader_keys}
     pickle_file_dict = {k:{} for k in ['responses', 'ids']}
@@ -1244,6 +1252,8 @@ def monkey_v4_cl(dataset,
         subject_ids = raw_data["subject_id"]
         data_key = str(raw_data["session_id"])
         TestImageCaches[data_key] = cache
+        if test_image_path is not None:
+            OracleImageCaches[data_key] = oracle_cache
 
         for stim_key in dataloader_keys:
             pickle_file_dict["responses"][stim_key] = raw_data[stim_key+"_responses"].astype(np.float32).transpose((2, 0, 1))
@@ -1251,11 +1261,16 @@ def monkey_v4_cl(dataset,
             if time_bins_sum is not None:  # then average over given time bins
                 pickle_file_dict["responses"][stim_key] = (np.mean if avg else np.sum)(pickle_file_dict["responses"][stim_key][:, :, time_bins_sum], axis=-1)
 
+            if stim_key == "test_image" and test_image_path is not None:
+                stim_key_cache = OracleImageCaches[data_key]
+            else:
+                stim_key_cache = TestImageCaches[data_key]
+
             loader = get_cached_loader(pickle_file_dict["ids"][stim_key],
                                        pickle_file_dict["responses"][stim_key],
                                        batch_size=None,
                                        shuffle=None,
-                                       image_cache=TestImageCaches[data_key],
+                                       image_cache=stim_key_cache,
                                        repeat_condition=pickle_file_dict["ids"][stim_key])
 
             dataloaders[stim_key][data_key] = loader
