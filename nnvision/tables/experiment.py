@@ -62,3 +62,66 @@ class StaticImage(dj.Manual):
 
             child_keys = (stim.StaticImage.ImageNet & parent_key & key).fetch(as_dict=True)
             self.ImageNet().insert(child_keys, skip_duplicates=True)
+
+
+@schema
+class GaussianCLMaskedControl(dj.Manual):
+    definition = """
+    -> StaticImage.Image
+    cl_image_id          : int
+    ---
+    image_mask           : longblob
+    image_mask_key       : longblob
+    image                : longblob
+    """
+
+@schema
+class GaussianCLMaskedMEI(dj.Manual):
+    definition = """
+    cl_image_id          : int
+    method_fn            : varchar(64)                  # name of the method function
+    method_hash          : varchar(32)                  # hash of the method config
+    dataset_fn           : varchar(64)                  # name of the dataset loader function
+    dataset_hash         : varchar(64)                  # hash of the configuration object
+    ensemble_hash        : char(32)                     # the hash of the ensemble
+    data_key             : varchar(64)                  # 
+    unit_id              : int                          # 
+    unit_type            : int                          # 
+    mei_seed             : tinyint unsigned             # MEI seed
+    ---
+    image_mask           : longblob
+    image                : longblob
+    """
+
+@schema
+class ShiftCLMaskedControl(dj.Manual):
+    definition = """
+    -> StaticImage.Image
+    cl_image_id          : int
+    ---
+    image_mask           : longblob
+    shift_mask           : longblob
+    image_mask_key       : longblob
+    shift_mask_key       : longblob
+    image                : longblob
+    """
+
+@schema
+class ShiftCLMaskedMEI(dj.Manual):
+    definition = """
+    cl_image_id          : int
+    method_fn            : varchar(64)                  # name of the method function
+    method_hash          : varchar(32)                  # hash of the method config
+    dataset_fn           : varchar(64)                  # name of the dataset loader function
+    dataset_hash         : varchar(64)                  # hash of the configuration object
+    ensemble_hash        : char(32)                     # the hash of the ensemble
+    data_key             : varchar(64)                  # 
+    unit_id              : int                          # 
+    unit_type            : int                          # 
+    mei_seed             : tinyint unsigned             # MEI seed
+    ---
+    image_mask           : longblob
+    shift_mask           : longblob
+    shift_mask_key       : longblob
+    image                : longblob
+    """
