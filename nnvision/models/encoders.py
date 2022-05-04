@@ -11,7 +11,10 @@ class Encoder(nn.Module):
         self.readout = readout
         self.offset = elu_offset
 
-    def forward(self, x, data_key=None, **kwargs):
+    def forward(self, x, data_key=None, repeat_channel_dim=None, **kwargs):
+        if repeat_channel_dim is not None:
+            x = x.repeat(1, repeat_channel_dim, 1, 1)
+            x[:, 1:, ...] = 0
         x = self.core(x)
 
         x = self.readout(x, data_key=data_key)
