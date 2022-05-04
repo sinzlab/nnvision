@@ -11,7 +11,7 @@ from .measure_helpers import get_subset_of_repeats
 
 
 def model_predictions_repeats(
-        model, dataloader, data_key, device="cuda", broadcast_to_target=False
+        model, dataloader, data_key, device="cuda", broadcast_to_target=False, repeat_channel_dim=None,
 ):
     """
     Computes model predictions for a dataloader that yields batches with identical inputs along the first dimension.
@@ -55,7 +55,7 @@ def model_predictions_repeats(
                         model
                 ) else contextlib.nullcontext():
                     output.append(
-                        model(images.to(device), data_key=data_key, **batch._asdict())
+                        model(images.to(device), data_key=data_key, **batch._asdict(), repeat_channel_dim=repeat_channel_dim)
                             .detach()
                             .cpu()
                             .numpy()
@@ -70,7 +70,7 @@ def model_predictions_repeats(
                     model
             ) else contextlib.nullcontext():
                 output = (
-                    model(unique_images.to(device), data_key=data_key).detach().cpu()
+                    model(unique_images.to(device), data_key=data_key, repeat_channel_dim=repeat_channel_dim).detach().cpu()
                 )
 
             output = output.numpy()
