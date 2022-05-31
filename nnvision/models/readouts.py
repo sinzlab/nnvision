@@ -139,7 +139,7 @@ class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
 
 class MultipleSharedMultiHeadAttention2d(torch.nn.ModuleDict):
     def __init__(self,
-                 core, #
+                 core,
                  in_shape_dict,
                  n_neurons_dict,
                  bias,

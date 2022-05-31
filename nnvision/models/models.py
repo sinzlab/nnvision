@@ -2137,28 +2137,7 @@ def se_core_shared_multihead_attention(dataloaders, seed, hidden_channels=32, in
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
-
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, *args, data_key=None, **kwargs):
-            x = args[0]
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
-
     set_random_seed(seed)
-
     core = SE2dCore(input_channels=core_input_channels,
                     hidden_channels=hidden_channels,
                     input_kern=input_kern,
@@ -2347,4 +2326,51 @@ def transfer_core_selfattention_readout(dataloaders,
                     readout=readout,
                     elu_offset=elu_offset,
                     )
+    return model
+
+
+def transfere_core_shared_multihead_attention(dataloaders,
+                                               seed,
+                                               transfer_key=dict(),
+                                               transfer_table=None,
+                                               freeze_core=True,
+                                               freeze_readout=True,
+                                               data_info=None,
+                                               **kwargs):
+
+
+    # set default values that are in line with parameter expansion
+    if transfer_table is None:
+        transfer_table = TrainedTransferModel
+    elif transfer_table == "TrainedModel":
+        transfer_table = TrainedModel
+
+    model_fn, model_config = (Model & transfer_key).fetch1("model_fn", "model_config")
+
+    if kwargs:
+        model_config.update(kwargs)
+        model = get_model(model_fn=model_fn,
+                          model_config=model_config,
+                          dataloaders=dataloaders,
+                          seed=seed)
+    else:
+        model = (Model & transfer_key).build_model(dataloaders=dataloaders, seed=seed, data_info=data_info)
+
+    model_state = (transfer_table & transfer_key).get_full_config(include_state_dict=True)["state_dict"]
+
+    if model_config.get("learned_pos", False) is False:
+        _ = model_state.pop("readout.position_embedding.twod_pe")
+
+
+    model.load_state_dict(model_state, strict=False)
+
+    if freeze_core:
+        for params in model.core.parameters():
+            params.requires_grad = False
+
+    if freeze_readout:
+        for name, param in model.readout.named_parameters():
+            for k in dataloaders["train"].keys():
+                if k not in name:
+                    param.requires_grad = False
     return model
