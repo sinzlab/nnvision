@@ -17,7 +17,10 @@ class Encoder(nn.Module):
             x[:, 1:, ...] = 0
         x = self.core(x)
 
-        x = self.readout(x, data_key=data_key)
+        x = self.readout(x, data_key=data_key, **kwargs)
+        if kwargs.get("output_attn_weights", False):
+            x, attention_weights = x
+            return F.elu(x + self.offset), attention_weights
         return F.elu(x + self.offset) + 1
 
     def regularizer(self, data_key):
