@@ -19,7 +19,7 @@ from nnfabrik.utility.dj_helpers import CustomSchema
 from ..datasets.conventions import unit_type_conventions
 
 
-schema = CustomSchema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
 
 
 @schema
@@ -111,11 +111,13 @@ class Recording(dj.Computed):
             if dataset == 'PlosCB19_V1':
                 n_neurons = raw_data["testing_responses"].shape[1]
             else:
-                n_neurons = raw_data["testing_responses"].shape[0]
+                responses_test = raw_data["testing_responses"]
+                if len(responses_test.shape) < 3:
+                    responses_test = responses_test[None, ...]
+                n_neurons = responses_test.shape[0]
 
             unit_ids = raw_data.get("unit_ids", np.arange(n_neurons))
             unit_type = raw_data.get("unit_type", np.ones(n_neurons))
-
             electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
                                                                                                       dtype=np.double)
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
@@ -123,6 +125,12 @@ class Recording(dj.Computed):
             relative_depth = raw_data[
                 "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
                                                                                                    dtype=np.double)
+            if not isinstance(unit_ids, Iterable):
+                unit_ids = [unit_ids]
+                electrode = [electrode]
+                relative_depth = [relative_depth]
+
+
             unit_ids = np.concatenate([unit_ids, unit_ids_mua])
             unit_type = np.concatenate([unit_type, unit_types_mua])
             unit_type_int = []

@@ -6,7 +6,7 @@ import numpy as np
 from skimage.transform import rescale
 from collections import namedtuple, Iterable
 import os
-from mlutils.data.samplers import RepeatsBatchSampler
+from neuralpredictors.data.samplers import RepeatsBatchSampler
 
 
 def get_oracle_dataloader(dat,
@@ -89,7 +89,16 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None, subsample=1, crop=0, scale=1, img_mean=None, img_std=None, transform=True, normalize=True, filename_precision=6):
+    def __init__(self, path=None,
+                 subsample=1,
+                 crop=0,
+                 scale=1,
+                 img_mean=None,
+                 img_std=None,
+                 transform=True,
+                 normalize=True,
+                 filename_precision=6,
+                 ):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
@@ -130,7 +139,7 @@ class ImageCache:
             return self.cache[key]
         else:
             filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
-            image = np.load(filename)
+            image = np.load(filename, allow_pickle=True)
             image = self.transform_image(image) if self.transform else image
             image = self.normalize_image(image) if self.normalize else image
             image = torch.tensor(image).to(torch.float)
@@ -174,7 +183,6 @@ class ImageCache:
         """
         image = (image - self.img_mean) / self.img_std
         return image
-               
 
     @property
     def cache_size(self):
@@ -203,6 +211,14 @@ class ImageCache:
             self.img_mean = np.float32(img_mean.item())
             self.img_std  = np.float32(img_std.item())
         
+    @property
+    def image_shape(self):
+        if self.cache_size > 0:
+            image = next(iter(self.cache.values()))
+            return image.shape
+        else:
+            self.update(1)
+            return self.image_shape
 
 
 class CachedTensorDataset(utils.Dataset):
@@ -215,29 +231,62 @@ class CachedTensorDataset(utils.Dataset):
         *tensors (Tensor): tensors that have the same size of the first dimension.
     """
 
-    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None):
+    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None, prev_img=None, trial_id=None):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
-        if not len(tensors) == len(names):
-            raise ValueError('Number of tensors and names provided have to match.  If there are more than two tensors,'
-                             'names have to be passed to the TensorDataset')
+
         self.tensors = tensors
         self.input_position = names.index("inputs")
         self.DataPoint = namedtuple('DataPoint', names)
         self.image_cache = image_cache
+        self.prev_img = prev_img
+        self.trial_id = trial_id
 
     def __getitem__(self, index):
         """
         retrieves the inputs (= tensors[0]) from the image cache. If the image ID is not present in the cache,
             the cache is updated to load the corresponding image into memory.
-        """
-        if type(index) == int:
-            key = self.tensors[0][index].item()
-        else:
-            key = self.tensors[0][index].numpy().astype(np.int32)
 
-        tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
+        Also has the functionality to include the previous image. In that case, len(tensors) will be 3
+        """
+
+        if len(self.tensors) == 2:
+            if type(index) == int:
+                key = self.tensors[0][index].item()
+            else:
+                key = self.tensors[0][index].numpy().astype(np.int64)
+            tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
                             for pos, tensor in enumerate(self.tensors)]
+
+        elif len(self.tensors) > 2:
+            if type(index) == int:
+                key_img = self.tensors[0][index].item()
+                if self.prev_img:
+                    key_prev_img = self.tensors[1][index].item()
+            else:
+                key_img = self.tensors[0][index].numpy().astype(np.int64)
+                if self.prev_img:
+                    key_prev_img = self.tensors[1][index].numpy().astype(np.int64)
+
+            img = torch.stack(list(self.image_cache[key_img]))
+            if self.prev_img:
+                prev_img = torch.stack(list(self.image_cache[key_prev_img]))
+
+            if len(self.tensors) == 3:
+                if self.trial_id:
+                    trial_id = self.tensors[1][index]
+                    trial_id_img = torch.ones_like(img).to(img.dtype)*trial_id
+
+                img_channel_2 = prev_img if self.prev_img else trial_id_img
+                targets = self.tensors[2][index]
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+            else:
+                trial_id = self.tensors[2][index]
+                targets = self.tensors[3][index]
+                trial_id_img= torch.ones_like(img).to(img.dtype)*trial_id
+                full_img = torch.cat([img, prev_img, trial_id_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img, trial_id_img], dim=0)
+
+            tensors_expanded = [full_img, targets]
 
         return self.DataPoint(*tensors_expanded)
 
@@ -245,7 +294,14 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cache=None, repeat_condition=None):
+def get_cached_loader(*args,
+                      batch_size=None,
+                      shuffle=True,
+                      image_cache=None,
+                      repeat_condition=None,
+                      names=('inputs', 'targets'),
+                      include_prev_image=False,
+                      include_trial_id=False):
     """
 
     Args:
@@ -258,9 +314,25 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
     Returns: a PyTorch DataLoader object
     """
 
-    image_ids = torch.tensor(image_ids.astype(np.int32))
-    responses = torch.tensor(responses).to(torch.float)
-    dataset = CachedTensorDataset(image_ids, responses, image_cache=image_cache)
+    image_ids = torch.from_numpy(args[0].astype(np.int64))
+    #breakhere
+    tensors = [image_ids]
+
+    if len(args) > 2 and "eye_position" not in names:
+        if include_prev_image:
+            prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
+            tensors.append(prev_image_ids)
+        if include_trial_id and include_prev_image:
+            tensors.append(torch.from_numpy(args[2]).to(torch.float))
+        if include_trial_id and not include_prev_image:
+            tensors.append(torch.from_numpy(args[1]).to(torch.float))
+
+    responses = torch.tensor(args[-1]).to(torch.float)
+    tensors.append(responses)
+    if len(args) > 2 and "eye_position" in names:
+        eye_position = torch.tensor(args[2]).to(torch.float)
+        tensors.append(eye_position)
+    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id, )
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
@@ -268,3 +340,27 @@ def get_cached_loader(image_ids, responses, batch_size, shuffle=True, image_cach
                                                                                                             shuffle=shuffle,
                                                                                                             )
     return dataloader
+
+
+def get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57):
+    """
+
+    Args:
+        stimulus_location: in pixels on the presentation monitor (1920 x 1080 resolution).
+        crop (tuple): [(crop_top, crop_bottom), (crop_left, crop_right)]
+        monitor_scaling_factor: upscaling factor from imagenet images (default 420x420 px) to monitor presentation
+            (1920 x 1080 px)
+
+    Returns:
+        crop_shifted (tuple):
+    """
+
+    # rounding down the pixels after dividing by the scaling factor
+    w_shift = int(stimulus_location[0] / monitor_scaling_factor)
+    h_shift = int(stimulus_location[1] / monitor_scaling_factor)
+
+    crop_shifted = ((crop[0][0] + h_shift, crop[0][1] - h_shift),
+                    (crop[1][0] + w_shift, crop[1][1] - w_shift))
+
+    return crop_shifted
+
