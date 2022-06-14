@@ -342,6 +342,57 @@ def get_cached_loader(*args,
     return dataloader
 
 
+def get_cached_loader_extended(*args,
+                      batch_size=None,
+                      shuffle=True,
+                      image_cache=None,
+                      repeat_condition=None,
+                      names=('inputs', 'targets'),
+                      include_prev_image=False,
+                      num_prev_images = 0,
+                      include_trial_id=False):
+    """
+
+    Args:
+        image_ids: an array of image IDs
+        responses: Numpy Array, Dimensions: N_images x Neurons
+        batch_size: int - batch size for the dataloader
+        shuffle: Boolean, shuffles image in the dataloader if True
+        image_cache: a cache object which stores the images
+        num_prev_images: how many prev images should be included
+
+    Returns: a PyTorch DataLoader object
+    """
+
+    image_ids = torch.from_numpy(args[0].astype(np.int64))
+    #breakhere
+    tensors = [image_ids]
+
+    if len(args) > 2 and "eye_position" not in names:
+        if include_prev_image:
+            prev_image_ids = torch.from_numpy(args[1].astype(np.int64))
+            for i in range(num_prev_images):
+                tensors.append(prev_image_ids[i])
+        if include_trial_id and include_prev_image:
+            tensors.append(torch.from_numpy(args[2]).to(torch.float))
+        if include_trial_id and not include_prev_image:
+            tensors.append(torch.from_numpy(args[1]).to(torch.float))
+
+    responses = torch.tensor(args[-1]).to(torch.float)
+    tensors.append(responses)
+    if len(args) > 2 and "eye_position" in names:
+        eye_position = torch.tensor(args[2]).to(torch.float)
+        tensors.append(eye_position)
+    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id, )
+    sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
+
+    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
+                                                                                                            batch_size=batch_size,
+                                                                                                            shuffle=shuffle,
+                                                                                                            )
+    return dataloader
+
+
 def get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57):
     """
 
