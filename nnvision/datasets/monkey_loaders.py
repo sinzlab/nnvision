@@ -295,6 +295,7 @@ def monkey_static_loader_extended(dataset,
                          include_prev_image=False,
                          num_prev_images = 0,
                          include_trial_id=False,
+
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images.
@@ -407,7 +408,6 @@ def monkey_static_loader_extended(dataset,
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
-
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
 
@@ -417,7 +417,6 @@ def monkey_static_loader_extended(dataset,
         responses_test = raw_data["testing_responses"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
-
         if include_prev_image and not "training_prior_image_ids" in raw_data:
             raise ValueError(
                 "No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
@@ -426,16 +425,20 @@ def monkey_static_loader_extended(dataset,
             raise ValueError(
                 "Include_prev_images True, but num_prev_images is zero. Set 'num_prev_images' to a positive number")
 
+        if not include_prev_image and (num_prev_images != 0):
+            raise ValueError(
+                "Include_prev_images False, but num_prev_images is zero. Set 'include_prev_images' to True")
+
         if include_prev_image:
             prev_training_image_ids = np.zeros((num_prev_images, len(training_image_ids)))
             prev_testing_image_ids = np.zeros((num_prev_images, len(testing_image_ids)))
             temp_prev_training = training_image_ids
             temp_prev_testing = testing_image_ids
-            for i in range(num_prev_images):
+            for j in range(num_prev_images):
                 temp_prev_training = np.insert(temp_prev_training.copy(), 0, 0)[:-1]
                 temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
-                prev_training_image_ids[i] = temp_prev_training
-                prev_testing_image_ids[i] = temp_prev_testing
+                prev_training_image_ids[j] = temp_prev_training
+                prev_testing_image_ids[j] = temp_prev_testing
 
         if dataset != 'PlosCB19_V1':
             if len(responses_test.shape) != 3:
@@ -547,7 +550,6 @@ def monkey_static_loader_extended(dataset,
             pickle.dump(data_info, pkl)
 
     return dataloaders if not return_data_info else data_info
-
 
 
 def monkey_mua_sua_loader(dataset,
