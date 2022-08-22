@@ -289,7 +289,7 @@ class MultipleSpatialXFeatureLinear(MultiReadout, torch.nn.ModuleDict):
 class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
     def __init__(self, core, in_shape_dict, n_neurons_dict, init_mu_range, init_sigma, bias, gamma_readout,
                  gauss_type, grid_mean_predictor, grid_mean_predictor_type, source_grids,
-                 share_features, share_grid, shared_match_ids, gamma_grid_dispersion=0):
+                 share_features, share_grid, shared_match_ids, gamma_grid_dispersion=0,**kwargs):
         # super init to get the _module attribute
         super().__init__()
         k0 = None
@@ -329,7 +329,8 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
                 grid_mean_predictor=grid_mean_predictor,
                 shared_features=shared_features,
                 shared_grid=shared_grid,
-                source_grid=source_grid
+                source_grid=source_grid,
+                **kwargs,
             )
                             )
         self.gamma_readout = gamma_readout

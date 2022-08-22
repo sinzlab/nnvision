@@ -70,24 +70,6 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
-
     set_random_seed(seed)
 
     core = SE2dCore(input_channels=core_input_channels,
@@ -161,6 +143,7 @@ def se_core_full_gauss_readout(dataloaders,
                                data_info=None,
                                gamma_grid_dispersion=0,
                                attention_conv=False,
+                               prev_responses = False,
                                ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -203,6 +186,7 @@ def se_core_full_gauss_readout(dataloaders,
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
 
+
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
     source_grids = None
@@ -224,24 +208,6 @@ def se_core_full_gauss_readout(dataloaders,
         for match_id in shared_match_ids.values():
             assert len(set(match_id) & all_multi_unit_ids) == len(all_multi_unit_ids), \
                 'All multi unit IDs must be present in all datasets'
-
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
 
     set_random_seed(seed)
 
@@ -281,6 +247,7 @@ def se_core_full_gauss_readout(dataloaders,
                                      share_grid=share_grid,
                                      shared_match_ids=shared_match_ids,
                                      gamma_grid_dispersion=gamma_grid_dispersion,
+                                     prev_responses = prev_responses,
                                      )
 
     # initializing readout bias to mean response
