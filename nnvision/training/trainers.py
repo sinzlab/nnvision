@@ -77,7 +77,12 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     model.train()
 
     criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
-    stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
+
+    #add information about previous responses in kwargs of stop_function here?
+    if kwargs.get("prev_responses", False):
+        stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
+    else:
+        stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
 
