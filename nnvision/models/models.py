@@ -144,6 +144,7 @@ def se_core_full_gauss_readout(dataloaders,
                                gamma_grid_dispersion=0,
                                attention_conv=False,
                                prev_responses = False,
+                               context_resps = False
                                ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -248,6 +249,7 @@ def se_core_full_gauss_readout(dataloaders,
                                      shared_match_ids=shared_match_ids,
                                      gamma_grid_dispersion=gamma_grid_dispersion,
                                      prev_responses = prev_responses,
+                                     context_resps = context_resps
                                      )
 
     # initializing readout bias to mean response
@@ -1764,6 +1766,7 @@ def transfer_core_fullgauss_readout(dataloaders,
                                     share_features=False,
                                     share_grid=False,
                                     gamma_grid_dispersion=0,
+                                    context_resps = False,
                                     ):
 
     if data_info is not None:
@@ -1807,7 +1810,8 @@ def transfer_core_fullgauss_readout(dataloaders,
                                      share_features=share_features,
                                      share_grid=share_grid,
                                      shared_match_ids=None,
-                                     gamma_grid_dispersion=gamma_grid_dispersion,)
+                                     gamma_grid_dispersion=gamma_grid_dispersion,
+                                     context_resps = context_resps)
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:

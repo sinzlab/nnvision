@@ -294,7 +294,8 @@ def monkey_static_loader_extended(dataset,
                          monitor_scaling_factor=4.57,
                          include_prev_image=False,
                          num_prev_images = 0,
-                         include_trial_id=False
+                         include_trial_id=False,
+                         include_prev_responses=False,
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images and the possibility to include the previous responses.
@@ -504,14 +505,16 @@ def monkey_static_loader_extended(dataset,
                                          image_cache=cache,
                                          include_trial_id=include_trial_id,
                                          include_prev_image=include_prev_image,
-                                         num_prev_images=num_prev_images)
+                                         num_prev_images=num_prev_images,
+                                         include_prev_responses=include_prev_responses)
 
         val_loader = get_cached_loader_extended(*args_val,
                                        batch_size=batch_size,
                                        image_cache=cache,
                                        include_trial_id=include_trial_id,
                                        include_prev_image=include_prev_image,
-                                       num_prev_images=num_prev_images)
+                                       num_prev_images=num_prev_images,
+                                       include_prev_responses=include_prev_responses)
 
         test_loader = get_cached_loader_extended(*args_test,
                                         batch_size=None,
@@ -520,7 +523,8 @@ def monkey_static_loader_extended(dataset,
                                         repeat_condition=testing_image_ids,
                                         include_prev_image=include_prev_image,
                                         include_trial_id=include_trial_id,
-                                        num_prev_images=num_prev_images)
+                                        num_prev_images=num_prev_images,
+                                        include_prev_responses=include_prev_responses)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
