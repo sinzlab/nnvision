@@ -12,10 +12,8 @@ x-shared: &common
       - GITHUB_TOKEN=${GITHUB_TOKEN}
       - DEV_SOURCE=${DEV_SOURCE}
   volumes:
-    - .:/src/nndichromacy
+    - .:/src/nnvision
     - ./notebooks:/notebooks
-    - /mnt/scratch07/color_mei:/data
-    - /mnt/scratch07/nexport:/nexport
   env_file:
     - .env
 
