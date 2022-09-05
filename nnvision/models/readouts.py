@@ -66,7 +66,20 @@ class MultipleGaussian2d(torch.nn.ModuleDict):
 
 
 class MultipleSelfAttention2d(torch.nn.ModuleDict):
-    def __init__(self, core, in_shape_dict, n_neurons_dict, bias, gamma_features=0, gamma_query=0):
+    def __init__(self,
+                 core,
+                 in_shape_dict,
+                 n_neurons_dict,
+                 bias,
+                 gamma_features=0,
+                 gamma_query=0,
+                 use_pos_enc=True,
+                 learned_pos=False,
+                 dropout_pos=0.1,
+                 stack_pos_encoding=False,
+                 n_pos_channels=None,
+                 temperature=1.0,
+                 ):
         # super init to get the _module attribute
         super().__init__()
         for k in n_neurons_dict:
@@ -75,7 +88,14 @@ class MultipleSelfAttention2d(torch.nn.ModuleDict):
             self.add_module(k, Attention2d(
                 in_shape=in_shape,
                 outdims=n_neurons,
-                bias=bias)
+                bias=bias,
+                use_pos_enc=use_pos_enc,
+                learned_pos=learned_pos,
+                dropout_pos=dropout_pos,
+                stack_pos_encoding=stack_pos_encoding,
+                n_pos_channels=n_pos_channels,
+                temperature=temperature,
+            )
                             )
         self.gamma_features = gamma_features
         self.gamma_query = gamma_query
