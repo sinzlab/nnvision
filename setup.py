@@ -11,5 +11,9 @@ setup(
     author='Konstantin Willeke',
     author_email='konstantin.willeke@gmail.com',
     packages=find_packages(exclude=[]),
-    install_requires=[],
+    install_requires=[
+        "einops",
+        "scikit-image==0.19.1",
+        "numpy==1.22.0",
+    ],
 )
