@@ -1,11 +1,11 @@
 import warnings
 import numpy as np
 import torch
-from mlutils.measures import corr
-from mlutils.training import eval_state, device_state
+from neuralpredictors.measures import corr
+from neuralpredictors.training import eval_state, device_state
 import types
 import contextlib
-from nnvision.utility.measure_helpers import is_ensemble_function
+from submodules.nnvision.nnvision.utility.measure_helpers import is_ensemble_function
 import warnings
 from .measure_helpers import get_subset_of_repeats
 
@@ -59,7 +59,7 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
             responses = responses.squeeze(dim=0)
         with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
             with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
-                output = torch.cat((output, (model(images.to(device), data_key=data_key).detach().cpu())), dim=0)
+                output = torch.cat((output, (torch.squeeze(torch.squeeze(model(images.to(device), data_key=data_key).detach().cpu(), dim=2), dim=2))), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
 
     return target.numpy(), output.numpy()
@@ -88,14 +88,19 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
     if not as_dict:
         correlations = np.hstack([v for v in correlations.values()]) if per_neuron else np.mean(np.hstack([v for v in correlations.values()]))
+
     return correlations
 
 
 def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
     correlations = {}
+
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+            # output = np.expand_dims(output, axis=1)
+            print('target:', target)
+            print('output:', output)
             correlations[k] = corr(target, output, axis=0)
 
             if np.any(np.isnan(correlations[k])):
@@ -112,6 +117,7 @@ def get_poisson_loss(model, dataloaders, device='cpu', as_dict=False, avg=False,
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
             target, output = model_predictions(dataloader=v, model=model, data_key=k, device=device)
+            # output = torch.unsqueeze(output, dim=1)
             loss = output - target * np.log(output + eps)
             poisson_loss[k] = np.mean(loss, axis=0) if avg else np.sum(loss, axis=0)
     if as_dict:

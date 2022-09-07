@@ -3,9 +3,9 @@ from itertools import zip_longest
 import warnings
 
 import numpy as np
-from mlutils.data.datasets import StaticImageSet, FileTreeDataset
-from mlutils.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels, SelectInputChannel
-from mlutils.data.samplers import SubsetSequentialSampler
+from neuralpredictors.data.datasets import StaticImageSet, FileTreeDataset
+from neuralpredictors.data.transforms import Subsample, ToTensor, NeuroNormalizer, AddBehaviorAsChannels, SelectInputChannel
+from neuralpredictors.data.samplers import SubsetSequentialSampler
 from nnfabrik.utility.nn_helpers import set_random_seed
 from .utility import get_oracle_dataloader
 from torch.utils.data import DataLoader

@@ -6,9 +6,8 @@ import pickle
 from collections import namedtuple, Iterable
 import os
 from pathlib import Path
-from mlutils.data.samplers import RepeatsBatchSampler
 from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images
-from nnfabrik.utility.nn_helpers import get_module_output, set_random_seed, get_dims_for_loader_dict
+from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 from nnfabrik.utility.dj_helpers import make_hash
 
 
@@ -176,7 +175,6 @@ def monkey_static_loader(dataset,
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
-
 
     if store_data_info and not os.path.exists(stats_path):
 

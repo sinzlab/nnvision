@@ -2,7 +2,7 @@ import datajoint as dj
 from nnvision.legacy.featurevis.main import TrainedEnsembleModelTemplate, MEITemplate
 from nnfabrik.main import Dataset
 from nnvision.tables.from_nnfabrik import TrainedModel
-from mlutils.data.datasets import StaticImageSet, FileTreeDataset
+from neuralpredictors.data.datasets import StaticImageSet, FileTreeDataset
 from nnvision.legacy.featurevis import integration
 from nnvision.mei.helpers import get_neuron_mappings
 from nnfabrik.utility.dj_helpers import make_hash
