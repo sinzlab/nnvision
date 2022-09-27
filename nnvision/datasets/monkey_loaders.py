@@ -296,6 +296,8 @@ def monkey_static_loader_extended(dataset,
                          num_prev_images = 0,
                          include_trial_id=False,
                          include_prev_responses=False,
+                         include_next_image = False,
+                         include_other_resps = False,
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images and the possibility to include the previous responses.
@@ -417,6 +419,7 @@ def monkey_static_loader_extended(dataset,
         responses_test = raw_data["testing_responses"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
+
         if include_prev_image and not "training_prior_image_ids" in raw_data:
             raise ValueError(
                 "No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
@@ -439,6 +442,11 @@ def monkey_static_loader_extended(dataset,
                 temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
                 prev_training_image_ids[j] = temp_prev_training
                 prev_testing_image_ids[j] = temp_prev_testing
+
+        if include_next_image:
+            next_training_image_ids = np.append(training_image_ids.copy(), 0)[1:]
+            next_testing_image_ids = np.append(testing_image_ids.copy(), 0)[1:]
+
 
         if dataset != 'PlosCB19_V1':
             if len(responses_test.shape) != 3:
@@ -463,6 +471,15 @@ def monkey_static_loader_extended(dataset,
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
+        if include_other_resps:
+            other_resps_train = responses_train
+            other_resps_test = np.zeros(responses_test.shape)
+            _, first_ids = np.unique(testing_image_ids,return_index=True)
+            for first_id in first_ids:
+                idx = np.where(testing_image_ids ==testing_image_ids[first_id])
+                idx2 = np.roll(idx,1)
+                other_resps_test[idx] = responses_test[idx2]
+
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
 
@@ -486,6 +503,14 @@ def monkey_static_loader_extended(dataset,
             train_trial_ids = all_train_trial_ids[train_idx]
             val_trial_ids = all_train_trial_ids[val_idx]
 
+        if include_next_image:
+            next_validation_image_ids = next_training_image_ids[val_idx]
+            next_training_image_ids = next_training_image_ids[train_idx]
+
+        if include_other_resps:
+            other_resps_validation = other_resps_train[val_idx]
+            other_resps_train = other_resps_train[train_idx]
+
         args_train = [training_image_ids, responses_train]
         args_val = [validation_image_ids, responses_val]
         args_test = [testing_image_ids, responses_test]
@@ -500,13 +525,25 @@ def monkey_static_loader_extended(dataset,
             args_val.insert(1 + include_prev_image, val_trial_ids)
             args_test.insert(1 + include_prev_image, test_trial_ids)
 
+        if include_next_image:
+            args_train.insert(1 + include_prev_image + include_trial_id, next_training_image_ids)
+            args_val.insert(1 + include_prev_image + include_trial_id, next_validation_image_ids)
+            args_test.insert(1 + include_prev_image + include_trial_id, next_testing_image_ids)
+
+        if include_other_resps:
+            args_train.insert(1 + include_prev_image + include_trial_id + include_next_image, other_resps_train)
+            args_val.insert(1 + include_prev_image + include_trial_id + include_next_image, other_resps_validation)
+            args_test.insert(1 + include_prev_image + include_trial_id + include_next_image, other_resps_test)
+
         train_loader = get_cached_loader_extended(*args_train,
                                          batch_size=batch_size,
                                          image_cache=cache,
                                          include_trial_id=include_trial_id,
                                          include_prev_image=include_prev_image,
                                          num_prev_images=num_prev_images,
-                                         include_prev_responses=include_prev_responses)
+                                         include_prev_responses=include_prev_responses,
+                                         include_next_image=include_next_image,
+                                         include_other_resps = include_other_resps)
 
         val_loader = get_cached_loader_extended(*args_val,
                                        batch_size=batch_size,
@@ -514,7 +551,9 @@ def monkey_static_loader_extended(dataset,
                                        include_trial_id=include_trial_id,
                                        include_prev_image=include_prev_image,
                                        num_prev_images=num_prev_images,
-                                       include_prev_responses=include_prev_responses)
+                                       include_prev_responses=include_prev_responses,
+                                       include_next_image=include_next_image,
+                                       include_other_resps = include_other_resps)
 
         test_loader = get_cached_loader_extended(*args_test,
                                         batch_size=None,
@@ -524,7 +563,9 @@ def monkey_static_loader_extended(dataset,
                                         include_prev_image=include_prev_image,
                                         include_trial_id=include_trial_id,
                                         num_prev_images=num_prev_images,
-                                        include_prev_responses=include_prev_responses)
+                                        include_prev_responses=include_prev_responses,
+                                        include_next_image=include_next_image,
+                                        include_other_resps = include_other_resps)
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
@@ -532,7 +573,11 @@ def monkey_static_loader_extended(dataset,
 
     if store_data_info and not os.path.exists(stats_path):
 
-        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        #in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        try: #if the prev_resps are added as a separate input, this will cause an error
+            in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        except:
+            in_name, out_name,prev_resps = next(iter(list(dataloaders["train"].values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}

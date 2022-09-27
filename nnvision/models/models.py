@@ -143,8 +143,7 @@ def se_core_full_gauss_readout(dataloaders,
                                data_info=None,
                                gamma_grid_dispersion=0,
                                attention_conv=False,
-                               prev_responses = False,
-                               context_resps = False
+                               **kwargs
                                ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -180,7 +179,10 @@ def se_core_full_gauss_readout(dataloaders,
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        try: #if the prev_resps are added as a separate input, this will cause an error
+            in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        except:
+            in_name, out_name,prev_resps = next(iter(list(dataloaders.values())[0]))._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -248,14 +250,16 @@ def se_core_full_gauss_readout(dataloaders,
                                      share_grid=share_grid,
                                      shared_match_ids=shared_match_ids,
                                      gamma_grid_dispersion=gamma_grid_dispersion,
-                                     prev_responses = prev_responses,
-                                     context_resps = context_resps
+                                     **kwargs
                                      )
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            try:
+                _, targets = next(iter(value))
+            except:
+                _,_,targets = next(iter(value))
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -1766,7 +1770,7 @@ def transfer_core_fullgauss_readout(dataloaders,
                                     share_features=False,
                                     share_grid=False,
                                     gamma_grid_dispersion=0,
-                                    context_resps = False,
+                                    **kwargs,
                                     ):
 
     if data_info is not None:
@@ -1811,7 +1815,7 @@ def transfer_core_fullgauss_readout(dataloaders,
                                      share_grid=share_grid,
                                      shared_match_ids=None,
                                      gamma_grid_dispersion=gamma_grid_dispersion,
-                                     context_resps = context_resps)
+                                     **kwargs)
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:

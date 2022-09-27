@@ -77,12 +77,7 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
     model.train()
 
     criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
-
-    #add information about previous responses in kwargs of stop_function here?
-    if kwargs.get("prev_responses", False):
-        stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
-    else:
-        stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
+    stop_closure = partial(getattr(measures, stop_function), dataloaders=dataloaders["validation"], device=device, per_neuron=False, avg=True)
 
     n_iterations = len(LongCycler(dataloaders["train"]))
 
@@ -124,7 +119,6 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
         optimizer.zero_grad()
         for batch_no, (data_key, data) in tqdm(enumerate(LongCycler(dataloaders["train"])), total=n_iterations,
                                                desc="Epoch {}".format(epoch)):
-
             loss = full_objective(model, dataloaders["train"], data_key, *data[:2], **data._asdict())
             loss.backward()
             if (batch_no + 1) % optim_step_count == 0:

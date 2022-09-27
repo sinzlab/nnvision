@@ -168,6 +168,8 @@ def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_ne
 
 
 def get_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):
+    if 'test' in dataloaders:
+        dataloaders = dataloaders['test']
     correlations = {}
     with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
         for k, v in dataloaders.items():
