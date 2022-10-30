@@ -297,7 +297,7 @@ def monkey_static_loader_extended(dataset,
                          include_trial_id=False,
                          include_prev_responses=False,
                          include_next_image = False,
-                         include_other_resps = False,
+                         include_other_resps = False
                          ):
     """
     Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images and the possibility to include the previous responses.
@@ -424,6 +424,10 @@ def monkey_static_loader_extended(dataset,
             raise ValueError(
                 "No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
 
+        if include_prev_image:
+            prior_training_image_ids = raw_data["training_prior_image_ids"] - image_id_offset
+            prior_testing_image_ids = raw_data["testing_prior_image_ids"] - image_id_offset
+
         if include_prev_image and (num_prev_images == 0):
             raise ValueError(
                 "Include_prev_images True, but num_prev_images is zero. Set 'num_prev_images' to a positive number")
@@ -435,13 +439,15 @@ def monkey_static_loader_extended(dataset,
         if include_prev_image:
             prev_training_image_ids = np.zeros((num_prev_images, len(training_image_ids)))
             prev_testing_image_ids = np.zeros((num_prev_images, len(testing_image_ids)))
-            temp_prev_training = training_image_ids
-            temp_prev_testing = testing_image_ids
-            for j in range(num_prev_images):
+            temp_prev_training =  prior_training_image_ids
+            temp_prev_testing = prior_testing_image_ids
+            prev_training_image_ids[0] = prior_training_image_ids
+            prev_testing_image_ids[0] = prior_testing_image_ids
+            for j in range(num_prev_images-1):
                 temp_prev_training = np.insert(temp_prev_training.copy(), 0, 0)[:-1]
                 temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
-                prev_training_image_ids[j] = temp_prev_training
-                prev_testing_image_ids[j] = temp_prev_testing
+                prev_training_image_ids[j+1] = temp_prev_training
+                prev_testing_image_ids[j+1] = temp_prev_testing
 
         if include_next_image:
             next_training_image_ids = np.append(training_image_ids.copy(), 0)[1:]

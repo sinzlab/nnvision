@@ -316,8 +316,6 @@ class CachedTensorDatasetExtended(utils.Dataset):
 
         if other_resps:
             self.DataPoint = namedtuple('DataPoint', ('inputs','targets','other_resps')) #(names)+('other_resps')?
-        else:
-            self.DataPoint = namedtuple('DataPoint', names)
         self.image_cache = image_cache
         self.prev_img = prev_img
         self.num_prev_images = num_prev_images
@@ -356,6 +354,15 @@ class CachedTensorDatasetExtended(utils.Dataset):
                     for i in range(self.num_prev_images):
                         key_prev_img = self.tensors[i+1][index].numpy().astype(np.int64)
             img = torch.stack(list(self.image_cache[key_img]))
+
+            if self.prev_responses:
+                prev_resps = self.tensors[self.num_prev_images + self.trial_id+1][index]
+                full_img=img
+
+            if self.other_resps:
+                other_resps = self.tensors[1+self.num_prev_images + self.trial_id+self.prev_responses+self.next_img ][index]
+                full_img=img
+
             if self.prev_img:
                 prev_img = torch.stack(list(self.image_cache[key_prev_img[0]]))
                 for i in range(self.num_prev_images-1):
@@ -384,7 +391,6 @@ class CachedTensorDatasetExtended(utils.Dataset):
 
             if self.other_resps:
                 tensors_expanded = [full_img, targets, other_resps]
-
 
         return self.DataPoint(*tensors_expanded)
 
