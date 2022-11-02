@@ -224,18 +224,19 @@ class ClipNormInAllChannel:
 
 
 class NatImgBackgroundHighNorm():
-    def __init__(self,key=None,):
+    def __init__(self, key=None,):
+        images = []
         dataloaders = (Dataset & key).get_dataloader()
         data_key = list(dataloaders["train"].keys())[0]
-        images = []
-        for tier in ['train','test','validation']:
+        for tier in ['train', 'test', 'validation']:
             for b in dataloaders[tier][data_key]:
-                images.append(b.inputs.squeeze())
+                # squeeze out channel dim
+                images.append(b.inputs.squeeze(1))
         self.images = torch.vstack(images)
 
-    def __call__(self, x,iteration=None):
-        bg=random.choice(self.images)
-        return bg
+    def __call__(self, x, iteration=None):
+        background = random.choice(self.images)
+        return background
 
 
 class CollapseChannel:
