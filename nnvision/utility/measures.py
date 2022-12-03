@@ -158,8 +158,16 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     """
 
     target, output = torch.empty(0), torch.empty(0)
+    batch = next(iter(dataloader))
+    if "bools" in batch._fields:
+        mask_flag = True
+        masks = torch.empty(0,dtype=np.bool)
+    else:
+        mask_flag = False
     for batch in dataloader:
         images, responses = batch[:2]
+        if mask_flag:
+            mask = batch.bools
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
@@ -168,8 +176,17 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
                 with torch.no_grad():
                     output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
+            if mask_flag:
+                masks = torch.cat((masks, mask))
 
-    return target.numpy(), output.numpy()
+    if mask_flag:
+        target = np.ma.masked_array(target, mask=~masks)
+        output = np.ma.masked_array(output, mask=~masks)
+    else:
+        target = target.numpy()
+        output = output.numpy()
+
+    return target, output
 
 
 def get_avg_correlations(model, dataloaders, device='cpu', as_dict=False, per_neuron=True, **kwargs):

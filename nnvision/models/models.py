@@ -259,7 +259,7 @@ def se_core_full_gauss_readout(dataloaders,
             try:
                 _, targets = next(iter(value))
             except:
-                _,_,targets = next(iter(value))
+                _,targets,_ = next(iter(value))
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
