@@ -179,10 +179,12 @@ def se_core_full_gauss_readout(dataloaders,
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        try: #if the prev_resps are added as a separate input, this will cause an error
-            in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
-        except:
-            in_name, out_name,prev_resps = next(iter(list(dataloaders.values())[0]))._fields
+        in_name = next(iter(list(dataloaders.values())[0]))._fields[0]
+        out_name = next(iter(list(dataloaders.values())[0]))._fields[1]
+
+        dl = next(iter(list(dataloaders.values())))
+        if hasattr(dl.dataset,"n_neurons"): # retrieve n_neurons for when all sessions are in the same response array
+            kwargs["n_neurons"] = dl.dataset.n_neurons
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -256,10 +258,7 @@ def se_core_full_gauss_readout(dataloaders,
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            try:
-                _, targets = next(iter(value))
-            except:
-                _,targets,_ = next(iter(value))
+            targets = next(iter(value))[1]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)

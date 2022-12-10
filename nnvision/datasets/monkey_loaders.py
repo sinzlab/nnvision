@@ -12,6 +12,7 @@ from .utility import get_validation_split, ImageCache, get_cached_loader, get_ca
 from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 from neuralpredictors.utils import get_module_output
 from nnfabrik.utility.dj_helpers import make_hash
+from tqdm import tqdm
 import scipy
 
 def monkey_static_loader(dataset,
@@ -294,9 +295,10 @@ def monkey_static_loader_combined(dataset,
                          include_prev_image=False,
                          include_trial_id=False,
                          include_bools = True,
+                         include_n_neurons = False
                          ):
     """
-    Function that returns cached dataloaders for monkey ephys experiments.
+    Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times.
 
      creates a nested dictionary of dataloaders in the format
             {'train' : dict_of_loaders,
@@ -331,6 +333,11 @@ def monkey_static_loader_combined(dataset,
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
+        include_prev_image: boolean, whether to add the previous image to the core input as a second image channel
+        include_trial_id: boolean,  whether to add the trial ID to the core input as a second image channel
+        include_bools: boolean, dataloader has a "booleans"-array that indicates which neurons were shown the image and which weren't (necessary for zeroing out the gradients from those neurons that weren't shown the image)
+        include_n_neurons: include a variable n_neurons in the datasets that records how many neurons were from each session
+
 
     Returns: nested dictionary of dataloaders
     """
@@ -404,11 +411,11 @@ def monkey_static_loader_combined(dataset,
                                                              train_frac=train_frac,
                                                              seed=seed)
 
-    n_neurons = np.zeros(len(neuronal_data_files),dtype=np.uint16) #save number of neurons for easier access
+    n_neurons = np.zeros(len(neuronal_data_files),dtype=np.uint8) #save number of neurons for easier access
     max_repeats = 0 #save number of max repeats in test dataset
     all_testing_ids = np.array([], dtype=np.uint16) #unique testing
 
-    #cycle through all datafiles to get number of neurons, unique testing image ids and
+    #cycle through all datafiles to get the total number of neurons accross all sessions, the unique testing image ids and the maximum number of repeats for them
     for i, datapath in enumerate(neuronal_data_files):
 
         with open(datapath, "rb") as pkl:
@@ -430,8 +437,7 @@ def monkey_static_loader_combined(dataset,
     all_test_bools = np.full((len(all_testing_ids),np.sum(n_neurons)),False)
 
 
-    for i, datapath in enumerate(neuronal_data_files):
-        print(i)
+    for i, datapath in tqdm(enumerate(neuronal_data_files),total=len(neuronal_data_files),desc="Files Processing"):
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
 
@@ -473,7 +479,7 @@ def monkey_static_loader_combined(dataset,
                 all_responses_test[k*max_repeats + j][n_start:n_end] = responses_test[idx]
                 all_test_bools[k*max_repeats + j][n_start:n_end] = True
 
-    #delete rows with nothing in them
+    #delete rows with nothing in them to prevent miscalculation later
     all_responses_train = all_responses_train[~(~all_train_bools).all(axis=1)]
     all_train_ids= all_train_ids[~(~all_train_bools).all(axis=1)]
     all_train_bools = all_train_bools[~(~all_train_bools).all(axis=1)]
@@ -486,21 +492,30 @@ def monkey_static_loader_combined(dataset,
     all_testing_ids= all_testing_ids[~(~all_test_bools).all(axis=1)]
     all_test_bools = all_test_bools[~(~all_test_bools).all(axis=1)]
 
-
+    #arguments for dataloader always include image IDs and responses
     args_train = [all_train_ids, all_responses_train]
     args_val = [all_validation_ids, all_responses_val]
     args_test = [all_testing_ids, all_responses_test]
 
+    #include bools and n_neurons to args for dataloaders
     if include_bools:
-            args_train.insert(1, all_train_bools)
-            args_val.insert(1, all_val_bools)
-            args_test.insert(1, all_test_bools)
+        args_train.insert(1, all_train_bools)
+        args_val.insert(1, all_val_bools)
+        args_test.insert(1, all_test_bools)
+        if include_n_neurons:
+            n_neurons = np.insert(np.cumsum(n_neurons),0,0).astype(np.int64) #make n_neurons cumulative sum with 0 in front for easier indexing
+            args_train.insert(2, n_neurons)
+            args_val.insert(2, n_neurons)
+            args_test.insert(2, n_neurons)
+    else:
+        n_neurons = None
 
     train_loader = get_cached_loader_extended(*args_train,
                                      batch_size=batch_size,
                                      image_cache=cache,
                                      include_trial_id=include_trial_id,
                                      include_bools = include_bools,
+                                     include_n_neurons = include_n_neurons,
                                      include_prev_image=include_prev_image,)
 
     val_loader = get_cached_loader_extended(*args_val,
@@ -508,6 +523,7 @@ def monkey_static_loader_combined(dataset,
                                    image_cache=cache,
                                    include_trial_id=include_trial_id,
                                    include_bools = include_bools,
+                                   include_n_neurons = include_n_neurons,
                                    include_prev_image=include_prev_image,)
 
     test_loader = get_cached_loader_extended(*args_test,
@@ -516,6 +532,7 @@ def monkey_static_loader_combined(dataset,
                                     image_cache=cache,
                                     repeat_condition=all_testing_ids,
                                     include_bools = include_bools,
+                                    include_n_neurons = include_n_neurons,
                                     include_prev_image=include_prev_image,
                                     include_trial_id=include_trial_id)
 
