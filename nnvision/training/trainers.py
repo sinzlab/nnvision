@@ -22,7 +22,8 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
                                 max_iter=100, maximize=True, tolerance=1e-6,
                                 restore_best=True, lr_decay_steps=3,
                                 lr_decay_factor=0.3, min_lr=0.0001,  # lr scheduler args
-                                cb=None, track_training=False, return_test_score=False, batchping=1000,**kwargs):
+                                cb=None, track_training=False, return_test_score=False, batchping=1000,
+                                adamw=False, **kwargs):
     """
 
     Args:
@@ -81,7 +82,11 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
 
     n_iterations = len(LongCycler(dataloaders["train"]))
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr_init)
+    if adamw:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr_init)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr_init)
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max' if maximize else 'min',
                                                            factor=lr_decay_factor, patience=patience,
                                                            threshold=tolerance,
