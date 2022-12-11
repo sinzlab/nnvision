@@ -293,6 +293,130 @@ class CachedTensorDataset(utils.Dataset):
     def __len__(self):
         return self.tensors[0].size(0)
 
+class CachedTensorDatasetExtended(utils.Dataset):
+    """
+    Dataset wrapping tensors.
+
+    Each sample will be retrieved by indexing tensors along the first dimension.
+
+    Arguments:
+        *tensors (Tensor): tensors that have the same size of the first dimension.
+    """
+
+    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None, prev_img=None,  num_prev_images = None, trial_id=None, prev_responses = None, next_img=None, other_resps=None,bools = None, n_neurons=None):
+        if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
+            raise ValueError('The tensors of the dataset have unequal lengths. The first dim of all tensors has to match exactly.')
+
+        self.tensors = tensors
+        self.input_position = names.index("inputs")
+        if prev_responses:
+            self.DataPoint = namedtuple('DataPoint', ('inputs','targets','prev_resps')) #(names)+('prev_resps')?
+        else:
+            self.DataPoint = namedtuple('DataPoint', names)
+
+        if other_resps:
+            self.DataPoint = namedtuple('DataPoint', ('inputs','targets','other_resps')) #(names)+('other_resps')?
+
+        if bools:
+            self.DataPoint =  namedtuple('DataPoint', ('inputs','targets','bools'))
+
+        self.image_cache = image_cache
+        self.prev_img = prev_img
+        self.num_prev_images = num_prev_images
+        self.trial_id = trial_id
+        self.prev_responses = prev_responses
+        self.next_img = next_img
+        self.other_resps = other_resps
+        self.bools=bools
+        self.n_neurons=n_neurons
+
+
+    def __getitem__(self, index):
+        """
+        retrieves the inputs (= tensors[0]) from the image cache. If the image ID is not present in the cache,
+            the cache is updated to load the corresponding image into memory.
+
+        Also has the functionality to include the previous image. In that case, len(tensors) will be 3
+        """
+        if len(self.tensors) == 2:
+            if type(index) == int:
+                key = self.tensors[0][index].item()
+            else:
+                key = self.tensors[0][index].numpy().astype(np.int64)
+
+            tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
+                            for pos, tensor in enumerate(self.tensors)]
+        else:
+            if type(index) == int:
+                key_img = self.tensors[0][index].item()
+                if self.prev_img:
+                    key_prev_img = np.zeros(self.num_prev_images,dtype=np.int64)
+                    for i in range(self.num_prev_images):
+                        key_prev_img[i] = self.tensors[i+1][index].item()
+            else:
+                key_img = self.tensors[0][index].numpy().astype(np.int64)
+                if self.prev_img:
+                    key_prev_img = np.zeros(self.num_prev_images)
+                    for i in range(self.num_prev_images):
+                        key_prev_img = self.tensors[i+1][index].numpy().astype(np.int64)
+            img = torch.stack(list(self.image_cache[key_img]))
+
+            idx = 1 + self.num_prev_images #index to keep track of which arguments is where in self.tensors
+
+            if self.prev_responses:
+                prev_resps = self.tensors[idx][index]
+                idx +=1
+                full_img=img
+
+            if self.prev_img:
+                prev_img = torch.stack(list(self.image_cache[key_prev_img[0]]))
+                for i in range(self.num_prev_images-1):
+                    prev_img = torch.cat([prev_img,torch.stack(list(self.image_cache[key_prev_img[i+1]]))], dim=0)
+                img_channel_2 = prev_img
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+
+            if self.trial_id:
+                trial_id = self.tensors[idx][index]
+                idx+=1
+                trial_id_img = torch.ones_like(img).to(img.dtype)*trial_id
+                if self.prev_img:
+                    img_channel_2 = torch.cat([prev_img, trial_id_img])
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+
+            if self.bools:
+                bools = self.tensors[idx][index]
+                idx+=1
+                full_img=img
+
+            if self.next_img:
+                key_next_img = self.tensors[idx][index].numpy().astype(np.int64)
+                idx += 1
+                next_img = torch.stack(list(self.image_cache[key_next_img]))
+                img_channel_2 = next_img
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+
+            if self.other_resps:
+                other_resps = self.tensors[1+self.num_prev_images + self.trial_id + self.bools + self.n_neurons + self.prev_responses+self.next_img ][index]
+                full_img=img
+
+            targets = self.tensors[-1][index]
+            tensors_expanded = [full_img, targets]
+
+            if self.bools:
+                tensors_expanded = [full_img , targets, bools]
+
+            if self.prev_responses:
+                tensors_expanded = [full_img, targets, prev_resps]
+
+            if self.other_resps:
+                tensors_expanded = [full_img, targets, other_resps]
+
+        return self.DataPoint(*tensors_expanded)
+
+    def __len__(self):
+        return self.tensors[0].size(0)
+
+
 
 def get_cached_loader(*args,
                       batch_size=None,
@@ -332,9 +456,95 @@ def get_cached_loader(*args,
     if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
         tensors.append(eye_position)
-    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id, )
+    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id )
     sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
 
+    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
+                                                                                                            batch_size=batch_size,
+                                                                                                            shuffle=shuffle,
+                                                                                                            )
+    return dataloader
+
+
+def get_cached_loader_extended(*args,
+                      batch_size=None,
+                      shuffle=True,
+                      image_cache=None,
+                      repeat_condition=None,
+                      names=('inputs', 'targets'),
+                      include_prev_image=False,
+                      num_prev_images=0,
+                      include_trial_id=False,
+                      include_prev_responses=False,
+                      include_next_image=False,
+                      include_other_resps = False,
+                      include_bools = False,
+                      include_n_neurons = False):
+    """
+
+    Args:
+        image_ids: an array of image IDs
+        responses: Numpy Array, Dimensions: N_images x Neurons
+        batch_size: int - batch size for the dataloader
+        shuffle: Boolean, shuffles image in the dataloader if True
+        image_cache: a cache object which stores the images
+        num_prev_images: how many prev images should be included
+
+    Returns: a PyTorch DataLoader object
+    """
+
+    image_ids = torch.from_numpy(args[0].astype(np.int64))
+    #breakhere
+    tensors = [image_ids]
+    n_neurons = None
+    if len(args) >= 2 and "eye_position" not in names:
+
+        idx = 1 #index for keeping count of which tensor is where in the args
+        if include_prev_image:
+            prev_image_ids = torch.from_numpy(args[idx].astype(np.int64))
+            for i in range(num_prev_images):
+                tensors.append(prev_image_ids[i])
+            idx +=1
+
+        if include_prev_responses:
+            #get responses
+            resps = torch.tensor(args[-1]).to(torch.float)
+            #shift them by 1 so it is always the previous response
+            zer = np.array([np.zeros(resps.shape[1])])
+            prev_resps = torch.tensor(np.concatenate((zer,resps[:-1,:]))).to(torch.float)
+            #zero it out where prior_ids are zero
+            prior_ids = torch.from_numpy(args[idx].astype(np.int64))
+            prev_resps[np.where(prior_ids == 0)] *= 0
+            tensors.append(prev_resps)
+            id +=1
+
+        if include_trial_id:
+            tensors.append(torch.from_numpy(args[idx]).to(torch.float))
+            idx +=1
+
+        if include_bools:
+            tensors.append(torch.from_numpy(args[idx]))
+            idx +=1
+
+        if include_n_neurons:
+            n_neurons =torch.from_numpy(args[idx]).view(1,-1)
+            idx +=1
+
+        if include_next_image:
+            tensors.append(torch.from_numpy(args[idx]).to(torch.float))
+            idx +=1
+
+        if include_other_resps:
+            tensors.append(torch.from_numpy(args[idx]).to(torch.float))
+
+    if len(args) > 2 and "eye_position" in names:
+        eye_position = torch.tensor(args[2]).to(torch.float)
+        tensors.append(eye_position)
+    responses = torch.tensor(args[-1]).to(torch.float)
+    tensors.append(responses)
+    dataset = CachedTensorDatasetExtended(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, num_prev_images = num_prev_images, trial_id=include_trial_id, prev_responses = include_prev_responses, next_img = include_next_image, other_resps = include_other_resps,bools=include_bools, n_neurons=n_neurons  )
+    sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
+    dataset[2]
     dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
                                                                                                             batch_size=batch_size,
                                                                                                             shuffle=shuffle,

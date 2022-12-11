@@ -8,10 +8,11 @@ from collections import namedtuple, Iterable
 import os
 from pathlib import Path
 from neuralpredictors.data.samplers import RepeatsBatchSampler
-from .utility import get_validation_split, ImageCache, get_cached_loader, get_fraction_of_training_images, get_crop_from_stimulus_location
+from .utility import get_validation_split, ImageCache, get_cached_loader, get_cached_loader_extended, get_fraction_of_training_images, get_crop_from_stimulus_location
 from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 from neuralpredictors.utils import get_module_output
 from nnfabrik.utility.dj_helpers import make_hash
+from tqdm import tqdm
 import scipy
 
 def monkey_static_loader(dataset,
@@ -263,6 +264,623 @@ def monkey_static_loader(dataset,
                                        img_std=img_std)
 
         stats_path_base =  str(Path(stats_path).parent)
+        if not os.path.exists(stats_path_base):
+            os.mkdir(stats_path_base)
+        with open(stats_path, "wb") as pkl:
+            pickle.dump(data_info, pkl)
+
+    return dataloaders if not return_data_info else data_info
+
+def monkey_static_loader_combined(dataset,
+                         neuronal_data_files,
+                         image_cache_path,
+                         batch_size=64,
+                         seed=None,
+                         train_frac=0.8,
+                         subsample=1,
+                         crop=((96, 96), (96, 96)),
+                         scale=1.,
+                         time_bins_sum=tuple(range(12)),
+                         avg=False,
+                         image_file=None,
+                         return_data_info=False,
+                         store_data_info=True,
+                         image_frac=1.,
+                         image_selection_seed=None,
+                         randomize_image_selection=True,
+                         img_mean=None,
+                         img_std=None,
+                         stimulus_location=None,
+                         monitor_scaling_factor=4.57,
+                         include_prev_image=False,
+                         include_trial_id=False,
+                         include_bools = True,
+                         include_n_neurons = False
+                         ):
+    """
+    Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times.
+
+     creates a nested dictionary of dataloaders in the format
+            {'train' : dict_of_loaders,
+             'validation'   : dict_of_loaders,
+            'test'  : dict_of_loaders, }
+
+        in each dict_of_loaders, there will be  one dataloader per data-key (refers to a unique session ID)
+        with the format:
+            {'data-key1': torch.utils.data.DataLoader,
+             'data-key2': torch.utils.da.DataLoader, ... }
+
+    requires the types of input files:
+        - the neuronal data files. A list of pickle files, with one file per session
+        - the image file. The pickle file that contains all images.
+        - individual image files, stored as numpy array, in a subfolder
+
+    Args:
+        dataset: a string, identifying the Dataset:
+            'PlosCB19_V1', 'CSRF19_V1', 'CSRF19_V4'
+            This string will be parsed by a datajoint table
+
+        neuronal_data_files: a list paths that point to neuronal data pickle files
+        image_file: a path that points to the image file
+        image_cache_path: The path to the cached images
+        batch_size: int - batch size of the dataloaders
+        seed: int - random seed, to calculate the random split
+        train_frac: ratio of train/validation images
+        subsample: int - downsampling factor
+        crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
+            if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
+        scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
+        time_bins_sum: sums the responses over x time bins.
+        avg: Boolean - Sums oder Averages the responses across bins.
+        include_prev_image: boolean, whether to add the previous image to the core input as a second image channel
+        include_trial_id: boolean,  whether to add the trial ID to the core input as a second image channel
+        include_bools: boolean, dataloader has a "booleans"-array that indicates which neurons were shown the image and which weren't (necessary for zeroing out the gradients from those neurons that weren't shown the image)
+        include_n_neurons: include a variable n_neurons in the datasets that records how many neurons were from each session
+
+
+    Returns: nested dictionary of dataloaders
+    """
+
+    dataset_config = locals()
+
+    # initialize dataloaders as empty dict
+    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+
+    if not isinstance(time_bins_sum, Iterable):
+        time_bins_sum = tuple(range(time_bins_sum))
+
+    if isinstance(crop, int):
+        crop = [(crop, crop), (crop, crop)]
+
+    if stimulus_location is not None:
+        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+
+    if not isinstance(image_frac, Iterable):
+        image_frac = [image_frac for i in neuronal_data_files]
+
+    # clean up image path because of legacy folder structure
+    image_cache_path = image_cache_path.split('individual')[0]
+
+    # Load image statistics if present
+    stats_filename = make_hash(dataset_config)
+    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+
+    # Get mean and std
+    if os.path.exists(stats_path):
+        with open(stats_path, "rb") as pkl:
+            data_info = pickle.load(pkl)
+        if return_data_info:
+            return data_info
+        img_mean = list(data_info.values())[0]["img_mean"]
+        img_std = list(data_info.values())[0]["img_std"]
+
+        # Initialize cache
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
+    else:
+
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std  = cache.img_std
+
+
+    n_images = len(cache)
+    data_info = {}
+
+    # set up parameters for the different dataset types
+    if dataset == 'PlosCB19_V1':
+        # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
+        # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
+        # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
+        train_test_split = 0.8
+        image_id_offset = 1
+    else:
+        train_test_split = 1
+        image_id_offset = 0
+
+    #get train- and validation IDs from helper function
+    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
+                                                             train_frac=train_frac,
+                                                             seed=seed)
+
+    n_neurons = np.zeros(len(neuronal_data_files),dtype=np.uint8) #save number of neurons for easier access
+    max_repeats = 0 #save number of max repeats in test dataset
+    all_testing_ids = np.array([], dtype=np.uint16) #unique testing
+
+    #cycle through all datafiles to get the total number of neurons accross all sessions, the unique testing image ids and the maximum number of repeats for them
+    for i, datapath in enumerate(neuronal_data_files):
+
+        with open(datapath, "rb") as pkl:
+            raw_data = pickle.load(pkl)
+
+        n_neurons[i] = raw_data['unit_ids'].shape[0] #get number of neurons recorded for each session
+        testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
+        max_repeats =max(np.max(np.unique(testing_image_ids, return_counts=True)[1]),max_repeats) #figure out maximum number of repeats for testing images
+        all_testing_ids = np.unique(np.concatenate((all_testing_ids, testing_image_ids)))
+
+    all_responses_train = np.zeros((len(all_train_ids),np.sum(n_neurons))) #shape: (number of training image IDs, number of neurons)
+    all_responses_val = np.zeros((len(all_validation_ids),np.sum(n_neurons))) # shape: (number of validation image IDs, number neurons)
+    all_train_bools = np.full((len(all_train_ids),np.sum(n_neurons)),False) #booleans signify whether a neurons was shown a particular image during a particular session
+    all_val_bools = np.full((len(all_validation_ids),np.sum(n_neurons)),False)
+
+    all_testing_ids_unique = all_testing_ids
+    all_testing_ids = np.repeat(all_testing_ids,max_repeats) #repeat the ids for the max number of repeats to have space for all the answers
+    all_responses_test = np.zeros((len(all_testing_ids),np.sum(n_neurons))) #shape: (number of testing IDs (with repetitions), number of neurons)
+    all_test_bools = np.full((len(all_testing_ids),np.sum(n_neurons)),False)
+
+
+    for i, datapath in tqdm(enumerate(neuronal_data_files),total=len(neuronal_data_files),desc="Files Processing"):
+        with open(datapath, "rb") as pkl:
+            raw_data = pickle.load(pkl)
+
+        responses_train = raw_data["training_responses"].astype(np.float32)
+        responses_test = raw_data["testing_responses"].astype(np.float32)
+        training_image_ids = raw_data["training_image_ids"] - image_id_offset
+        testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
+
+
+        responses_test = responses_test.transpose((2, 0, 1))
+        responses_train = responses_train.transpose((2, 0, 1))
+
+        if time_bins_sum is not None:  # then average over given time bins
+            responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
+            responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+
+        #neuron indices for this session
+        n_start = np.sum(n_neurons[0:i])
+        n_end = np.sum(n_neurons[0:i+1])
+
+        #go through all train ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
+        for k, train_id in enumerate(all_train_ids):
+            if train_id in training_image_ids:
+                j = np.where(train_id == training_image_ids)
+                all_responses_train[k][n_start:n_end] = responses_train[j]
+                all_train_bools[k][n_start:n_end] = True
+
+        #go through all validation ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
+        for k, val_id in enumerate(all_validation_ids):
+            if val_id in training_image_ids:
+                j = np.where(val_id == training_image_ids)
+                all_responses_val[k][n_start:n_end] = responses_train[j]
+                all_val_bools[k][n_start:n_end] = True
+
+        #go through all test ids, add the responses for all repeats in the appropriate space
+        for k, test_id in enumerate(all_testing_ids_unique):
+            idxs = np.where(test_id == testing_image_ids)[0]
+            for j, idx in enumerate(idxs):
+                all_responses_test[k*max_repeats + j][n_start:n_end] = responses_test[idx]
+                all_test_bools[k*max_repeats + j][n_start:n_end] = True
+
+    #delete rows with nothing in them to prevent miscalculation later
+    all_responses_train = all_responses_train[~(~all_train_bools).all(axis=1)]
+    all_train_ids= all_train_ids[~(~all_train_bools).all(axis=1)]
+    all_train_bools = all_train_bools[~(~all_train_bools).all(axis=1)]
+
+    all_responses_val = all_responses_val[~(~all_val_bools).all(axis=1)]
+    all_validation_ids= all_validation_ids[~(~all_val_bools).all(axis=1)]
+    all_val_bools = all_val_bools[~(~all_val_bools).all(axis=1)]
+
+    all_responses_test = all_responses_test[~(~all_test_bools).all(axis=1)]
+    all_testing_ids= all_testing_ids[~(~all_test_bools).all(axis=1)]
+    all_test_bools = all_test_bools[~(~all_test_bools).all(axis=1)]
+
+    #arguments for dataloader always include image IDs and responses
+    args_train = [all_train_ids, all_responses_train]
+    args_val = [all_validation_ids, all_responses_val]
+    args_test = [all_testing_ids, all_responses_test]
+
+    #include bools and n_neurons to args for dataloaders
+    if include_bools:
+        args_train.insert(1, all_train_bools)
+        args_val.insert(1, all_val_bools)
+        args_test.insert(1, all_test_bools)
+        if include_n_neurons:
+            n_neurons = np.insert(np.cumsum(n_neurons),0,0).astype(np.int64) #make n_neurons cumulative sum with 0 in front for easier indexing
+            args_train.insert(2, n_neurons)
+            args_val.insert(2, n_neurons)
+            args_test.insert(2, n_neurons)
+    else:
+        n_neurons = None
+
+    train_loader = get_cached_loader_extended(*args_train,
+                                     batch_size=batch_size,
+                                     image_cache=cache,
+                                     include_trial_id=include_trial_id,
+                                     include_bools = include_bools,
+                                     include_n_neurons = include_n_neurons,
+                                     include_prev_image=include_prev_image,)
+
+    val_loader = get_cached_loader_extended(*args_val,
+                                   batch_size=batch_size,
+                                   image_cache=cache,
+                                   include_trial_id=include_trial_id,
+                                   include_bools = include_bools,
+                                   include_n_neurons = include_n_neurons,
+                                   include_prev_image=include_prev_image,)
+
+    test_loader = get_cached_loader_extended(*args_test,
+                                    batch_size=None,
+                                    shuffle=None,
+                                    image_cache=cache,
+                                    repeat_condition=all_testing_ids,
+                                    include_bools = include_bools,
+                                    include_n_neurons = include_n_neurons,
+                                    include_prev_image=include_prev_image,
+                                    include_trial_id=include_trial_id)
+
+    data_key = 'all_sessions'
+    dataloaders["train"][data_key] = train_loader
+    dataloaders["validation"][data_key] = val_loader
+    dataloaders["test"][data_key] = test_loader
+
+
+    return dataloaders if not return_data_info else data_info
+
+
+def monkey_static_loader_extended(dataset,
+                         neuronal_data_files,
+                         image_cache_path,
+                         batch_size=64,
+                         seed=None,
+                         train_frac=0.8,
+                         subsample=1,
+                         crop=((96, 96), (96, 96)),
+                         scale=1.,
+                         time_bins_sum=tuple(range(12)),
+                         avg=False,
+                         image_file=None,
+                         return_data_info=False,
+                         store_data_info=True,
+                         image_frac=1.,
+                         image_selection_seed=None,
+                         randomize_image_selection=True,
+                         img_mean=None,
+                         img_std=None,
+                         stimulus_location=None,
+                         monitor_scaling_factor=4.57,
+                         include_prev_image=False,
+                         num_prev_images = 0,
+                         include_trial_id=False,
+                         include_prev_responses=False,
+                         include_next_image = False,
+                         include_other_resps = False
+                         ):
+    """
+    Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images and the possibility to include the previous responses.
+
+     creates a nested dictionary of dataloaders in the format
+            {'train' : dict_of_loaders,
+             'validation'   : dict_of_loaders,
+            'test'  : dict_of_loaders, }
+
+        in each dict_of_loaders, there will be  one dataloader per data-key (refers to a unique session ID)
+        with the format:
+            {'data-key1': torch.utils.data.DataLoader,
+             'data-key2': torch.utils.da.DataLoader, ... }
+
+    requires the types of input files:
+        - the neuronal data files. A list of pickle files, with one file per session
+        - the image file. The pickle file that contains all images.
+        - individual image files, stored as numpy array, in a subfolder
+
+    Args:
+        dataset: a string, identifying the Dataset:
+            'PlosCB19_V1', 'CSRF19_V1', 'CSRF19_V4'
+            This string will be parsed by a datajoint table
+
+        neuronal_data_files: a list paths that point to neuronal data pickle files
+        image_file: a path that points to the image file
+        image_cache_path: The path to the cached images
+        batch_size: int - batch size of the dataloaders
+        seed: int - random seed, to calculate the random split
+        train_frac: ratio of train/validation images
+        subsample: int - downsampling factor
+        crop: int or tuple - crops x pixels from each side. Example: Input image of 100x100, crop=10 => Resulting img = 80x80.
+            if crop is tuple, the expected input is a list of tuples, the specify the exact cropping from all four sides
+                i.e. [(crop_top, crop_bottom), (crop_left, crop_right)]
+        scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
+        time_bins_sum: sums the responses over x time bins.
+        avg: Boolean - Sums oder Averages the responses across bins.
+
+    Returns: nested dictionary of dataloaders
+    """
+
+    dataset_config = locals()
+
+    # initialize dataloaders as empty dict
+    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+
+    if not isinstance(time_bins_sum, Iterable):
+        time_bins_sum = tuple(range(time_bins_sum))
+
+    if isinstance(crop, int):
+        crop = [(crop, crop), (crop, crop)]
+
+    if stimulus_location is not None:
+        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+
+    if not isinstance(image_frac, Iterable):
+        image_frac = [image_frac for i in neuronal_data_files]
+
+    # clean up image path because of legacy folder structure
+    image_cache_path = image_cache_path.split('individual')[0]
+
+    # Load image statistics if present
+    stats_filename = make_hash(dataset_config)
+    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+
+    # Get mean and std
+    if os.path.exists(stats_path):
+        with open(stats_path, "rb") as pkl:
+            data_info = pickle.load(pkl)
+        if return_data_info:
+            return data_info
+        img_mean = list(data_info.values())[0]["img_mean"]
+        img_std = list(data_info.values())[0]["img_std"]
+
+        # Initialize cache
+        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                           img_std=img_std, transform=True, normalize=True)
+    else:
+
+        if img_mean is not None:
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
+                               img_std=img_std, transform=True, normalize=True)
+        else:
+            # Initialize cache with no normalization
+            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
+                               normalize=False)
+
+            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+            cache.zscore_images(update_stats=True)
+            img_mean = cache.img_mean
+            img_std = cache.img_std
+
+    n_images = len(cache)
+    data_info = {}
+
+    # set up parameters for the different dataset types
+    if dataset == 'PlosCB19_V1':
+        # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
+        # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
+        # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
+        train_test_split = 0.8
+        image_id_offset = 1
+    else:
+        train_test_split = 1
+        image_id_offset = 0
+
+    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
+                                                             train_frac=train_frac,
+                                                             seed=seed)
+
+    # cycling through all datafiles to fill the dataloaders with an entry per session
+    for i, datapath in enumerate(neuronal_data_files):
+        with open(datapath, "rb") as pkl:
+            raw_data = pickle.load(pkl)
+
+        subject_ids = raw_data["subject_id"]
+        data_key = str(raw_data["session_id"])
+        responses_train = raw_data["training_responses"].astype(np.float32)
+        responses_test = raw_data["testing_responses"].astype(np.float32)
+        training_image_ids = raw_data["training_image_ids"] - image_id_offset
+        testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
+
+        if include_prev_image and not "training_prior_image_ids" in raw_data:
+            raise ValueError(
+                "No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
+
+        if include_prev_image or include_prev_responses:
+            prior_training_image_ids = raw_data["training_prior_image_ids"] - image_id_offset
+            prior_testing_image_ids = raw_data["testing_prior_image_ids"] - image_id_offset
+
+        if include_prev_image and (num_prev_images == 0):
+            raise ValueError(
+                "Include_prev_images True, but num_prev_images is zero. Set 'num_prev_images' to a positive number")
+
+        if not include_prev_image and (num_prev_images != 0):
+            raise ValueError(
+                "Include_prev_images False, but num_prev_images is zero. Set 'include_prev_images' to True")
+
+        if include_prev_image:
+            prev_training_image_ids = np.zeros((num_prev_images, len(training_image_ids)))
+            prev_testing_image_ids = np.zeros((num_prev_images, len(testing_image_ids)))
+            temp_prev_training =  prior_training_image_ids
+            temp_prev_testing = prior_testing_image_ids
+            prev_training_image_ids[0] = prior_training_image_ids
+            prev_testing_image_ids[0] = prior_testing_image_ids
+            for j in range(num_prev_images-1):
+                temp_prev_training = np.insert(temp_prev_training.copy(), 0, 0)[:-1]
+                temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
+                prev_training_image_ids[j+1] = temp_prev_training
+                prev_testing_image_ids[j+1] = temp_prev_testing
+
+        if include_next_image:
+            next_training_image_ids = np.append(training_image_ids.copy(), 0)[1:]
+            next_testing_image_ids = np.append(testing_image_ids.copy(), 0)[1:]
+
+
+        if dataset != 'PlosCB19_V1':
+            if len(responses_test.shape) != 3:
+                responses_test = responses_test[None, ...]
+                responses_train = responses_train[None, ...]
+                # correct the shape of the responses for a session that was exported incorrectly
+                if data_key != '3653663964522':
+                    warnings.warn("Pickle file with invalid response shape detected")
+
+            responses_test = responses_test.transpose((2, 0, 1))
+            responses_train = responses_train.transpose((2, 0, 1))
+
+            if time_bins_sum is not None:  # then average over given time bins
+                responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
+                responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+
+        if image_frac[i] < 1:
+            if randomize_image_selection:
+                image_selection_seed = int(image_selection_seed * image_frac[i])
+            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac[i],
+                                                      seed=image_selection_seed)
+            training_image_ids = training_image_ids[idx_out]
+            responses_train = responses_train[idx_out]
+
+        if include_other_resps:
+            other_resps_train = responses_train
+            other_resps_test = np.zeros(responses_test.shape)
+            _, first_ids = np.unique(testing_image_ids,return_index=True)
+            for first_id in first_ids:
+                idx = np.where(testing_image_ids ==testing_image_ids[first_id])
+                idx2 = np.roll(idx,1)
+                other_resps_test[idx] = responses_test[idx2]
+
+        train_idx = np.isin(training_image_ids, all_train_ids)
+        val_idx = np.isin(training_image_ids, all_validation_ids)
+
+        responses_val = responses_train[val_idx]
+        responses_train = responses_train[train_idx]
+
+        validation_image_ids = training_image_ids[val_idx]
+        training_image_ids = training_image_ids[train_idx]
+
+        if include_prev_image:
+            all_prev_training_image_ids = prev_training_image_ids
+            prev_validation_image_ids = np.zeros((num_prev_images, np.count_nonzero(val_idx)))
+            prev_training_image_ids = np.zeros((num_prev_images, np.count_nonzero(train_idx)))
+            for i in range(num_prev_images):
+                prev_validation_image_ids[i] = all_prev_training_image_ids[i][val_idx]
+                prev_training_image_ids[i] = all_prev_training_image_ids[i][train_idx]
+
+        if include_trial_id:
+            test_trial_ids = scipy.stats.zscore(range(len(testing_image_ids)))
+            all_train_trial_ids = scipy.stats.zscore(range(len(training_image_ids) + len(validation_image_ids)))
+            train_trial_ids = all_train_trial_ids[train_idx]
+            val_trial_ids = all_train_trial_ids[val_idx]
+
+        if include_next_image:
+            next_validation_image_ids = next_training_image_ids[val_idx]
+            next_training_image_ids = next_training_image_ids[train_idx]
+
+        if include_other_resps:
+            other_resps_validation = other_resps_train[val_idx]
+            other_resps_train = other_resps_train[train_idx]
+
+        if include_prev_responses:
+            prior_validation_image_ids = prior_training_image_ids[val_idx]
+            prior_training_image_ids = prior_training_image_ids[val_idx]
+
+        args_train = [training_image_ids, responses_train]
+        args_val = [validation_image_ids, responses_val]
+        args_test = [testing_image_ids, responses_test]
+
+        if include_prev_image:
+            args_train.insert(1, prev_training_image_ids)
+            args_val.insert(1, prev_validation_image_ids)
+            args_test.insert(1, prev_testing_image_ids)
+
+        if include_prev_responses:
+            args_train.insert(1 + include_prev_image, prior_training_image_ids)
+            args_val.insert(1 + include_prev_image, prior_validation_image_ids)
+            args_test.insert(1 + include_prev_image, prior_testing_image_ids)
+
+        if include_trial_id:
+            args_train.insert(1 + include_prev_image + include_prev_responses, train_trial_ids)
+            args_val.insert(1 + include_prev_image + include_prev_responses, val_trial_ids)
+            args_test.insert(1 + include_prev_image + include_prev_responses, test_trial_ids)
+
+        if include_next_image:
+            args_train.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_training_image_ids)
+            args_val.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_validation_image_ids)
+            args_test.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_testing_image_ids)
+
+        if include_other_resps:
+            args_train.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_train)
+            args_val.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_validation)
+            args_test.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_test)
+
+        train_loader = get_cached_loader_extended(*args_train,
+                                         batch_size=batch_size,
+                                         image_cache=cache,
+                                         include_trial_id=include_trial_id,
+                                         include_prev_image=include_prev_image,
+                                         num_prev_images=num_prev_images,
+                                         include_prev_responses=include_prev_responses,
+                                         include_next_image=include_next_image,
+                                         include_other_resps = include_other_resps)
+
+        val_loader = get_cached_loader_extended(*args_val,
+                                       batch_size=batch_size,
+                                       image_cache=cache,
+                                       include_trial_id=include_trial_id,
+                                       include_prev_image=include_prev_image,
+                                       num_prev_images=num_prev_images,
+                                       include_prev_responses=include_prev_responses,
+                                       include_next_image=include_next_image,
+                                       include_other_resps = include_other_resps)
+
+        test_loader = get_cached_loader_extended(*args_test,
+                                        batch_size=None,
+                                        shuffle=None,
+                                        image_cache=cache,
+                                        repeat_condition=testing_image_ids,
+                                        include_prev_image=include_prev_image,
+                                        include_trial_id=include_trial_id,
+                                        num_prev_images=num_prev_images,
+                                        include_prev_responses=include_prev_responses,
+                                        include_next_image=include_next_image,
+                                        include_other_resps = include_other_resps)
+
+        dataloaders["train"][data_key] = train_loader
+        dataloaders["validation"][data_key] = val_loader
+        dataloaders["test"][data_key] = test_loader
+
+    if store_data_info and not os.path.exists(stats_path):
+
+        #in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        try: #if the prev_resps are added as a separate input, this will cause an error
+            in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        except:
+            in_name, out_name,prev_resps = next(iter(list(dataloaders["train"].values())[0]))._fields
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
+
+        for data_key in session_shape_dict:
+            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
+                                       input_channels=input_channels[data_key],
+                                       output_dimension=n_neurons_dict[data_key],
+                                       img_mean=img_mean,
+                                       img_std=img_std)
+
+        stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
             os.mkdir(stats_path_base)
         with open(stats_path, "wb") as pkl:

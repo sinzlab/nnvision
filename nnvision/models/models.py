@@ -70,24 +70,6 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
-
     set_random_seed(seed)
 
     core = SE2dCore(input_channels=core_input_channels,
@@ -161,6 +143,7 @@ def se_core_full_gauss_readout(dataloaders,
                                data_info=None,
                                gamma_grid_dispersion=0,
                                attention_conv=False,
+                               **kwargs
                                ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -196,12 +179,18 @@ def se_core_full_gauss_readout(dataloaders,
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name = next(iter(list(dataloaders.values())[0]))._fields[0]
+        out_name = next(iter(list(dataloaders.values())[0]))._fields[1]
+
+        dl = next(iter(list(dataloaders.values())))
+        if hasattr(dl.dataset,"n_neurons"): # retrieve n_neurons for when all sessions are in the same response array
+            kwargs["n_neurons"] = dl.dataset.n_neurons
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
         in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
         input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
 
     core_input_channels = list(input_channels.values())[0] if isinstance(input_channels, dict) else input_channels[0]
 
@@ -224,24 +213,6 @@ def se_core_full_gauss_readout(dataloaders,
         for match_id in shared_match_ids.values():
             assert len(set(match_id) & all_multi_unit_ids) == len(all_multi_unit_ids), \
                 'All multi unit IDs must be present in all datasets'
-
-    class Encoder(nn.Module):
-
-        def __init__(self, core, readout, elu_offset):
-            super().__init__()
-            self.core = core
-            self.readout = readout
-            self.offset = elu_offset
-
-        def forward(self, x, data_key=None, **kwargs):
-            x = self.core(x)
-
-            sample = kwargs["sample"] if 'sample' in kwargs else None
-            x = self.readout(x, data_key=data_key, sample=sample)
-            return F.elu(x + self.offset) + 1
-
-        def regularizer(self, data_key):
-            return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
 
     set_random_seed(seed)
 
@@ -281,12 +252,13 @@ def se_core_full_gauss_readout(dataloaders,
                                      share_grid=share_grid,
                                      shared_match_ids=shared_match_ids,
                                      gamma_grid_dispersion=gamma_grid_dispersion,
+                                     **kwargs
                                      )
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            targets = next(iter(value))[1]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -1797,6 +1769,7 @@ def transfer_core_fullgauss_readout(dataloaders,
                                     share_features=False,
                                     share_grid=False,
                                     gamma_grid_dispersion=0,
+                                    **kwargs,
                                     ):
 
     if data_info is not None:
@@ -1840,7 +1813,8 @@ def transfer_core_fullgauss_readout(dataloaders,
                                      share_features=share_features,
                                      share_grid=share_grid,
                                      shared_match_ids=None,
-                                     gamma_grid_dispersion=gamma_grid_dispersion,)
+                                     gamma_grid_dispersion=gamma_grid_dispersion,
+                                     **kwargs)
 
     # initializing readout bias to mean response
     if readout_bias and data_info is None:

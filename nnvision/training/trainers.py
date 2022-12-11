@@ -124,7 +124,6 @@ def nnvision_trainer(model, dataloaders, seed, avg_loss=False, scale_loss=True, 
         optimizer.zero_grad()
         for batch_no, (data_key, data) in tqdm(enumerate(LongCycler(dataloaders["train"])), total=n_iterations,
                                                desc="Epoch {}".format(epoch)):
-
             loss = full_objective(model, dataloaders["train"], data_key, *data[:2], **data._asdict())
             loss.backward()
             if (batch_no + 1) % optim_step_count == 0:
