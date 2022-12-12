@@ -23,6 +23,10 @@ def model_predictions_repeats(
     """
     target, output = [], []
     unique_images = torch.empty(0).to(device)
+    batch = next(iter(dataloader))
+    if "bools" in batch._fields: #if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
+        mask_flag = True
+
     for batch in dataloader:
         images, responses = batch[:2]
 
@@ -30,23 +34,15 @@ def model_predictions_repeats(
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
 
-        assert torch.all(
-            torch.eq(
-                images[-1, :1, ...],
-                images[0, :1, ...],
-            )
-        ), "All images in the batch should be equal"
+        assert (torch.all(torch.eq(images[-1, :1, ...],images[0, :1, ...],)), "All images in the batch should be equal") #make sure all images are the same
 
-        unique_images = torch.cat(
-            (
-                unique_images,
-                images[
-                0:1,
-                ].to(device),
-            ),
-            dim=0,
-        )
-        target.append(responses.detach().cpu().numpy())
+        unique_images = torch.cat((unique_images,images[0:1,].to(device),),dim=0)
+
+        batch_responses = responses.detach().cpu().numpy()
+        if mask_flag:  #apply mask to responses
+            batch_mask = batch.bools
+            batch_responses = np.ma.masked_array(batch_responses, mask=~batch_mask)
+        target.append(batch_responses)
 
         if images.shape[0] > 1:
             with eval_state(model) if not is_ensemble_function(
@@ -55,12 +51,10 @@ def model_predictions_repeats(
                 with device_state(model, device) if not is_ensemble_function(
                         model
                 ) else contextlib.nullcontext():
-                    output.append(
-                        model(images.to(device), data_key=data_key, **batch._asdict(), repeat_channel_dim=repeat_channel_dim)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                    )
+                    batch_output = model(images.to(device), data_key=data_key, **batch._asdict(), repeat_channel_dim=repeat_channel_dim).detach().cpu().numpy() #get output from model
+                    if mask_flag: #apply mask to output
+                        batch_output = np.ma.masked_array(batch_output, mask=~batch_mask)
+                    output.append(batch_output)
 
     # Forward unique images once
     if len(output) == 0:
@@ -70,9 +64,7 @@ def model_predictions_repeats(
             with device_state(model, device) if not is_ensemble_function(
                     model
             ) else contextlib.nullcontext():
-                output = (
-                    model(unique_images.to(device), data_key=data_key, repeat_channel_dim=repeat_channel_dim).detach().cpu()
-                )
+                output = model(unique_images.to(device), data_key=data_key, repeat_channel_dim=repeat_channel_dim).detach().cpu() #get output from model
 
             output = output.numpy()
 
@@ -159,7 +151,7 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
 
     target, output = torch.empty(0), torch.empty(0)
     batch = next(iter(dataloader))
-    if "bools" in batch._fields:
+    if "bools" in batch._fields: #if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
         mask_flag = True
         masks = torch.empty(0,dtype=np.bool)
     else:
@@ -167,19 +159,19 @@ def model_predictions(model, dataloader, data_key, device='cpu'):
     for batch in dataloader:
         images, responses = batch[:2]
         if mask_flag:
-            mask = batch.bools
+            mask = batch.bools #get mask from batch
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
         with eval_state(model) if not is_ensemble_function(model) else contextlib.nullcontext():
             with device_state(model, device) if not is_ensemble_function(model) else contextlib.nullcontext():
                 with torch.no_grad():
-                    output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0)
-            target = torch.cat((target, responses.detach().cpu()), dim=0)
+                    output = torch.cat((output, (model(images.to(device), data_key=data_key, **batch._asdict()).detach().cpu())), dim=0) #get output as predicted by model
+            target = torch.cat((target, responses.detach().cpu()), dim=0) #get responses from batch
             if mask_flag:
                 masks = torch.cat((masks, mask))
 
-    if mask_flag:
+    if mask_flag: #mask target and output to ignore neurons that were not shown
         target = np.ma.masked_array(target, mask=~masks)
         output = np.ma.masked_array(output, mask=~masks)
     else:

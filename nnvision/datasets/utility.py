@@ -336,7 +336,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
         retrieves the inputs (= tensors[0]) from the image cache. If the image ID is not present in the cache,
             the cache is updated to load the corresponding image into memory.
 
-        Also has the functionality to include the previous image. In that case, len(tensors) will be 3
+        Also has the functionality to include the previous image or other additional information such as the trial id. In that case, len(tensors) will > 2
         """
         if len(self.tensors) == 2:
             if type(index) == int:
@@ -373,7 +373,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 for i in range(self.num_prev_images-1):
                     prev_img = torch.cat([prev_img,torch.stack(list(self.image_cache[key_prev_img[i+1]]))], dim=0)
                 img_channel_2 = prev_img
-                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0) #previous image is added as a second channel into the core
 
             if self.trial_id:
                 trial_id = self.tensors[idx][index]
@@ -381,7 +381,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 trial_id_img = torch.ones_like(img).to(img.dtype)*trial_id
                 if self.prev_img:
                     img_channel_2 = torch.cat([prev_img, trial_id_img])
-                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)#trial id is added as a second channel into the core
 
             if self.bools:
                 bools = self.tensors[idx][index]
@@ -393,7 +393,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 idx += 1
                 next_img = torch.stack(list(self.image_cache[key_next_img]))
                 img_channel_2 = next_img
-                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0) #next image is added as a second channel into the core
 
             if self.other_resps:
                 other_resps = self.tensors[1+self.num_prev_images + self.trial_id + self.bools + self.n_neurons + self.prev_responses+self.next_img ][index]
@@ -402,6 +402,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
             targets = self.tensors[-1][index]
             tensors_expanded = [full_img, targets]
 
+            #bools, previous responses and other responses are added to the DataPoint to be used in the readout of the network.
             if self.bools:
                 tensors_expanded = [full_img , targets, bools]
 
@@ -488,7 +489,10 @@ def get_cached_loader_extended(*args,
         batch_size: int - batch size for the dataloader
         shuffle: Boolean, shuffles image in the dataloader if True
         image_cache: a cache object which stores the images
-        num_prev_images: how many prev images should be included
+        include_prev_image: Boolean- whether one or several previous images should be included in dataloader
+        num_prev_images: int - how many prev images should be included
+        include_next_image:Boolean-  whether the next image should be included
+        include_other_resps: Boolean- include context responses from a different showing of the same image for the testing set for the readout
 
     Returns: a PyTorch DataLoader object
     """

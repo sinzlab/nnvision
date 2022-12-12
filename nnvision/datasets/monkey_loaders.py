@@ -333,13 +333,13 @@ def monkey_static_loader_combined(dataset,
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
-        include_prev_image: boolean, whether to add the previous image to the core input as a second image channel
-        include_trial_id: boolean,  whether to add the trial ID to the core input as a second image channel
-        include_bools: boolean, dataloader has a "booleans"-array that indicates which neurons were shown the image and which weren't (necessary for zeroing out the gradients from those neurons that weren't shown the image)
-        include_n_neurons: include a variable n_neurons in the datasets that records how many neurons were from each session
+        include_prev_image: Boolean - whether to add the previous image to the core input as a second image channel
+        include_trial_id: Boolean -  whether to add the trial ID to the core input as a second image channel
+        include_bools: Boolean - dataloader has a "booleans"-array that indicates which neurons were shown the image and which weren't (necessary for zeroing out the gradients from those neurons that weren't shown the image)
+        include_n_neurons: Boolean - whether to include a variable n_neurons in the datasets that records how many neurons were from each session
 
 
-    Returns: nested dictionary of dataloaders
+    Returns: nested dictionary of dataloaders with one dataloader for all sessions
     """
 
     dataset_config = locals()
@@ -609,8 +609,14 @@ def monkey_static_loader_extended(dataset,
         scale: float or integer - up-scale or down-scale via interpolation hte input images (default= 1)
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
+        include_prev_image: Boolean- whether one or several previous images should be included in dataloader to be input into the core
+        num_prev_images: Int- how many prev images should be included
+        include_prev_responses: Boolean- whether to include the responses to the previous images for the readout
+        include_trial_id: Boolean- whether to include the trial id for each image as a second channel into the core
+        include_next_image: Boolean- whether the next image should be included as a second channel into the core
+        other_resps: Boolean- include context responses from a different showing of the same image for the testing set for the readout
 
-    Returns: nested dictionary of dataloaders
+    Returns: nested dictionary of dataloaders, one dataloader for each batch
     """
 
     dataset_config = locals()
@@ -677,7 +683,7 @@ def monkey_static_loader_extended(dataset,
     else:
         train_test_split = 1
         image_id_offset = 0
-
+    #get indexes to split training and validation ids
     all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
                                                              train_frac=train_frac,
                                                              seed=seed)
@@ -713,16 +719,19 @@ def monkey_static_loader_extended(dataset,
         if include_prev_image:
             prev_training_image_ids = np.zeros((num_prev_images, len(training_image_ids)))
             prev_testing_image_ids = np.zeros((num_prev_images, len(testing_image_ids)))
+            #for previous image ids, use prior image ids in raw data
             temp_prev_training =  prior_training_image_ids
             temp_prev_testing = prior_testing_image_ids
             prev_training_image_ids[0] = prior_training_image_ids
             prev_testing_image_ids[0] = prior_testing_image_ids
+            #if there is more than one previous image beign included, move prior image ids by one for each
             for j in range(num_prev_images-1):
                 temp_prev_training = np.insert(temp_prev_training.copy(), 0, 0)[:-1]
                 temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
                 prev_training_image_ids[j+1] = temp_prev_training
                 prev_testing_image_ids[j+1] = temp_prev_testing
 
+        # move image ids by one in other direction for next image ids
         if include_next_image:
             next_training_image_ids = np.append(training_image_ids.copy(), 0)[1:]
             next_testing_image_ids = np.append(testing_image_ids.copy(), 0)[1:]
@@ -743,7 +752,7 @@ def monkey_static_loader_extended(dataset,
                 responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
                 responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
 
-        if image_frac[i] < 1:
+        if image_frac[i] < 1: #only include given fraction of image ids
             if randomize_image_selection:
                 image_selection_seed = int(image_selection_seed * image_frac[i])
             idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac[i],
@@ -754,14 +763,14 @@ def monkey_static_loader_extended(dataset,
         if include_other_resps:
             other_resps_train = responses_train
             other_resps_test = np.zeros(responses_test.shape)
-            _, first_ids = np.unique(testing_image_ids,return_index=True)
+            _, first_ids = np.unique(testing_image_ids,return_index=True) #indexes for first showing of each testing image
             for first_id in first_ids:
                 idx = np.where(testing_image_ids ==testing_image_ids[first_id])
-                idx2 = np.roll(idx,1)
+                idx2 = np.roll(idx,1) #find next showing of the same image to switch responses
                 other_resps_test[idx] = responses_test[idx2]
 
-        train_idx = np.isin(training_image_ids, all_train_ids)
-        val_idx = np.isin(training_image_ids, all_validation_ids)
+        train_idx = np.isin(training_image_ids, all_train_ids) #delete?
+        val_idx = np.isin(training_image_ids, all_validation_ids) #delete?
 
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]
@@ -769,7 +778,7 @@ def monkey_static_loader_extended(dataset,
         validation_image_ids = training_image_ids[val_idx]
         training_image_ids = training_image_ids[train_idx]
 
-        if include_prev_image:
+        if include_prev_image:#split previous image ids into training and validation
             all_prev_training_image_ids = prev_training_image_ids
             prev_validation_image_ids = np.zeros((num_prev_images, np.count_nonzero(val_idx)))
             prev_training_image_ids = np.zeros((num_prev_images, np.count_nonzero(train_idx)))
@@ -777,7 +786,7 @@ def monkey_static_loader_extended(dataset,
                 prev_validation_image_ids[i] = all_prev_training_image_ids[i][val_idx]
                 prev_training_image_ids[i] = all_prev_training_image_ids[i][train_idx]
 
-        if include_trial_id:
+        if include_trial_id: #split trial ids into training and validation
             test_trial_ids = scipy.stats.zscore(range(len(testing_image_ids)))
             all_train_trial_ids = scipy.stats.zscore(range(len(training_image_ids) + len(validation_image_ids)))
             train_trial_ids = all_train_trial_ids[train_idx]
@@ -799,6 +808,7 @@ def monkey_static_loader_extended(dataset,
         args_val = [validation_image_ids, responses_val]
         args_test = [testing_image_ids, responses_test]
 
+        #add various other variables to arguments to be given to dataloaders
         if include_prev_image:
             args_train.insert(1, prev_training_image_ids)
             args_val.insert(1, prev_validation_image_ids)
@@ -824,6 +834,7 @@ def monkey_static_loader_extended(dataset,
             args_val.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_validation)
             args_test.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_test)
 
+        #get dataloaders
         train_loader = get_cached_loader_extended(*args_train,
                                          batch_size=batch_size,
                                          image_cache=cache,
@@ -855,18 +866,16 @@ def monkey_static_loader_extended(dataset,
                                         include_prev_responses=include_prev_responses,
                                         include_next_image=include_next_image,
                                         include_other_resps = include_other_resps)
-
+        #add dataloaders to nested dictionary
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
 
     if store_data_info and not os.path.exists(stats_path):
 
-        #in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
-        try: #if the prev_resps are added as a separate input, this will cause an error
-            in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
-        except:
-            in_name, out_name,prev_resps = next(iter(list(dataloaders["train"].values())[0]))._fields
+        #get input name and output name from dataloaders
+        in_name = next(iter(list(dataloaders["train"].values())[0]))._fields[0]
+        out_name = next(iter(list(dataloaders["train"].values())[0]))._fields[1]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
