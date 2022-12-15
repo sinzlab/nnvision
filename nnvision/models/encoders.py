@@ -21,7 +21,7 @@ class Encoder(nn.Module):
         x = self.readout(x, data_key=data_key, **kwargs)
         if kwargs.get("output_attn_weights", False):
             x, attention_weights = x
-            return F.elu(x + self.offset), attention_weights
+            return F.elu(x + self.offset) + 1, attention_weights
 
         return F.elu(x + self.offset) + 1
 

@@ -27,8 +27,7 @@ try:
     from neuralpredictors.layers.activations import MultiplePiecewiseLinearExpNonlinearity
     from neuralpredictors.utils import get_module_output
 except (ImportError, ModuleNotFoundError):
-    print("omg")
-
+    pass
 
 def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13,  # core args
                           hidden_kern=3, layers=3, gamma_input=15.5,
