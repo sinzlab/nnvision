@@ -10,7 +10,8 @@ logger.setLevel(logging.INFO)
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.INFO)
 formatter = logging.Formatter(
-    "%(asctime)s %(levelname)-8s %(filename)-20s%(lineno)4d:\t %(message)s", datefmt="%d-%m-%Y:%H:%M:%S"
+    "%(asctime)s %(levelname)-8s %(filename)-20s%(lineno)4d:\t %(message)s",
+    datefmt="%d-%m-%Y:%H:%M:%S",
 )
 ch.setFormatter(formatter)
 logger.addHandler(ch)
@@ -53,7 +54,15 @@ def build_core(
     )
 
 
-def build_readout(in_shape, neurons, gamma_features=1.0, positive=False, pool_steps=2, kernel_size=4, stride=4):
+def build_readout(
+    in_shape,
+    neurons,
+    gamma_features=1.0,
+    positive=False,
+    pool_steps=2,
+    kernel_size=4,
+    stride=4,
+):
     return readouts.STPool3dReadout(
         in_shape=in_shape,
         neurons=neurons,
@@ -65,7 +74,14 @@ def build_readout(in_shape, neurons, gamma_features=1.0, positive=False, pool_st
     )
 
 
-def build_modulator(data_keys, input_channels, hidden_channels=50, bias=True, gamma_modulator=0, offset=1):
+def build_modulator(
+    data_keys,
+    input_channels,
+    hidden_channels=50,
+    bias=True,
+    gamma_modulator=0,
+    offset=1,
+):
     return modulators.GateGRUModulator(
         data_keys,
         input_channels,
@@ -77,11 +93,18 @@ def build_modulator(data_keys, input_channels, hidden_channels=50, bias=True, ga
 
 
 def build_shifter(data_keys, input_channels, gamma_shifter=1e-3, bias=True):
-    return shifters.StaticAffineShifter(data_keys, input_channels, gamma_shifter=gamma_shifter, bias=bias)
+    return shifters.StaticAffineShifter(
+        data_keys, input_channels, gamma_shifter=gamma_shifter, bias=bias
+    )
 
 
 def build_network(
-    dataloaders, burn_in=15, core_config=None, readout_config=None, shifter_config=None, modulator_config=None
+    dataloaders,
+    burn_in=15,
+    core_config=None,
+    readout_config=None,
+    shifter_config=None,
+    modulator_config=None,
 ):
 
     trainloader = dataloaders["train_loader"]
@@ -103,11 +126,20 @@ def build_network(
     ro_input_shape = get_module_output(core, (1,) + input_shape[1:])[1:]
 
     readout = build_readout(ro_input_shape, n_neurons, **readout_config)
-    shifter = build_shifter(n_neurons, input_channels=eye_pos_channels, **shifter_config)
-    modulator = build_modulator(n_neurons, input_channels=beh_channels, **modulator_config)
+    shifter = build_shifter(
+        n_neurons, input_channels=eye_pos_channels, **shifter_config
+    )
+    modulator = build_modulator(
+        n_neurons, input_channels=beh_channels, **modulator_config
+    )
 
     model = base.CorePlusReadout3d(
-        core, readout, nonlinearity=Elu1(), shifter=shifter, modulator=modulator, burn_in=burn_in
+        core,
+        readout,
+        nonlinearity=Elu1(),
+        shifter=shifter,
+        modulator=modulator,
+        burn_in=burn_in,
     )
 
     # initialize the model

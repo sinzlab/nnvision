@@ -12,7 +12,7 @@ from ..tables.from_nnfabrik import Dataset
 
 
 class BlurAndCut:
-    """ Blur an image with a Gaussian window.
+    """Blur an image with a Gaussian window.
 
     Arguments:
         sigma (float or tuple): Standard deviation in y, x used for the gaussian blurring.
@@ -24,7 +24,9 @@ class BlurAndCut:
             'constant', 'reflect' and 'replicate'
     """
 
-    def __init__(self, sigma, decay_factor=None, truncate=4, pad_mode="reflect", cut_channel=None):
+    def __init__(
+        self, sigma, decay_factor=None, truncate=4, pad_mode="reflect", cut_channel=None
+    ):
         self.sigma = sigma if isinstance(sigma, tuple) else (sigma,) * 2
         self.decay_factor = decay_factor
         self.truncate = truncate
@@ -52,9 +54,17 @@ class BlurAndCut:
         x_gaussian = torch.as_tensor(x_gaussian, device=x.device, dtype=x.dtype)
 
         # Blur
-        padded_x = F.pad(x, pad=(x_halfsize, x_halfsize, y_halfsize, y_halfsize), mode=self.pad_mode)
-        blurred_x = F.conv2d(padded_x, y_gaussian.repeat(num_channels, 1, 1)[..., None], groups=num_channels)
-        blurred_x = F.conv2d(blurred_x, x_gaussian.repeat(num_channels, 1, 1, 1), groups=num_channels)
+        padded_x = F.pad(
+            x, pad=(x_halfsize, x_halfsize, y_halfsize, y_halfsize), mode=self.pad_mode
+        )
+        blurred_x = F.conv2d(
+            padded_x,
+            y_gaussian.repeat(num_channels, 1, 1)[..., None],
+            groups=num_channels,
+        )
+        blurred_x = F.conv2d(
+            blurred_x, x_gaussian.repeat(num_channels, 1, 1, 1), groups=num_channels
+        )
         final_x = blurred_x / (y_gaussian.sum() * x_gaussian.sum())  # normalize
 
         if self.cut_channel is not None:
@@ -64,7 +74,7 @@ class BlurAndCut:
 
 
 class ChangeNormAndClip:
-    """ Change the norm of the input.
+    """Change the norm of the input.
 
     Arguments:
         norm (float or tensor): Desired norm. If tensor, it should be the same length as
@@ -84,7 +94,7 @@ class ChangeNormAndClip:
 
 
 class ChangeNormClipSetBackground:
-    """ Change the norm of the input.
+    """Change the norm of the input.
 
     Arguments:
         norm (float or tensor): Desired norm. If tensor, it should be the same length as
@@ -100,26 +110,29 @@ class ChangeNormClipSetBackground:
     @varargin
     def __call__(self, x, iteration=None):
         x_norm = torch.norm((x + self.background).view(len(x), -1), dim=-1)
-        renorm = x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1)) + self.background
+        renorm = (
+            x * (self.norm / x_norm).view(len(x), *[1] * (x.dim() - 1))
+            + self.background
+        )
         return torch.clamp(renorm, self.x_min, self.x_max)
 
 
 class MaskChangeNormClip:
-    """ Change the norm of the input.
+    """Change the norm of the input.
 
     Arguments:
         norm (float or tensor): Desired norm. If tensor, it should be the same length as
             x.
     """
 
-    def __init__(self, norm, x_min, x_max, mask_width, mask_height, ppd, fade_start_degrees):
+    def __init__(
+        self, norm, x_min, x_max, mask_width, mask_height, ppd, fade_start_degrees
+    ):
 
         self.mask = get_cosine_mask(mask_width, mask_height, ppd, fade_start_degrees)
         self.norm = norm
         self.x_min = x_min
         self.x_max = x_max
-
-
 
     @varargin
     def __call__(self, x, iteration=None):
@@ -132,7 +145,7 @@ class MaskChangeNormClip:
 
 
 class BatchedCropsPadded:
-    """ Create a batch of crops of the original image.
+    """Create a batch of crops of the original image.
 
     Arguments:
         height (int): Height of the crop
@@ -152,7 +165,9 @@ class BatchedCropsPadded:
         self.width = width
         self.padding = padding
         self.step_size = step_size if isinstance(step_size, tuple) else (step_size,) * 2
-        self.sigma = sigma if sigma is None or isinstance(sigma, tuple) else (sigma,) * 2
+        self.sigma = (
+            sigma if sigma is None or isinstance(sigma, tuple) else (sigma,) * 2
+        )
 
         # If needed, create gaussian mask
         if sigma is not None:
@@ -169,8 +184,16 @@ class BatchedCropsPadded:
 
         # Take crops
         crops = []
-        for i in range(0 + self.padding, x.shape[-2] - self.height + 1 - self.padding, self.step_size[0]):
-            for j in range(0 + self.padding, x.shape[-1] - self.width + 1 - self.padding, self.step_size[1]):
+        for i in range(
+            0 + self.padding,
+            x.shape[-2] - self.height + 1 - self.padding,
+            self.step_size[0],
+        ):
+            for j in range(
+                0 + self.padding,
+                x.shape[-1] - self.width + 1 - self.padding,
+                self.step_size[1],
+            ):
                 crops.append(x[..., i : i + self.height, j : j + self.width])
         crops = torch.cat(crops, dim=0)
 
@@ -183,14 +206,23 @@ class BatchedCropsPadded:
 
 
 class ClipNormInAllChannel:
-    """ When need add transparency to visualization, change the norm of the input for different channel separately (i.e. color channel & transparent channel)
+    """When need add transparency to visualization, change the norm of the input for different channel separately (i.e. color channel & transparent channel)
     Arguments:
         norm (float or tensor): Desired norm. If tensor, it should be the same length as
             x.
     """
 
-    def __init__(self, channel1, norm_ch1,channel2=None,norm_ch2=None, x_min_ch1=None, x_max_ch1=None,
-                 x_min_ch2=None, x_max_ch2=None):
+    def __init__(
+        self,
+        channel1,
+        norm_ch1,
+        channel2=None,
+        norm_ch2=None,
+        x_min_ch1=None,
+        x_max_ch1=None,
+        x_min_ch2=None,
+        x_max_ch2=None,
+    ):
         self.channel1 = channel1
         self.norm_ch1 = norm_ch1
         self.x_min_ch1 = x_min_ch1
@@ -208,27 +240,38 @@ class ClipNormInAllChannel:
         x_norm_ch2 = torch.norm(x[:, self.channel2, ...])
 
         if x_norm_ch1 > self.norm_ch1:
-            x[:, self.channel1, ...] = x[:, self.channel1, ...] * (self.norm_ch1 / x_norm_ch1)
+            x[:, self.channel1, ...] = x[:, self.channel1, ...] * (
+                self.norm_ch1 / x_norm_ch1
+            )
 
         if self.x_min_ch1 or self.x_max_ch1 is not None:
-            x[:, self.channel1, ...] = torch.clamp(x[:, self.channel1, ...], self.x_min_ch1, self.x_max_ch1)
+            x[:, self.channel1, ...] = torch.clamp(
+                x[:, self.channel1, ...], self.x_min_ch1, self.x_max_ch1
+            )
 
         # when there is transparent channel
         if self.channel2 is not None:
             if self.norm_ch2 is not None:
                 if x_norm_ch2 > self.norm_ch2:
-                    x[:, self.channel2, ...] = x[:, self.channel2, ...] * (self.norm_ch2 / x_norm_ch2)
+                    x[:, self.channel2, ...] = x[:, self.channel2, ...] * (
+                        self.norm_ch2 / x_norm_ch2
+                    )
 
-            x[:, self.channel2, ...] = torch.clamp(x[:, self.channel2, ...], self.x_min_ch2, self.x_max_ch2)
+            x[:, self.channel2, ...] = torch.clamp(
+                x[:, self.channel2, ...], self.x_min_ch2, self.x_max_ch2
+            )
         return x
 
 
-class NatImgBackgroundHighNorm():
-    def __init__(self, key=None,):
+class NatImgBackgroundHighNorm:
+    def __init__(
+        self,
+        key=None,
+    ):
         images = []
         dataloaders = (Dataset & key).get_dataloader()
         data_key = list(dataloaders["train"].keys())[0]
-        for tier in ['train', 'test', 'validation']:
+        for tier in ["train", "test", "validation"]:
             for b in dataloaders[tier][data_key]:
                 # squeeze out channel dim
                 images.append(b.inputs.squeeze(1))
@@ -240,16 +283,18 @@ class NatImgBackgroundHighNorm():
 
 
 class CollapseChannel:
-    """ Collapsing.
+    """Collapsing.
 
     Arguments:
         height (int): Height of the crop.
         width (int): Width of the crop
     """
 
-    def __init__(self, channel, ):
+    def __init__(
+        self,
+        channel,
+    ):
         self.channel = channel if isinstance(channel, Iterable) else [channel]
-
 
     @varargin
     def __call__(self, x, iteration=None):

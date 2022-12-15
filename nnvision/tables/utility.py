@@ -36,18 +36,22 @@ def augment_ensemble_model(model, data_keys=None, unit_indices=None):
     if data_keys is None or unit_indices is None:
         raise ValueError("not implemented yet")
 
-    if not hasattr(model, 'members'):
-        raise ValueError("Model has to be an ensemble model with the 'members' property")
+    if not hasattr(model, "members"):
+        raise ValueError(
+            "Model has to be an ensemble model with the 'members' property"
+        )
 
     for ensemble_member in model.members:
         data_key = list(ensemble_member.readout.keys())[0]
         in_shape = ensemble_member.readout[data_key].in_shape
         total_n_neurons = len(unit_indices)
 
-        ensemble_member.readout['augmentation'] = FullGaussian2d(in_shape=in_shape,
-                                                                 outdims=total_n_neurons,
-                                                                 bias=True,
-                                                                 gauss_type="isotropic")
+        ensemble_member.readout["augmentation"] = FullGaussian2d(
+            in_shape=in_shape,
+            outdims=total_n_neurons,
+            bias=True,
+            gauss_type="isotropic",
+        )
 
         for i, (dk, idx) in enumerate(zip(data_keys, unit_indices)):
             features = ensemble_member.readout[dk].features.data[:, :, :, idx]
@@ -56,8 +60,7 @@ def augment_ensemble_model(model, data_keys=None, unit_indices=None):
             mu = ensemble_member.readout[dk].mu.data[0][idx]
             ensemble_member.readout["augmentation"].features.data[:, :, :, i] = features
             ensemble_member.readout["augmentation"].bias.data[i] = bias
-            ensemble_member.readout['augmentation'].sigma.data[:, i, :, :] = sigma
-            ensemble_member.readout['augmentation'].mu.data[:, i, :, :] = mu
+            ensemble_member.readout["augmentation"].sigma.data[:, i, :, :] = sigma
+            ensemble_member.readout["augmentation"].mu.data[:, i, :, :] = mu
 
     return model
-

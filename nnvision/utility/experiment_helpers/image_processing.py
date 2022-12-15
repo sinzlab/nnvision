@@ -31,8 +31,14 @@ def rescale_image(image, scale):
     preserve_range: whether to keep original range of values
     """
 
-    rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=False,
-                                      anti_aliasing=False, preserve_range=True).astype(x.dtype)
+    rescale_fn = lambda x, s: rescale(
+        x,
+        s,
+        mode="reflect",
+        multichannel=False,
+        anti_aliasing=False,
+        preserve_range=True,
+    ).astype(x.dtype)
 
     image = image if scale == 1 else rescale_fn(image, scale)
 
@@ -49,12 +55,14 @@ def shift_image_based_on_masks(img, original_mask, masks):
     h, w = img.shape
 
     com = center_of_mass(original_mask, labels=None, index=None)
-    centered_image = shift(img, (h//2 - int(com[0]), w//2 - int(com[1])))
+    centered_image = shift(img, (h // 2 - int(com[0]), w // 2 - int(com[1])))
 
     shifted_images = []
     for mask in masks:
         com = center_of_mass(mask, labels=None, index=None)
-        shifted_image = shift(centered_image, (int(com[0]) - h//2, int(com[1]) - w//2))
+        shifted_image = shift(
+            centered_image, (int(com[0]) - h // 2, int(com[1]) - w // 2)
+        )
         shifted_images.append(shifted_image)
     return shifted_images
 
@@ -66,27 +74,36 @@ def normalize_image(image, img_mean, img_std):
     image = (image - img_mean) / img_std
     return image
 
+
 def transform_image(image, scale, subsample, crop):
     """
     applies transformations to the image: downsampling, cropping, rescaling, and dimension expansion.
     """
     if len(image.shape) == 2:
         h, w = image.shape
-        rescale_fn = lambda x, s: rescale(x,
-                                          s,
-                                          mode='reflect',
-                                          multichannel=False,
-                                          anti_aliasing=False,
-                                          preserve_range=True).astype(x.dtype)
-        image = image[crop[0][0]:h - crop[0][1]:subsample,
-                crop[1][0]:w - crop[1][1]:subsample]
+        rescale_fn = lambda x, s: rescale(
+            x,
+            s,
+            mode="reflect",
+            multichannel=False,
+            anti_aliasing=False,
+            preserve_range=True,
+        ).astype(x.dtype)
+        image = image[
+            crop[0][0] : h - crop[0][1] : subsample,
+            crop[1][0] : w - crop[1][1] : subsample,
+        ]
         image = image if scale == 1 else rescale_fn(image, scale)
-        image = image[None,]
+        image = image[
+            None,
+        ]
         return image
+
 
 def get_norm(img):
     norm = torch.norm(torch.from_numpy(img))
     return norm
+
 
 def re_norm(img, norm):
     desiredNorm = ChangeNorm(norm)
@@ -94,5 +111,3 @@ def re_norm(img, norm):
     imgTensor = torch.from_numpy(img)
     renormedImage = desiredNorm.__call__(x=imgTensor.view(1, height, width))
     return renormedImage
-
-
