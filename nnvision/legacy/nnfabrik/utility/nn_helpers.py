@@ -46,8 +46,8 @@ def get_module_output(model, input_shape):
 
     :return: output dimensions of the core
     """
-    initial_device = 'cuda' if next(iter(model.parameters())).is_cuda else 'cpu'
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    initial_device = "cuda" if next(iter(model.parameters())).is_cuda else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     with eval_state(model):
         with torch.no_grad():
             input = torch.zeros(1, *input_shape[1:]).to(device)

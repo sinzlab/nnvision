@@ -42,15 +42,25 @@ class _CorePlusReadoutBase(nn.Module):
     def get_readout_in_shape(core, in_shape):
         mov_shape = in_shape[1:]
         core.eval()
-        tmp = Variable(torch.from_numpy(np.random.randn(1, *mov_shape).astype(np.float32)))
+        tmp = Variable(
+            torch.from_numpy(np.random.randn(1, *mov_shape).astype(np.float32))
+        )
         nout = core(tmp).size()[1:]
         core.train(True)
         return nout
 
 
 class CorePlusReadout3d(_CorePlusReadoutBase):
-    def __init__(self, core, readout, modulator=None, nonlinearity=None, shifter=None, burn_in=15):
-        super().__init__(core, readout, modulator=modulator, nonlinearity=nonlinearity, shifter=shifter)
+    def __init__(
+        self, core, readout, modulator=None, nonlinearity=None, shifter=None, burn_in=15
+    ):
+        super().__init__(
+            core,
+            readout,
+            modulator=modulator,
+            nonlinearity=nonlinearity,
+            shifter=shifter,
+        )
         self.burn_in = burn_in
 
     @property
@@ -73,13 +83,18 @@ class CorePlusReadout3d(_CorePlusReadoutBase):
             shift = None
 
         if self.readout_gpu is not None:
-            module_kwargs = dict(shift=shift.cuda(1) if shift is not None else None, subs_idx=subs_idx)
+            module_kwargs = dict(
+                shift=shift.cuda(1) if shift is not None else None, subs_idx=subs_idx
+            )
             n_gpu = torch.cuda.device_count()
 
             if x.size(0) > 1:
                 device_ids = list(range(1, min(n_gpu, x.size(0))))
                 x = data_parallel(
-                    self.readout[readout_key], x.cuda(1), module_kwargs=module_kwargs, device_ids=device_ids
+                    self.readout[readout_key],
+                    x.cuda(1),
+                    module_kwargs=module_kwargs,
+                    device_ids=device_ids,
                 ).cuda(0)
             else:
                 x = self.readout[readout_key](x.cuda(1), **module_kwargs).cuda(0)

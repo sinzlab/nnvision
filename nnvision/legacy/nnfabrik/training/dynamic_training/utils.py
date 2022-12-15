@@ -28,8 +28,12 @@ def corr(y1, y2, axis=-1, eps=1e-8, **kwargs):
     Returns: correlation vector
 
     """
-    y1 = (y1 - y1.mean(axis=axis, keepdims=True)) / (y1.std(axis=axis, keepdims=True, ddof=1) + eps)
-    y2 = (y2 - y2.mean(axis=axis, keepdims=True)) / (y2.std(axis=axis, keepdims=True, ddof=1) + eps)
+    y1 = (y1 - y1.mean(axis=axis, keepdims=True)) / (
+        y1.std(axis=axis, keepdims=True, ddof=1) + eps
+    )
+    y2 = (y2 - y2.mean(axis=axis, keepdims=True)) / (
+        y2.std(axis=axis, keepdims=True, ddof=1) + eps
+    )
     return (y1 * y2).mean(axis=axis, **kwargs)
 
 
@@ -52,19 +56,38 @@ def ptcorr(y1, y2, axis=-1, eps=1e-8, **kwargs):
     return (y1 * y2).mean(dim=axis, **kwargs)
 
 
-def compute_predictions(loader, model, readout_key, reshape=True, stack=True, subsamp_size=None, return_lag=False):
+def compute_predictions(
+    loader,
+    model,
+    readout_key,
+    reshape=True,
+    stack=True,
+    subsamp_size=None,
+    return_lag=False,
+):
     y, y_hat = [], []
     if subsamp_size is not None:
         loader = tqdm(loader)
     for x_val, beh_val, eye_val, y_val in loader:
         neurons = y_val.size(-1)
         if subsamp_size is None:
-            y_mod = model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val).detach().cpu().numpy()
+            y_mod = (
+                model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val)
+                .detach()
+                .cpu()
+                .numpy()
+            )
         else:
             y_mod = []
             for subs_idx in slice_iter(neurons, subsamp_size):
                 y_mod.append(
-                    model(x_val, readout_key, eye_pos=eye_val, behavior=beh_val, subs_idx=subs_idx)
+                    model(
+                        x_val,
+                        readout_key,
+                        eye_pos=eye_val,
+                        behavior=beh_val,
+                        subs_idx=subs_idx,
+                    )
                     .detach()
                     .cpu()
                     .numpy()
@@ -90,7 +113,14 @@ def correlation_closure(mod, loaders, avg=True, subsamp_size=None):
     train = mod.training
     mod.eval()
     for readout_key, loader in loaders.items():
-        y, y_hat = compute_predictions(loader, mod, readout_key, reshape=True, stack=True, subsamp_size=subsamp_size)
+        y, y_hat = compute_predictions(
+            loader,
+            mod,
+            readout_key,
+            reshape=True,
+            stack=True,
+            subsamp_size=subsamp_size,
+        )
         co = corr(y, y_hat, axis=0)
         print(readout_key + "correlation: {:.4f}".format(co.mean()))
         ret.append(co)

@@ -26,7 +26,9 @@ class Core:
         s = super().__repr__()
         s += " [{} regularizers: ".format(self.__class__.__name__)
         ret = []
-        for attr in filter(lambda x: not x.startswith("_") and "gamma" in x or "skip" in x, dir(self)):
+        for attr in filter(
+            lambda x: not x.startswith("_") and "gamma" in x or "skip" in x, dir(self)
+        ):
             ret.append("{} = {}".format(attr, getattr(self, attr)))
         return s + "|".join(ret) + "]\n"
 
@@ -48,7 +50,11 @@ class StackedDepthSeparable2dCore(Core, nn.Module):
         batch_norm=True,
         **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self._input_weights_regularizer = LaplaceL2()
 
@@ -63,7 +69,11 @@ class StackedDepthSeparable2dCore(Core, nn.Module):
         # --- first layer
         layer = OrderedDict()
         layer["conv"] = DepthSeparableConv2d(
-            input_channels, hidden_channels, input_kern, padding=input_kern // 2 if pad_input else 0, bias=bias
+            input_channels,
+            hidden_channels,
+            input_kern,
+            padding=input_kern // 2 if pad_input else 0,
+            bias=bias,
         )
         if batch_norm:
             layer["norm"] = nn.BatchNorm2d(hidden_channels, momentum=momentum)
@@ -93,13 +103,17 @@ class StackedDepthSeparable2dCore(Core, nn.Module):
         ret = []
         for l, feat in enumerate(self.features):
             do_skip = l >= 1 and self.skip > 1
-            input_ = feat(input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1))
+            input_ = feat(
+                input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1)
+            )
             ret.append(input_)
         return torch.cat(ret, dim=1)
 
     def laplace(self):
         if not self.features[0].conv.spatial_conv.weight.shape[-2:] == (1, 1):
-            return self._input_weights_regularizer(self.features[0].conv.spatial_conv.weight)
+            return self._input_weights_regularizer(
+                self.features[0].conv.spatial_conv.weight
+            )
         else:
             return 0
 
@@ -129,7 +143,11 @@ class Stacked2dCore(Core, nn.Module):
         batch_norm=True,
         **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self._input_weights_regularizer = LaplaceL2()
 
@@ -145,7 +163,11 @@ class Stacked2dCore(Core, nn.Module):
         # --- first layer
         layer = OrderedDict()
         layer["conv"] = nn.Conv2d(
-            input_channels, hidden_channels, input_kern, padding=input_kern // 2 if pad_input else 0, bias=bias
+            input_channels,
+            hidden_channels,
+            input_kern,
+            padding=input_kern // 2 if pad_input else 0,
+            bias=bias,
         )
         if batch_norm:
             layer["norm"] = nn.BatchNorm2d(hidden_channels, momentum=momentum)
@@ -175,7 +197,9 @@ class Stacked2dCore(Core, nn.Module):
         ret = []
         for l, feat in enumerate(self.features):
             do_skip = l >= 1 and self.skip > 1
-            input_ = feat(input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1))
+            input_ = feat(
+                input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1)
+            )
             ret.append(input_)
         return torch.cat(ret, dim=1)
 
@@ -188,11 +212,22 @@ class Stacked2dCore(Core, nn.Module):
     def group_sparsity(self):
         ret = 0
         for l in range(1, self.layers):
-            ret = ret + self.features[l].conv.weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+            ret = (
+                ret
+                + self.features[l]
+                .conv.weight.pow(2)
+                .sum(3, keepdim=True)
+                .sum(2, keepdim=True)
+                .sqrt()
+                .mean()
+            )
         return ret / ((self.layers - 1) if self.layers > 1 else 1)
 
     def regularizer(self):
-        return self.group_sparsity() * self.gamma_hidden + self.gamma_input * self.laplace()
+        return (
+            self.group_sparsity() * self.gamma_hidden
+            + self.gamma_input * self.laplace()
+        )
 
     @property
     def outchannels(self):
@@ -201,8 +236,20 @@ class Stacked2dCore(Core, nn.Module):
 
 # ---------------------- Conv3d Core -----------------------------
 class Conv3dLinearCore(Core, nn.Sequential):
-    def __init__(self, input_channels=1, input_kern=5, hidden_channels=32, momentum=0.99, gamma_input=0, **kwargs):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+    def __init__(
+        self,
+        input_channels=1,
+        input_kern=5,
+        hidden_channels=32,
+        momentum=0.99,
+        gamma_input=0,
+        **kwargs
+    ):
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self._input_weight_regularizer = LaplaceL23d()
         assert input_kern % 2 == 1, "kernel sizes must be odd"
@@ -237,7 +284,11 @@ class Conv3dCore(Core, nn.Sequential):
         gamma_hidden=0.0,
         **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self.laplace_reg = LaplaceL23d()
         assert input_kern % 2 == hidden_kern % 2 == 1, "kernel sizes must be odd"
@@ -245,13 +296,27 @@ class Conv3dCore(Core, nn.Sequential):
         self.gamma_hidden = gamma_hidden
         self.gamma_input = gamma_input
 
-        hidden_padding = hidden_kern // 2 if not isinstance(hidden_kern, tuple) else tuple(k // 2 for k in hidden_kern)
-        input_padding = input_kern // 2 if not isinstance(input_kern, tuple) else tuple(k // 2 for k in input_kern)
+        hidden_padding = (
+            hidden_kern // 2
+            if not isinstance(hidden_kern, tuple)
+            else tuple(k // 2 for k in hidden_kern)
+        )
+        input_padding = (
+            input_kern // 2
+            if not isinstance(input_kern, tuple)
+            else tuple(k // 2 for k in input_kern)
+        )
 
         self.add_module(
             "layer0",
             nn.Sequential(
-                nn.Conv3d(input_channels, channels, input_kern, bias=False, padding=input_padding),
+                nn.Conv3d(
+                    input_channels,
+                    channels,
+                    input_kern,
+                    bias=False,
+                    padding=input_padding,
+                ),
                 nn.BatchNorm3d(channels, momentum=momentum),
                 nn.ELU(inplace=True),
             ),
@@ -261,7 +326,14 @@ class Conv3dCore(Core, nn.Sequential):
             self.add_module(
                 "layer{}".format(l + 1),
                 nn.Sequential(
-                    nn.Conv3d(channels, channels, hidden_kern, bias=False, padding=hidden_padding, dilation=dilation),
+                    nn.Conv3d(
+                        channels,
+                        channels,
+                        hidden_kern,
+                        bias=False,
+                        padding=hidden_padding,
+                        dilation=dilation,
+                    ),
                     nn.BatchNorm3d(channels, momentum=momentum),
                     nn.ELU(inplace=True),
                 ),
@@ -274,11 +346,22 @@ class Conv3dCore(Core, nn.Sequential):
     def group_sparsity(self):
         ret = 0
         for l in range(1, self.layers):
-            ret = ret + self[l][0].weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+            ret = (
+                ret
+                + self[l][0]
+                .weight.pow(2)
+                .sum(3, keepdim=True)
+                .sum(2, keepdim=True)
+                .sqrt()
+                .mean()
+            )
         return ret
 
     def regularizer(self):
-        return self.group_sparsity() * self.gamma_hidden + self.laplace_l2() * self.gamma_input
+        return (
+            self.group_sparsity() * self.gamma_hidden
+            + self.laplace_l2() * self.gamma_input
+        )
 
     def forward(self, input):
         ret = []
@@ -307,7 +390,11 @@ class Stacked3dCore(Core, nn.Module):
         normalize=True,
         **kwargs
     ):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self._input_weights_regularizer = LaplaceL23d()
 
@@ -343,7 +430,9 @@ class Stacked3dCore(Core, nn.Module):
         )
         if normalize:
             # layer['norm'] = nn.BatchNorm3d(hidden_channels, momentum=momentum)
-            layer["norm"] = nn.InstanceNorm3d(hidden_channels, momentum=momentum, eps=0.1, affine=True)
+            layer["norm"] = nn.InstanceNorm3d(
+                hidden_channels, momentum=momentum, eps=0.1, affine=True
+            )
         if layers > 1 or final_nonlinearity:
             layer["nonlin"] = nn.ELU(inplace=True)
         self.features.add_module("layer0", nn.Sequential(layer))
@@ -353,10 +442,18 @@ class Stacked3dCore(Core, nn.Module):
         for l in range(1, self.layers):
             layer = OrderedDict()
             dch = hidden_channels if not skip > 1 else min(skip, l) * hidden_channels
-            layer["conv"] = nn.Conv3d(dch, hidden_channels, hidden_kern, padding=padding(hidden_kern, 1), bias=bias)
+            layer["conv"] = nn.Conv3d(
+                dch,
+                hidden_channels,
+                hidden_kern,
+                padding=padding(hidden_kern, 1),
+                bias=bias,
+            )
             if normalize:
                 # layer['norm'] = nn.BatchNorm3d(hidden_channels, momentum=momentum)
-                layer["norm"] = nn.InstanceNorm3d(hidden_channels, momentum=momentum, eps=1.0, affine=True)
+                layer["norm"] = nn.InstanceNorm3d(
+                    hidden_channels, momentum=momentum, eps=1.0, affine=True
+                )
 
             if final_nonlinearity or l < self.layers - 1:
                 layer["nonlin"] = nn.ELU(inplace=True)
@@ -368,7 +465,9 @@ class Stacked3dCore(Core, nn.Module):
         ret = []
         for l, feat in enumerate(self.features):
             do_skip = l >= 1 and self.skip > 1
-            input_ = feat(input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1))
+            input_ = feat(
+                input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1)
+            )
             ret.append(input_)
         return torch.cat(ret, dim=1)
 
@@ -391,7 +490,10 @@ class Stacked3dCore(Core, nn.Module):
         return ret / ((self.layers - 1) if self.layers > 1 else 1)
 
     def regularizer(self):
-        return self.group_sparsity() * self.gamma_hidden + self.gamma_input * self.laplace()
+        return (
+            self.group_sparsity() * self.gamma_hidden
+            + self.gamma_input * self.laplace()
+        )
 
     @property
     def outchannels(self):
@@ -404,9 +506,22 @@ class Stacked3dCore(Core, nn.Module):
 class ConvGRUCell(Core, nn.Module):
     _base_conv = nn.Conv2d
 
-    def __init__(self, input_channels, rec_channels, input_kern, rec_kern, gamma_rec=0, pad_input=True, **kwargs):
+    def __init__(
+        self,
+        input_channels,
+        rec_channels,
+        input_kern,
+        rec_kern,
+        gamma_rec=0,
+        pad_input=True,
+        **kwargs
+    ):
         super().__init__()
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
 
         self._laplace_reg = LaplaceL2()
 
@@ -416,14 +531,26 @@ class ConvGRUCell(Core, nn.Module):
         self._shrinkage = 0 if pad_input else input_kern - 1
 
         self.gamma_rec = gamma_rec
-        self.reset_gate_input = self._base_conv(input_channels, rec_channels, input_kern, padding=input_padding)
-        self.reset_gate_hidden = self._base_conv(rec_channels, rec_channels, rec_kern, padding=rec_padding)
+        self.reset_gate_input = self._base_conv(
+            input_channels, rec_channels, input_kern, padding=input_padding
+        )
+        self.reset_gate_hidden = self._base_conv(
+            rec_channels, rec_channels, rec_kern, padding=rec_padding
+        )
 
-        self.update_gate_input = self._base_conv(input_channels, rec_channels, input_kern, padding=input_padding)
-        self.update_gate_hidden = self._base_conv(rec_channels, rec_channels, rec_kern, padding=rec_padding)
+        self.update_gate_input = self._base_conv(
+            input_channels, rec_channels, input_kern, padding=input_padding
+        )
+        self.update_gate_hidden = self._base_conv(
+            rec_channels, rec_channels, rec_kern, padding=rec_padding
+        )
 
-        self.out_gate_input = self._base_conv(input_channels, rec_channels, input_kern, padding=input_padding)
-        self.out_gate_hidden = self._base_conv(rec_channels, rec_channels, rec_kern, padding=rec_padding)
+        self.out_gate_input = self._base_conv(
+            input_channels, rec_channels, input_kern, padding=input_padding
+        )
+        self.out_gate_hidden = self._base_conv(
+            rec_channels, rec_channels, rec_kern, padding=rec_padding
+        )
 
         self.apply(self.init_conv)
         self.register_parameter("_prev_state", None)
@@ -432,7 +559,9 @@ class ConvGRUCell(Core, nn.Module):
         if self._prev_state is None:
             log.info("Initializing first hidden state")
             batch_size, _, *spatial_size = input_.data.size()
-            state_size = [batch_size, self.rec_channels] + [s - self._shrinkage for s in spatial_size]
+            state_size = [batch_size, self.rec_channels] + [
+                s - self._shrinkage for s in spatial_size
+            ]
             prev_state = torch.zeros(*state_size)
             if input_.is_cuda:
                 prev_state = prev_state.cuda()

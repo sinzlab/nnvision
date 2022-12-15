@@ -2,44 +2,48 @@ from torch.utils.data import DataLoader
 import torch
 import torch.utils.data as utils
 import numpy as np
-#from retina.retina import warp_image
+
+# from retina.retina import warp_image
 from skimage.transform import rescale
 from collections import namedtuple, Iterable
 import os
 from neuralpredictors.data.samplers import RepeatsBatchSampler
 
 
-def get_oracle_dataloader(dat,
-                          toy_data=False,
-                          oracle_condition=None,
-                          verbose=False,
-                          file_tree=False):
+def get_oracle_dataloader(
+    dat, toy_data=False, oracle_condition=None, verbose=False, file_tree=False
+):
 
     if toy_data:
         condition_hashes = dat.info.condition_hash
     else:
         dat_info = dat.info if not file_tree else dat.trial_info
-        if 'image_id' in dir(dat_info):
+        if "image_id" in dir(dat_info):
             condition_hashes = dat_info.image_id
             image_class = dat_info.image_class
 
-        elif 'colorframeprojector_image_id' in dir(dat_info):
+        elif "colorframeprojector_image_id" in dir(dat_info):
             condition_hashes = dat_info.colorframeprojector_image_id
             image_class = dat_info.colorframeprojector_image_class
-        elif 'frame_image_id' in dir(dat_info):
+        elif "frame_image_id" in dir(dat_info):
             condition_hashes = dat_info.frame_image_id
             image_class = dat_info.frame_image_class
         else:
-            raise ValueError("'image_id' 'colorframeprojector_image_id', or 'frame_image_id' have to present in the dataset under dat.info "
-                             "in order to load get the oracle repeats.")
+            raise ValueError(
+                "'image_id' 'colorframeprojector_image_id', or 'frame_image_id' have to present in the dataset under dat.info "
+                "in order to load get the oracle repeats."
+            )
 
     max_idx = condition_hashes.max() + 1
     classes, class_idx = np.unique(image_class, return_inverse=True)
     identifiers = condition_hashes + class_idx * max_idx
 
     dat_tiers = dat.tiers if not file_tree else dat.trial_info.tiers
-    sampling_condition = np.where(dat_tiers == 'test')[0] if oracle_condition is None else \
-        np.where((dat_tiers == 'test') & (class_idx == oracle_condition))[0]
+    sampling_condition = (
+        np.where(dat_tiers == "test")[0]
+        if oracle_condition is None
+        else np.where((dat_tiers == "test") & (class_idx == oracle_condition))[0]
+    )
     if (oracle_condition is not None) and verbose:
         print("Created Testloader for image class {}".format(classes[oracle_condition]))
 
@@ -60,9 +64,14 @@ def get_validation_split(n_images, train_frac, seed):
     Returns: Two arrays, containing image IDs of the whole imageset, split into train and validation
 
     """
-    if seed: np.random.seed(seed)
-    train_idx, val_idx = np.split(np.random.permutation(int(n_images)), [int(n_images*train_frac)])
-    assert not np.any(np.isin(train_idx, val_idx)), "train_set and val_set are overlapping sets"
+    if seed:
+        np.random.seed(seed)
+    train_idx, val_idx = np.split(
+        np.random.permutation(int(n_images)), [int(n_images * train_frac)]
+    )
+    assert not np.any(
+        np.isin(train_idx, val_idx)
+    ), "train_set and val_set are overlapping sets"
 
     return train_idx, val_idx
 
@@ -89,16 +98,18 @@ class ImageCache:
     Images need to be present as 2D .npy arrays
     """
 
-    def __init__(self, path=None,
-                 subsample=1,
-                 crop=0,
-                 scale=1,
-                 img_mean=None,
-                 img_std=None,
-                 transform=True,
-                 normalize=True,
-                 filename_precision=6,
-                 ):
+    def __init__(
+        self,
+        path=None,
+        subsample=1,
+        crop=0,
+        scale=1,
+        img_mean=None,
+        img_std=None,
+        transform=True,
+        normalize=True,
+        filename_precision=6,
+    ):
         """
 
         path: str - pointing to the directory, where the individual .npy files are present
@@ -112,7 +123,7 @@ class ImageCache:
         normalize: - whether to standarized inputs by the mean and variance
         filename_precision: - amount leading zeros of the files in the specified folder
         """
-        
+
         self.cache = {}
         self.path = path
         self.subsample = subsample
@@ -125,20 +136,24 @@ class ImageCache:
         self.leading_zeros = filename_precision
 
     def __len__(self):
-        return len([file for file in os.listdir(self.path) if file.endswith('.npy')])
+        return len([file for file in os.listdir(self.path) if file.endswith(".npy")])
 
     def __contains__(self, key):
         return key in self.cache
 
     def __getitem__(self, item):
         item = item.tolist() if isinstance(item, Iterable) else item
-        return [self[i] for i in item] if isinstance(item, Iterable) else self.update(item)
+        return (
+            [self[i] for i in item] if isinstance(item, Iterable) else self.update(item)
+        )
 
     def update(self, key):
         if key in self.cache:
             return self.cache[key]
         else:
-            filename = os.path.join(self.path, str(key).zfill(self.leading_zeros) + '.npy')
+            filename = os.path.join(
+                self.path, str(key).zfill(self.leading_zeros) + ".npy"
+            )
             image = np.load(filename, allow_pickle=True)
             image = self.transform_image(image) if self.transform else image
             image = self.normalize_image(image) if self.normalize else image
@@ -152,31 +167,50 @@ class ImageCache:
         """
         if len(image.shape) == 2:
             h, w = image.shape
-            rescale_fn = lambda x, s: rescale(x,
-                                              s,
-                                              mode='reflect',
-                                              multichannel=False,
-                                              anti_aliasing=False,
-                                              preserve_range=True).astype(x.dtype)
-            image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
-                    self.crop[1][0]:w - self.crop[1][1]:self.subsample]
+            rescale_fn = lambda x, s: rescale(
+                x,
+                s,
+                mode="reflect",
+                multichannel=False,
+                anti_aliasing=False,
+                preserve_range=True,
+            ).astype(x.dtype)
+            image = image[
+                self.crop[0][0] : h - self.crop[0][1] : self.subsample,
+                self.crop[1][0] : w - self.crop[1][1] : self.subsample,
+            ]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,]
+            image = image[
+                None,
+            ]
             return image
 
         elif len(image.shape) == 3:
             h, w = image.shape[:2]
-            rescale_fn = lambda x, s: rescale(x, s, mode='reflect', multichannel=True, anti_aliasing=False,
-                                              preserve_range=True).astype(x.dtype)
-            image = image[self.crop[0][0]:h - self.crop[0][1]:self.subsample,
-                    self.crop[1][0]:w - self.crop[1][1]:self.subsample, ...]
+            rescale_fn = lambda x, s: rescale(
+                x,
+                s,
+                mode="reflect",
+                multichannel=True,
+                anti_aliasing=False,
+                preserve_range=True,
+            ).astype(x.dtype)
+            image = image[
+                self.crop[0][0] : h - self.crop[0][1] : self.subsample,
+                self.crop[1][0] : w - self.crop[1][1] : self.subsample,
+                ...,
+            ]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[None,].permute(0, 3, 1, 2)
+            image = image[
+                None,
+            ].permute(0, 3, 1, 2)
         else:
-            raise ValueError(f"Image shape has to be two dimensional (grayscale) or three dimensional "
-                             f"(color, with w x h x c). got image shape {image.shape}")
+            raise ValueError(
+                f"Image shape has to be two dimensional (grayscale) or three dimensional "
+                f"(color, with w x h x c). got image shape {image.shape}"
+            )
         return image
-    
+
     def normalize_image(self, image):
         """
         standarizes image
@@ -187,30 +221,33 @@ class ImageCache:
     @property
     def cache_size(self):
         return len(self.cache)
-    
+
     @property
     def loaded_images(self):
-        print('Loading images ...')
-        items = [int(file.split('.')[0]) for file in os.listdir(self.path) if file.endswith('.npy')]
+        print("Loading images ...")
+        items = [
+            int(file.split(".")[0])
+            for file in os.listdir(self.path)
+            if file.endswith(".npy")
+        ]
         images = torch.stack([self.update(item) for item in items])
         return images
-    
-    
+
     def zscore_images(self, update_stats=True):
         """
         zscore images in cache
         """
-        images   = self.loaded_images
+        images = self.loaded_images
         img_mean = images.mean()
-        img_std  = images.std()
-        
+        img_std = images.std()
+
         for key in self.cache:
             self.cache[key] = (self.cache[key] - img_mean) / img_std
-        
+
         if update_stats:
             self.img_mean = np.float32(img_mean.item())
-            self.img_std  = np.float32(img_std.item())
-        
+            self.img_std = np.float32(img_std.item())
+
     @property
     def image_shape(self):
         if self.cache_size > 0:
@@ -231,13 +268,22 @@ class CachedTensorDataset(utils.Dataset):
         *tensors (Tensor): tensors that have the same size of the first dimension.
     """
 
-    def __init__(self, *tensors, names=('inputs', 'targets'), image_cache=None, prev_img=None, trial_id=None):
+    def __init__(
+        self,
+        *tensors,
+        names=("inputs", "targets"),
+        image_cache=None,
+        prev_img=None,
+        trial_id=None,
+    ):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
-            raise ValueError('The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly.')
+            raise ValueError(
+                "The tensors of the dataset have unequal lenghts. The first dim of all tensors has to match exactly."
+            )
 
         self.tensors = tensors
         self.input_position = names.index("inputs")
-        self.DataPoint = namedtuple('DataPoint', names)
+        self.DataPoint = namedtuple("DataPoint", names)
         self.image_cache = image_cache
         self.prev_img = prev_img
         self.trial_id = trial_id
@@ -255,8 +301,12 @@ class CachedTensorDataset(utils.Dataset):
                 key = self.tensors[0][index].item()
             else:
                 key = self.tensors[0][index].numpy().astype(np.int64)
-            tensors_expanded = [tensor[index] if pos != self.input_position else torch.stack(list(self.image_cache[key]))
-                            for pos, tensor in enumerate(self.tensors)]
+            tensors_expanded = [
+                tensor[index]
+                if pos != self.input_position
+                else torch.stack(list(self.image_cache[key]))
+                for pos, tensor in enumerate(self.tensors)
+            ]
 
         elif len(self.tensors) > 2:
             if type(index) == int:
@@ -275,16 +325,24 @@ class CachedTensorDataset(utils.Dataset):
             if len(self.tensors) == 3:
                 if self.trial_id:
                     trial_id = self.tensors[1][index]
-                    trial_id_img = torch.ones_like(img).to(img.dtype)*trial_id
+                    trial_id_img = torch.ones_like(img).to(img.dtype) * trial_id
 
                 img_channel_2 = prev_img if self.prev_img else trial_id_img
                 targets = self.tensors[2][index]
-                full_img = torch.cat([img, img_channel_2], dim=1) if len(img.shape) > 3 else torch.cat([img, img_channel_2], dim=0)
+                full_img = (
+                    torch.cat([img, img_channel_2], dim=1)
+                    if len(img.shape) > 3
+                    else torch.cat([img, img_channel_2], dim=0)
+                )
             else:
                 trial_id = self.tensors[2][index]
                 targets = self.tensors[3][index]
-                trial_id_img= torch.ones_like(img).to(img.dtype)*trial_id
-                full_img = torch.cat([img, prev_img, trial_id_img], dim=1) if len(img.shape) > 3 else torch.cat([img, prev_img, trial_id_img], dim=0)
+                trial_id_img = torch.ones_like(img).to(img.dtype) * trial_id
+                full_img = (
+                    torch.cat([img, prev_img, trial_id_img], dim=1)
+                    if len(img.shape) > 3
+                    else torch.cat([img, prev_img, trial_id_img], dim=0)
+                )
 
             tensors_expanded = [full_img, targets]
 
@@ -294,14 +352,16 @@ class CachedTensorDataset(utils.Dataset):
         return self.tensors[0].size(0)
 
 
-def get_cached_loader(*args,
-                      batch_size=None,
-                      shuffle=True,
-                      image_cache=None,
-                      repeat_condition=None,
-                      names=('inputs', 'targets'),
-                      include_prev_image=False,
-                      include_trial_id=False):
+def get_cached_loader(
+    *args,
+    batch_size=None,
+    shuffle=True,
+    image_cache=None,
+    repeat_condition=None,
+    names=("inputs", "targets"),
+    include_prev_image=False,
+    include_trial_id=False,
+):
     """
 
     Args:
@@ -315,7 +375,7 @@ def get_cached_loader(*args,
     """
 
     image_ids = torch.from_numpy(args[0].astype(np.int64))
-    #breakhere
+    # breakhere
     tensors = [image_ids]
 
     if len(args) > 2 and "eye_position" not in names:
@@ -332,17 +392,32 @@ def get_cached_loader(*args,
     if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
         tensors.append(eye_position)
-    dataset = CachedTensorDataset(*tensors, image_cache=image_cache, names=names,prev_img=include_prev_image, trial_id=include_trial_id, )
-    sampler = RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
+    dataset = CachedTensorDataset(
+        *tensors,
+        image_cache=image_cache,
+        names=names,
+        prev_img=include_prev_image,
+        trial_id=include_trial_id,
+    )
+    sampler = (
+        RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
+    )
 
-    dataloader = utils.DataLoader(dataset, batch_sampler=sampler) if batch_size is None else utils.DataLoader(dataset,
-                                                                                                            batch_size=batch_size,
-                                                                                                            shuffle=shuffle,
-                                                                                                            )
+    dataloader = (
+        utils.DataLoader(dataset, batch_sampler=sampler)
+        if batch_size is None
+        else utils.DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+        )
+    )
     return dataloader
 
 
-def get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=4.57):
+def get_crop_from_stimulus_location(
+    stimulus_location, crop, monitor_scaling_factor=4.57
+):
     """
 
     Args:
@@ -359,8 +434,9 @@ def get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_fac
     w_shift = int(stimulus_location[0] / monitor_scaling_factor)
     h_shift = int(stimulus_location[1] / monitor_scaling_factor)
 
-    crop_shifted = ((crop[0][0] + h_shift, crop[0][1] - h_shift),
-                    (crop[1][0] + w_shift, crop[1][1] - w_shift))
+    crop_shifted = (
+        (crop[0][0] + h_shift, crop[0][1] - h_shift),
+        (crop[1][0] + w_shift, crop[1][1] - w_shift),
+    )
 
     return crop_shifted
-
