@@ -274,12 +274,14 @@ class NatImgBackgroundHighNorm:
         for tier in ["train", "test", "validation"]:
             for b in dataloaders[tier][data_key]:
                 # squeeze out channel dim
+                # squeeze channel dim only
                 images.append(b.inputs.squeeze(1))
         self.images = torch.vstack(images)
 
     def __call__(self, x, iteration=None):
         background = random.choice(self.images)
         return background
+
 
 
 class CollapseChannel:
