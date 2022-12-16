@@ -17,12 +17,18 @@ def get_subset_of_repeats(outputs, repeat_limit, randomize=True):
     limited_output = []
     for repetitions in outputs:
         n_repeats = repetitions.shape[0]
-        _repeat_limit = repeat_limit if not randomize else np.random.choice(n_repeats,
-                                                                            repeat_limit if repeat_limit < n_repeats else n_repeats,
-                                                                            replace=False)
+        _repeat_limit = (
+            repeat_limit
+            if not randomize
+            else np.random.choice(
+                n_repeats,
+                repeat_limit if repeat_limit < n_repeats else n_repeats,
+                replace=False,
+            )
+        )
         limited_output.append(repetitions[:_repeat_limit])
     return limited_output
 
 
 def is_ensemble_function(model):
-    return (isinstance(model, types.FunctionType))
+    return isinstance(model, types.FunctionType)

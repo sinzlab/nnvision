@@ -33,7 +33,9 @@ class DataInfoBase(dj.Computed):
 
             ->[nullable] self.user_table
             datainfo_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
-            """.format(table_comment=self.table_comment)
+            """.format(
+            table_comment=self.table_comment
+        )
         return definition
 
     def make(self, key):
@@ -57,8 +59,8 @@ class DataInfoBase(dj.Computed):
 
         fabrikant_name = self.user_table.get_current_user()
 
-        key['fabrikant_name'] = fabrikant_name
-        key['data_info'] = data_info
+        key["fabrikant_name"] = fabrikant_name
+        key["data_info"] = data_info
         self.insert1(key)
 
 
@@ -79,7 +81,7 @@ class TrainedModelBase(dj.Computed):
     data_info_table = DataInfoBase
 
     # delimitter to use when concatenating comments from model, dataset, and trainer tables
-    comment_delimitter = '.'
+    comment_delimitter = "."
 
     # table level comment
     table_comment = "Trained models"
@@ -98,11 +100,13 @@ class TrainedModelBase(dj.Computed):
         output:                            longblob     # trainer object's output
         ->[nullable] self.user_table
         trainedmodel_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
-        """.format(table_comment=self.table_comment)
+        """.format(
+            table_comment=self.table_comment
+        )
         return definition
 
     class ModelStorage(dj.Part):
-        storage = 'minio'
+        storage = "minio"
 
         @property
         def definition(self):
@@ -111,9 +115,10 @@ class TrainedModelBase(dj.Computed):
             -> master
             ---
             model_state:            attach@{storage}
-            """.format(storage=self.storage)
+            """.format(
+                storage=self.storage
+            )
             return definition
-
 
     def get_full_config(self, key=None, include_state_dict=True, include_trainer=True):
         """
@@ -130,29 +135,41 @@ class TrainedModelBase(dj.Computed):
             include_trainer (bool): If False, then trainer configuration is skipped. Usually desirable when you want to simply retrieve trained model.
         """
         if key is None:
-            key = self.fetch1('KEY')
+            key = self.fetch1("KEY")
 
         model_fn, model_config = (self.model_table & key).fn_config
         dataset_fn, dataset_config = (self.dataset_table & key).fn_config
 
-
-        ret = dict(model_fn=model_fn, model_config=model_config,
-                   dataset_fn=dataset_fn, dataset_config=dataset_config)
+        ret = dict(
+            model_fn=model_fn,
+            model_config=model_config,
+            dataset_fn=dataset_fn,
+            dataset_config=dataset_config,
+        )
 
         if include_trainer:
             trainer_fn, trainer_config = (self.trainer_table & key).fn_config
-            ret['trainer_fn'] = trainer_fn
-            ret['trainer_config'] = trainer_config
+            ret["trainer_fn"] = trainer_fn
+            ret["trainer_config"] = trainer_config
 
         # if trained model exist and include_state_dict is True
         if include_state_dict and (self.ModelStorage & key):
             with tempfile.TemporaryDirectory() as temp_dir:
-                state_dict_path = (self.ModelStorage & key).fetch1('model_state', download_path=temp_dir)
-                ret['state_dict'] = torch.load(state_dict_path)
+                state_dict_path = (self.ModelStorage & key).fetch1(
+                    "model_state", download_path=temp_dir
+                )
+                ret["state_dict"] = torch.load(state_dict_path)
 
         return ret
 
-    def load_model(self, key=None, include_dataloader=True, include_trainer=False, include_state_dict=True, seed:int=None):
+    def load_model(
+        self,
+        key=None,
+        include_dataloader=True,
+        include_trainer=False,
+        include_state_dict=True,
+        seed: int = None,
+    ):
         """
         Load a single entry of the model. If state_dict is available, the model will be loaded with state_dict as well.
         By default the trainer is skipped. Set `include_trainer=True` to also retrieve the trainer function
@@ -173,30 +190,45 @@ class TrainedModelBase(dj.Computed):
             trainer - Loaded trainer function. This is not returned if include_trainer=False.
         """
         if key is None:
-            key = self.fetch1('KEY')
+            key = self.fetch1("KEY")
 
         if seed is None and len(self.seed_table & key) == 1:
-            seed = (self.seed_table & key).fetch1('seed')
+            seed = (self.seed_table & key).fetch1("seed")
 
-        config_dict = self.get_full_config(key, include_trainer=include_trainer, include_state_dict=include_state_dict)
+        config_dict = self.get_full_config(
+            key, include_trainer=include_trainer, include_state_dict=include_state_dict
+        )
 
         if not include_dataloader:
             try:
-                data_info = (self.data_info_table & key).fetch1('data_info')
-                model_config_dict = dict(model_fn=config_dict["model_fn"],
-                                         model_config=config_dict["model_config"],
-                                         data_info=data_info,
-                                         seed=seed,
-                                         state_dict=config_dict.get("state_dict", None),
-                                         strict=False)
+                data_info = (self.data_info_table & key).fetch1("data_info")
+                model_config_dict = dict(
+                    model_fn=config_dict["model_fn"],
+                    model_config=config_dict["model_config"],
+                    data_info=data_info,
+                    seed=seed,
+                    state_dict=config_dict.get("state_dict", None),
+                    strict=False,
+                )
 
                 net = get_model(**model_config_dict)
-                return (net, get_trainer(config_dict["trainer_fn"], config_dict["trainer_config"])) if include_trainer else net
+                return (
+                    (
+                        net,
+                        get_trainer(
+                            config_dict["trainer_fn"], config_dict["trainer_config"]
+                        ),
+                    )
+                    if include_trainer
+                    else net
+                )
 
             except (TypeError, AttributeError, DataJointError):
-                print("Model could not be built without the dataloader. Dataloader will be built in order to create the model. "
-                      "Make sure to have an The 'model_fn' also has to be able to"
-                      "accept 'data_info' as an input arg, and use that over the dataloader to build the model.")
+                print(
+                    "Model could not be built without the dataloader. Dataloader will be built in order to create the model. "
+                    "Make sure to have an The 'model_fn' also has to be able to"
+                    "accept 'data_info' as an input arg, and use that over the dataloader to build the model."
+                )
 
             ret = get_all_parts(**config_dict, seed=seed)
             return ret[1:] if include_trainer else ret[1]
@@ -223,10 +255,12 @@ class TrainedModelBase(dj.Computed):
         """
         # lookup the fabrikant corresponding to the current DJ user
         fabrikant_name = self.user_table.get_current_user()
-        seed = (self.seed_table & key).fetch1('seed')
+        seed = (self.seed_table & key).fetch1("seed")
 
         # load everything
-        dataloaders, model, trainer = self.load_model(key, include_trainer=True, include_state_dict=False, seed=seed)
+        dataloaders, model, trainer = self.load_model(
+            key, include_trainer=True, include_state_dict=False, seed=seed
+        )
 
         # define callback with pinging
         def call_back(**kwargs):
@@ -234,24 +268,26 @@ class TrainedModelBase(dj.Computed):
             self.call_back(**kwargs)
 
         # model training
-        score, output, model_state = trainer(model=model, dataloaders=dataloaders, seed=seed, uid=key, cb=call_back)
+        score, output, model_state = trainer(
+            model=model, dataloaders=dataloaders, seed=seed, uid=key, cb=call_back
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            filename = make_hash(key) + '.pth.tar'
+            filename = make_hash(key) + ".pth.tar"
             filepath = os.path.join(temp_dir, filename)
             torch.save(model_state, filepath)
 
-            key['score'] = score
-            key['output'] = output
-            key['fabrikant_name'] = fabrikant_name
+            key["score"] = score
+            key["output"] = output
+            key["fabrikant_name"] = fabrikant_name
             comments = []
             comments.append((self.trainer_table & key).fetch1("trainer_comment"))
             comments.append((self.model_table & key).fetch1("model_comment"))
             comments.append((self.dataset_table & key).fetch1("dataset_comment"))
-            key['comment'] = self.comment_delimitter.join(comments)
+            key["comment"] = self.comment_delimitter.join(comments)
             self.insert1(key)
 
-            key['model_state'] = filepath
+            key["model_state"] = filepath
 
             self.ModelStorage.insert1(key, ignore_extra_fields=True)
 
@@ -299,6 +335,7 @@ class ScoringBase(dj.Computed):
         scoring_attribute (str) - name of the non-primary attribute of the master and part tables for the score.
         cache (object) - Stores
     """
+
     trainedmodel_table = TrainedModelBase
     dataset_table = trainedmodel_table.dataset_table
     unit_table = UnitIDsBase
@@ -309,7 +346,9 @@ class ScoringBase(dj.Computed):
     data_cache = None
 
     @staticmethod
-    def measure_function(dataloaders, model, device='cuda', as_dict=True, per_neuron=True):
+    def measure_function(
+        dataloaders, model, device="cuda", as_dict=True, per_neuron=True
+    ):
         raise NotImplementedError("Scoring Function has to be implemented")
 
     # table level comment
@@ -323,7 +362,9 @@ class ScoringBase(dj.Computed):
                 ---
                 {measure_attribute}:      float     # A template for a computed score of a trained model
                 {measure_attribute}_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
-                """.format(table_comment=self.table_comment, measure_attribute=self.measure_attribute)
+                """.format(
+            table_comment=self.table_comment, measure_attribute=self.measure_attribute
+        )
         return definition
 
     class Units(dj.Part):
@@ -335,29 +376,36 @@ class ScoringBase(dj.Computed):
                 -> master.unit_table
                 ---
                 unit_{measure_attribute}:     float   # A template for a computed unit score        
-                """.format(measure_attribute=self._master.measure_attribute)
+                """.format(
+                measure_attribute=self._master.measure_attribute
+            )
             return definition
 
     def get_model(self, key=None):
         if self.model_cache is None:
-            model = self.trainedmodel_table().load_model(key=key,
-                                                         include_state_dict=True,
-                                                         include_dataloader=False)
+            model = self.trainedmodel_table().load_model(
+                key=key, include_state_dict=True, include_dataloader=False
+            )
         else:
-            model = self.model_cache.load(key=key,
-                                          include_state_dict=True,
-                                          include_dataloader=False)
+            model = self.model_cache.load(
+                key=key, include_state_dict=True, include_dataloader=False
+            )
         return model
-
 
     def get_dataloaders(self, key=None):
         if key is None:
-            key = self.fetch1('KEY')
-        dataloaders = self.dataset_table().get_dataloader(key=key) if self.data_cache is None else self.data_cache.load(key=key)
+            key = self.fetch1("KEY")
+        dataloaders = (
+            self.dataset_table().get_dataloader(key=key)
+            if self.data_cache is None
+            else self.data_cache.load(key=key)
+        )
         return dataloaders[self.measure_dataset]
 
     def get_repeats_dataloaders(self, key=None):
-        raise NotImplementedError("Function to return the repeats-dataloader has to be implemented")
+        raise NotImplementedError(
+            "Function to return the repeats-dataloader has to be implemented"
+        )
 
     def get_avg_of_unit_dict(self, unit_scores_dict):
         return np.mean(np.hstack([v for v in unit_scores_dict.values()]))
@@ -366,8 +414,10 @@ class ScoringBase(dj.Computed):
         key = key.copy()
         for data_key, unit_scores in unit_measures_dict.items():
             for unit_index, unit_score in enumerate(unit_scores):
-                if "unit_id" in key: key.pop("unit_id")
-                if "data_key" in key: key.pop("data_key")
+                if "unit_id" in key:
+                    key.pop("unit_id")
+                if "data_key" in key:
+                    key.pop("data_key")
                 neuron_key = dict(unit_index=unit_index, data_key=data_key)
                 unit_id = ((self.unit_table & key) & neuron_key).fetch1("unit_id")
                 key["unit_id"] = unit_id
@@ -377,15 +427,20 @@ class ScoringBase(dj.Computed):
 
     def make(self, key):
 
-        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(
-            key=key)
+        dataloaders = (
+            self.get_repeats_dataloaders(key=key)
+            if self.measure_dataset == "test"
+            else self.get_dataloaders(key=key)
+        )
         model = self.get_model(key=key)
-        unit_measures_dict = self.measure_function(model=model,
-                                                 dataloaders=dataloaders,
-                                                 device='cuda',
-                                                 as_dict=True,
-                                                 per_neuron=True,
-                                                 **self.function_kwargs)
+        unit_measures_dict = self.measure_function(
+            model=model,
+            dataloaders=dataloaders,
+            device="cuda",
+            as_dict=True,
+            per_neuron=True,
+            **self.function_kwargs,
+        )
 
         key[self.measure_attribute] = self.get_avg_of_unit_dict(unit_measures_dict)
         self.insert1(key, ignore_extra_fields=True)
@@ -397,18 +452,21 @@ class SummaryScoringBase(ScoringBase):
     A template scoring table with the same logic as ScoringBase, but for scores that do not have unit scores, but
     an overall score per model only.
     """
+
     unit_table = None
     Units = None
 
     def make(self, key):
 
-        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(
-            key=key)
+        dataloaders = (
+            self.get_repeats_dataloaders(key=key)
+            if self.measure_dataset == "test"
+            else self.get_dataloaders(key=key)
+        )
         model = self.get_model(key=key)
-        key[self.measure_attribute] = self.measure_function(model=model,
-                                                            dataloaders=dataloaders,
-                                                            device='cuda',
-                                                            **self.function_kwargs)
+        key[self.measure_attribute] = self.measure_function(
+            model=model, dataloaders=dataloaders, device="cuda", **self.function_kwargs
+        )
         self.insert1(key, ignore_extra_fields=True)
 
 
@@ -417,7 +475,9 @@ class MeasuresBase(ScoringBase):
     dataset_table = Dataset
 
     # table level comment
-    table_comment = "A template table for storing measures / descriptive statistics of the Dataset"
+    table_comment = (
+        "A template table for storing measures / descriptive statistics of the Dataset"
+    )
 
     @property
     def definition(self):
@@ -427,7 +487,9 @@ class MeasuresBase(ScoringBase):
                     ---
                     {measure_attribute}:      float     # A template for a computed score of a trained model
                     {measure_attribute}_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
-                    """.format(table_comment=self.table_comment, measure_attribute=self.measure_attribute)
+                    """.format(
+            table_comment=self.table_comment, measure_attribute=self.measure_attribute
+        )
         return definition
 
     class Units(dj.Part):
@@ -439,16 +501,24 @@ class MeasuresBase(ScoringBase):
                 -> master.unit_table
                 ---
                 unit_{measure_attribute}:     float   # A template for a computed unit score        
-                """.format(measure_attribute=self._master.measure_attribute)
+                """.format(
+                measure_attribute=self._master.measure_attribute
+            )
             return definition
 
     def make(self, key):
 
-        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(key=key)
-        unit_measures_dict = self.measure_function(dataloaders=dataloaders,
-                                                   as_dict=True,
-                                                   per_neuron=True,
-                                                   **self.function_kwargs)
+        dataloaders = (
+            self.get_repeats_dataloaders(key=key)
+            if self.measure_dataset == "test"
+            else self.get_dataloaders(key=key)
+        )
+        unit_measures_dict = self.measure_function(
+            dataloaders=dataloaders,
+            as_dict=True,
+            per_neuron=True,
+            **self.function_kwargs,
+        )
 
         key[self.measure_attribute] = self.get_avg_of_unit_dict(unit_measures_dict)
         self.insert1(key, ignore_extra_fields=True)
@@ -460,12 +530,19 @@ class SummaryMeasuresBase(MeasuresBase):
     Units = None
 
     # table level comment
-    table_comment = "A template table for storing measures / descriptive statistics of the Dataset"
+    table_comment = (
+        "A template table for storing measures / descriptive statistics of the Dataset"
+    )
 
     def make(self, key):
-        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(key=key)
-        key[self.measure_attribute] = self.measure_function(dataloaders=dataloaders,
-                                                            **self.function_kwargs)
+        dataloaders = (
+            self.get_repeats_dataloaders(key=key)
+            if self.measure_dataset == "test"
+            else self.get_dataloaders(key=key)
+        )
+        key[self.measure_attribute] = self.measure_function(
+            dataloaders=dataloaders, **self.function_kwargs
+        )
         self.insert1(key, ignore_extra_fields=True)
 
 
@@ -504,7 +581,9 @@ class TransferredTrainedModelBase(TrainedModelBase):
         current_dataset_hash:              varchar(64)
         current_trainer_fn:                varchar(64)
         current_trainer_hash:              varchar(64)
-        """.format(table_comment=self.table_comment)
+        """.format(
+            table_comment=self.table_comment
+        )
         return definition
 
     class ModelStorage(TrainedModelBase.ModelStorage):
@@ -551,7 +630,9 @@ class TransferredTrainedModelBase(TrainedModelBase):
                 for t in transfer_recipe[1:]:
                     joined *= t
 
-                joined.post_restr = dj.AndList([recipe.post_restr for recipe in self.transfer_recipe])
+                joined.post_restr = dj.AndList(
+                    [recipe.post_restr for recipe in self.transfer_recipe]
+                )
 
             return joined
 
@@ -564,33 +645,73 @@ class TransferredTrainedModelBase(TrainedModelBase):
         if hasattr(self, "transfer_recipe"):
 
             # project (rename) attributes of the existing transfereedmodel table to the same name but with prefix "prev"
-            prev_transferredmodel = self.proj(prev_model_fn='current_model_fn', prev_model_hash='current_model_hash',
-                                               prev_dataset_fn='current_dataset_fn', prev_dataset_hash='current_dataset_hash',
-                                               prev_trainer_fn='current_trainer_fn', prev_trainer_hash='current_trainer_hash',
-                                               prev_step='transfer_step', transfer_step='transfer_step + 1') * dj.U('transfer_step', # make these attributes primary keys
-                                                                                                                    'prev_model_fn', 'prev_model_hash',
-                                                                                                                    'prev_dataset_fn', 'prev_dataset_hash',
-                                                                                                                    'prev_trainer_fn', 'prev_trainer_hash')
+            prev_transferredmodel = self.proj(
+                prev_model_fn="current_model_fn",
+                prev_model_hash="current_model_hash",
+                prev_dataset_fn="current_dataset_fn",
+                prev_dataset_hash="current_dataset_hash",
+                prev_trainer_fn="current_trainer_fn",
+                prev_trainer_hash="current_trainer_hash",
+                prev_step="transfer_step",
+                transfer_step="transfer_step + 1",
+            ) * dj.U(
+                "transfer_step",  # make these attributes primary keys
+                "prev_model_fn",
+                "prev_model_hash",
+                "prev_dataset_fn",
+                "prev_dataset_hash",
+                "prev_trainer_fn",
+                "prev_trainer_hash",
+            )
 
             # get the current transfer step
-            transfer_step = prev_transferredmodel.fetch('transfer_step').max() if prev_transferredmodel else 0
+            transfer_step = (
+                prev_transferredmodel.fetch("transfer_step").max()
+                if prev_transferredmodel
+                else 0
+            )
 
             if transfer_step:
 
                 # get the necessay attributes to filter the prev_transferredmodel with the transfer recipe
-                prev_transferredmodel = dj.U('transfer_step', 'prev_model_fn', 'prev_model_hash', 'prev_dataset_fn', 'prev_dataset_hash', 'prev_trainer_fn', 'prev_trainer_hash') & prev_transferredmodel
+                prev_transferredmodel = (
+                    dj.U(
+                        "transfer_step",
+                        "prev_model_fn",
+                        "prev_model_hash",
+                        "prev_dataset_fn",
+                        "prev_dataset_hash",
+                        "prev_trainer_fn",
+                        "prev_trainer_hash",
+                    )
+                    & prev_transferredmodel
+                )
 
                 # get the entries that match the one in TransferRecipe (for specification of previous)
-                transfer_from = prev_transferredmodel * self._transfer_recipe(transfer_step)
+                transfer_from = prev_transferredmodel * self._transfer_recipe(
+                    transfer_step
+                )
 
-                transfers = dj.U("transfer_step",
-                                "model_fn", "model_hash",
-                                "dataset_fn", "dataset_hash",
-                                "trainer_fn", "trainer_hash",
-                                "seed",
-                                "prev_model_fn", "prev_model_hash",
-                                "prev_dataset_fn", "prev_dataset_hash",
-                                "prev_trainer_fn", "prev_trainer_hash") & Model * Dataset * Trainer * Seed * transfer_from & self._transfer_recipe(transfer_step).post_restr
+                transfers = (
+                    dj.U(
+                        "transfer_step",
+                        "model_fn",
+                        "model_hash",
+                        "dataset_fn",
+                        "dataset_hash",
+                        "trainer_fn",
+                        "trainer_hash",
+                        "seed",
+                        "prev_model_fn",
+                        "prev_model_hash",
+                        "prev_dataset_fn",
+                        "prev_dataset_hash",
+                        "prev_trainer_fn",
+                        "prev_trainer_hash",
+                    )
+                    & Model * Dataset * Trainer * Seed * transfer_from
+                    & self._transfer_recipe(transfer_step).post_restr
+                )
 
                 return transfers.proj()
 
@@ -600,13 +721,23 @@ class TransferredTrainedModelBase(TrainedModelBase):
                 step_0 = Model * Dataset * Trainer * Seed
 
                 # add transfer_step and prev_hash as prim keys
-                base = dj.U('transfer_step',
-                            'prev_model_fn', 'prev_model_hash',
-                            'prev_dataset_fn', 'prev_dataset_hash',
-                            'prev_trainer_fn', 'prev_trainer_hash') * step_0.proj(transfer_step='0',
-                                                                                prev_model_fn='""', prev_model_hash='""',
-                                                                                prev_dataset_fn='""', prev_dataset_hash='""',
-                                                                                prev_trainer_fn='""', prev_trainer_hash='""')
+                base = dj.U(
+                    "transfer_step",
+                    "prev_model_fn",
+                    "prev_model_hash",
+                    "prev_dataset_fn",
+                    "prev_dataset_hash",
+                    "prev_trainer_fn",
+                    "prev_trainer_hash",
+                ) * step_0.proj(
+                    transfer_step="0",
+                    prev_model_fn='""',
+                    prev_model_hash='""',
+                    prev_dataset_fn='""',
+                    prev_dataset_hash='""',
+                    prev_trainer_fn='""',
+                    prev_trainer_hash='""',
+                )
                 return base.proj()
 
         else:
@@ -614,15 +745,24 @@ class TransferredTrainedModelBase(TrainedModelBase):
             step_0 = Model * Dataset * Trainer * Seed
 
             # add transfer_step and prev_hash as prim keys
-            base = dj.U('transfer_step',
-                        'prev_model_fn', 'prev_model_hash',
-                        'prev_dataset_fn', 'prev_dataset_hash',
-                        'prev_trainer_fn', 'prev_trainer_hash') * step_0.proj(transfer_step='0',
-                                                                            prev_model_fn='""', prev_model_hash='""',
-                                                                            prev_dataset_fn='""', prev_dataset_hash='""',
-                                                                            prev_trainer_fn='""', prev_trainer_hash='""')
+            base = dj.U(
+                "transfer_step",
+                "prev_model_fn",
+                "prev_model_hash",
+                "prev_dataset_fn",
+                "prev_dataset_hash",
+                "prev_trainer_fn",
+                "prev_trainer_hash",
+            ) * step_0.proj(
+                transfer_step="0",
+                prev_model_fn='""',
+                prev_model_hash='""',
+                prev_dataset_fn='""',
+                prev_dataset_hash='""',
+                prev_trainer_fn='""',
+                prev_trainer_hash='""',
+            )
             return base.proj()
-
 
     def make(self, key):
         """
@@ -632,10 +772,12 @@ class TransferredTrainedModelBase(TrainedModelBase):
 
         # lookup the fabrikant corresponding to the current DJ user
         fabrikant_name = Fabrikant.get_current_user()
-        seed = (Seed & key).fetch1('seed')
+        seed = (Seed & key).fetch1("seed")
 
         # load everything
-        dataloaders, model, trainer = self.load_model(key, include_trainer=True, include_state_dict=False, seed=seed)
+        dataloaders, model, trainer = self.load_model(
+            key, include_trainer=True, include_state_dict=False, seed=seed
+        )
 
         # define callback with pinging
         def call_back(**kwargs):
@@ -643,28 +785,36 @@ class TransferredTrainedModelBase(TrainedModelBase):
             self.call_back(**kwargs)
 
         # model training
-        score, output, model_state = trainer(model=model, dataloaders=dataloaders, seed=seed, uid=key, cb=call_back)
+        score, output, model_state = trainer(
+            model=model, dataloaders=dataloaders, seed=seed, uid=key, cb=call_back
+        )
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            filename = make_hash(key) + '.pth.tar'
+            filename = make_hash(key) + ".pth.tar"
             filepath = os.path.join(temp_dir, filename)
             torch.save(model_state, filepath)
 
-            key['score'] = score
-            key['output'] = output
-            key['fabrikant_name'] = fabrikant_name
+            key["score"] = score
+            key["output"] = output
+            key["fabrikant_name"] = fabrikant_name
             comments = []
             comments.append((self.trainer_table & key).fetch1("trainer_comment"))
             comments.append((self.model_table & key).fetch1("model_comment"))
             comments.append((self.dataset_table & key).fetch1("dataset_comment"))
-            key['comment'] = self.comment_delimitter.join(comments)
+            key["comment"] = self.comment_delimitter.join(comments)
 
-            key['current_model_fn'], key['current_model_hash'] = (Model & key).fetch1('model_fn', 'model_hash')
-            key['current_dataset_fn'], key['current_dataset_hash'] = (Dataset & key).fetch1('dataset_fn', 'dataset_hash')
-            key['current_trainer_fn'], key['current_trainer_hash'] = (Trainer & key).fetch1('trainer_fn', 'trainer_hash')
+            key["current_model_fn"], key["current_model_hash"] = (Model & key).fetch1(
+                "model_fn", "model_hash"
+            )
+            key["current_dataset_fn"], key["current_dataset_hash"] = (
+                Dataset & key
+            ).fetch1("dataset_fn", "dataset_hash")
+            key["current_trainer_fn"], key["current_trainer_hash"] = (
+                Trainer & key
+            ).fetch1("trainer_fn", "trainer_hash")
 
             self.insert1(key)
 
-            key['model_state'] = filepath
+            key["model_state"] = filepath
 
             self.ModelStorage.insert1(key, ignore_extra_fields=True)

@@ -417,7 +417,7 @@ def custom_task_core_multihead_attention(
     momentum=0.1,
     fine_tune=False,
     readout_bias=True,
-    gamma_features=3, # start of readout kwargs
+    gamma_features=3,  # start of readout kwargs
     gamma_query=1,
     use_pos_enc=True,
     learned_pos=False,
@@ -425,7 +425,7 @@ def custom_task_core_multihead_attention(
     scale=False,
     key_embedding=False,
     value_embedding=False,
-    temperature=(False,1.0),  # (learnable-per-neuron, value)
+    temperature=(False, 1.0),  # (learnable-per-neuron, value)
     dropout_pos=0.1,
     layer_norm=False,
     data_info=None,
@@ -541,49 +541,54 @@ def custom_task_core_multihead_attention(
                 gamma_shifter=gamma_shifter,
             )
 
-    model = EncoderShifter(core, readout, shifter=shifter, elu_offset=elu_offset,)
+    model = EncoderShifter(
+        core,
+        readout,
+        shifter=shifter,
+        elu_offset=elu_offset,
+    )
 
     return model
 
 
 def custom_task_core_shared_multihead_attention(
-        dataloaders,
-        seed,
-        input_channels=1,
-        model_name="vgg19",  # begin of core args
-        layer_name="features.10",
-        pretrained=True,
-        bias=False,
-        final_batchnorm=True,
-        final_nonlinearity=True,
-        momentum=0.1,
-        fine_tune=False,
-        readout_bias=True,
-        gamma_features=3, # start of readout kwargs
-        gamma_query=1,
-        use_pos_enc=True,
-        learned_pos=False,
-        heads=1,
-        scale=False,
-        key_embedding=False,
-        value_embedding=False,
-        temperature=(False,1.0),  # (learnable-per-neuron, value)
-        dropout_pos=0.1,
-        layer_norm=False,
-        data_info=None,
-        shifter=None,
-        shifter_type="MLP",
-        input_channels_shifter=2,
-        hidden_channels_shifter=5,
-        shift_layers=3,
-        gamma_shifter=0,
-        shifter_bias=True,
-        elu_offset=-1,
-        stack_pos_encoding=False,
-        n_pos_channels=0,
-        replace_downsampling=False,
-        gamma_embedding=0,
-        embed_out_dim=None,
+    dataloaders,
+    seed,
+    input_channels=1,
+    model_name="vgg19",  # begin of core args
+    layer_name="features.10",
+    pretrained=True,
+    bias=False,
+    final_batchnorm=True,
+    final_nonlinearity=True,
+    momentum=0.1,
+    fine_tune=False,
+    readout_bias=True,
+    gamma_features=3,  # start of readout kwargs
+    gamma_query=1,
+    use_pos_enc=True,
+    learned_pos=False,
+    heads=1,
+    scale=False,
+    key_embedding=False,
+    value_embedding=False,
+    temperature=(False, 1.0),  # (learnable-per-neuron, value)
+    dropout_pos=0.1,
+    layer_norm=False,
+    data_info=None,
+    shifter=None,
+    shifter_type="MLP",
+    input_channels_shifter=2,
+    hidden_channels_shifter=5,
+    shift_layers=3,
+    gamma_shifter=0,
+    shifter_bias=True,
+    elu_offset=-1,
+    stack_pos_encoding=False,
+    n_pos_channels=0,
+    replace_downsampling=False,
+    gamma_embedding=0,
+    embed_out_dim=None,
 ):
     """
     A Model class of a predefined core (using models from ptrnets). Can be initialized pretrained or random.
@@ -686,7 +691,12 @@ def custom_task_core_shared_multihead_attention(
                 gamma_shifter=gamma_shifter,
             )
 
-    model = EncoderShifter(core, readout, shifter=shifter, elu_offset=elu_offset,)
+    model = EncoderShifter(
+        core,
+        readout,
+        shifter=shifter,
+        elu_offset=elu_offset,
+    )
 
     return model
 

@@ -1,15 +1,30 @@
 import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from .main import Recording
-from ..utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, get_avg_correlations, get_predictions, get_targets
+from ..utility.measures import (
+    get_oracles,
+    get_repeats,
+    get_FEV,
+    get_explainable_var,
+    get_correlations,
+    get_poisson_loss,
+    get_avg_correlations,
+    get_predictions,
+    get_targets,
+)
 from .from_nnfabrik import TrainedModel, TrainedTransferModel
-from .utility import DataCache, TrainedModelCache, EnsembleModelCache, TransferTrainedModelCache
+from .utility import (
+    DataCache,
+    TrainedModelCache,
+    EnsembleModelCache,
+    TransferTrainedModelCache,
+)
 from nnfabrik.utility.dj_helpers import CustomSchema
 from .templates import SummaryScoringBase
 from .from_nnfabrik import ScoringBaseNeuronType
 from .from_mei import Ensemble
 
-schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
 
 @schema
@@ -65,12 +80,15 @@ class FEVeScore(ScoringBaseNeuronType):
     data_cache = DataCache
     model_cache = TrainedModelCache
 
+
 @schema
 class FEVe_thresholded(ScoringBaseNeuronType):
     trainedmodel_table = TrainedModel
     unit_table = Recording.Units
     measure_function = staticmethod(get_FEV)
-    function_kwargs = dict(threshold=0.15, )
+    function_kwargs = dict(
+        threshold=0.15,
+    )
     measure_dataset = "test"
     measure_attribute = "feve"
     data_cache = DataCache
@@ -138,7 +156,11 @@ class TestPredictions(ScoringBaseNeuronType):
                 {measure_attribute}:      longblob     # A template for a computed score of a trained model
                 {measure_secondaty_attribute}:      longblob     # A template for a computed score of a trained model
                 {measure_attribute}_ts=CURRENT_TIMESTAMP: timestamp    # UTZ timestamp at time of insertion
-                """.format(table_comment=self.table_comment, measure_attribute=self.measure_attribute, measure_secondaty_attribute=self.measure_secondary_attribute)
+                """.format(
+            table_comment=self.table_comment,
+            measure_attribute=self.measure_attribute,
+            measure_secondaty_attribute=self.measure_secondary_attribute,
+        )
         return definition
 
     class Units(dj.Part):
@@ -151,28 +173,38 @@ class TestPredictions(ScoringBaseNeuronType):
                 ---
                 unit_{measure_attribute}:     longblob   # A template for a computed unit score   
                 unit_{measure_secondaty_attribute}:     longblob   # A template for a computed unit score     
-                """.format(measure_attribute=self._master.measure_attribute, measure_secondaty_attribute=self._master.measure_secondary_attribute)
+                """.format(
+                measure_attribute=self._master.measure_attribute,
+                measure_secondaty_attribute=self._master.measure_secondary_attribute,
+            )
             return definition
 
     def make(self, key):
-        dataloaders = self.get_repeats_dataloaders(key=key) if self.measure_dataset == 'test' else self.get_dataloaders(
-            key=key)
+        dataloaders = (
+            self.get_repeats_dataloaders(key=key)
+            if self.measure_dataset == "test"
+            else self.get_dataloaders(key=key)
+        )
 
         model = self.get_model(key=key)
 
-        unit_predictions_dict = self.measure_function(model=model,
-                                                   dataloaders=dataloaders,
-                                                   device='cuda',
-                                                   as_dict=True,
-                                                   per_neuron=True,
-                                                   **self.measure_function_kwargs)
+        unit_predictions_dict = self.measure_function(
+            model=model,
+            dataloaders=dataloaders,
+            device="cuda",
+            as_dict=True,
+            per_neuron=True,
+            **self.measure_function_kwargs
+        )
 
-        unit_targets_dict = self.measure_secondary_function(model=model,
-                                                      dataloaders=dataloaders,
-                                                      device='cuda',
-                                                      as_dict=True,
-                                                      per_neuron=True,
-                                                      **self.measure_function_kwargs)
+        unit_targets_dict = self.measure_secondary_function(
+            model=model,
+            dataloaders=dataloaders,
+            device="cuda",
+            as_dict=True,
+            per_neuron=True,
+            **self.measure_function_kwargs
+        )
 
         key[self.measure_attribute] = unit_predictions_dict
         key[self.measure_secondary_attribute] = unit_targets_dict
@@ -181,16 +213,21 @@ class TestPredictions(ScoringBaseNeuronType):
         for data_key, unit_scores in unit_predictions_dict.items():
             for unit_index, unit_score in enumerate(unit_scores):
                 unit_secondary_score = unit_targets_dict[data_key][unit_index]
-                if "unit_id" in key: key.pop("unit_id")
-                if "data_key" in key: key.pop("data_key")
-                if "unit_type" in key: key.pop("unit_type")
+                if "unit_id" in key:
+                    key.pop("unit_id")
+                if "data_key" in key:
+                    key.pop("data_key")
+                if "unit_type" in key:
+                    key.pop("unit_type")
                 neuron_key = dict(unit_index=unit_index, data_key=data_key)
                 unit_type = ((self.unit_table & key) & neuron_key).fetch1("unit_type")
                 unit_id = ((self.unit_table & key) & neuron_key).fetch1("unit_id")
                 key["unit_id"] = unit_id
                 key["unit_type"] = unit_type
                 key["unit_{}".format(self.measure_attribute)] = unit_score
-                key["unit_{}".format(self.measure_secondary_attribute)] = unit_secondary_score
+                key[
+                    "unit_{}".format(self.measure_secondary_attribute)
+                ] = unit_secondary_score
                 key["data_key"] = data_key
                 self.Units.insert1(key, ignore_extra_fields=True)
 
@@ -205,6 +242,7 @@ class ValidationPredictions(TestPredictions):
 
 # ============================= Ensemble SCORES =============================
 
+
 @schema
 class TestCorrelationScoreEnsemble(ScoringBaseNeuronType):
     trainedmodel_table = Ensemble
@@ -214,7 +252,6 @@ class TestCorrelationScoreEnsemble(ScoringBaseNeuronType):
     measure_attribute = "test_correlation"
     data_cache = DataCache
     model_cache = EnsembleModelCache
-
 
 
 @schema
