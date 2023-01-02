@@ -385,19 +385,15 @@ class CachedTensorDatasetExtended(utils.Dataset):
         self.tensors = tensors
         self.input_position = names.index("inputs")
         if prev_responses:
-            self.DataPoint = namedtuple(
-                "DataPoint", ("inputs", "targets", "prev_resps")
-            )  # (names)+('prev_resps')?
-        else:
-            self.DataPoint = namedtuple("DataPoint", names)
+            names = names + ("prev_resps",)
 
         if other_resps:
-            self.DataPoint = namedtuple(
-                "DataPoint", ("inputs", "targets", "other_resps")
-            )  # (names)+('other_resps')?
+            names = names + ("other_resps",)
 
         if bools:
-            self.DataPoint = namedtuple("DataPoint", ("inputs", "targets", "bools"))
+            names = names + ("bools",)
+
+        self.DataPoint = namedtuple("DataPoint", names)
 
         self.image_cache = image_cache
         self.prev_img = prev_img
@@ -510,14 +506,17 @@ class CachedTensorDatasetExtended(utils.Dataset):
             tensors_expanded = [full_img, targets]
 
             # bools, previous responses and other responses are added to the DataPoint to be used in the readout of the network.
-            if self.bools:
-                tensors_expanded = [full_img, targets, bools]
+
+            tensors_expanded = [full_img, targets]
 
             if self.prev_responses:
-                tensors_expanded = [full_img, targets, prev_resps]
+                tensors_expanded.append(prev_resps)
 
             if self.other_resps:
-                tensors_expanded = [full_img, targets, other_resps]
+                tensors_expanded.append(other_resps)
+
+            if self.bools:
+                tensors_expanded.append(bools)
 
         return self.DataPoint(*tensors_expanded)
 
@@ -635,16 +634,19 @@ def get_cached_loader_extended(
             idx += 1
 
         if include_prev_responses:
-            # get responses
-            resps = torch.tensor(args[-1]).to(torch.float)
-            # shift them by 1 so it is always the previous response
-            zer = np.array([np.zeros(resps.shape[1])])
-            prev_resps = torch.tensor(np.concatenate((zer, resps[:-1, :]))).to(
-                torch.float
-            )
-            # zero it out where prior_ids are zero
-            prior_ids = torch.from_numpy(args[idx].astype(np.int64))
-            prev_resps[np.where(prior_ids == 0)] *= 0
+            if args[idx].ndim == 1:  # if prior ids were passed as argument
+                prior_ids = torch.from_numpy(args[idx].astype(np.int64))
+                # get responses
+                resps = torch.tensor(args[-1]).to(torch.float)
+                # shift them by 1 so it is always the previous response
+                zer = np.array([np.zeros(resps.shape[1])])
+                prev_resps = torch.tensor(np.concatenate((zer, resps[:-1, :]))).to(
+                    torch.float
+                )
+                # zero it out where prior_ids are zero
+                prev_resps[np.where(prior_ids == 0)] *= 0
+            else:  # if previous responses were passed directly as argument
+                prev_resps = torch.from_numpy(args[idx]).to(torch.float)
             tensors.append(prev_resps)
             idx += 1
 
@@ -664,8 +666,6 @@ def get_cached_loader_extended(
 
         if include_session_ids:
             session_ids = torch.from_numpy(args[idx])
-            print("in dataloader:")
-            print(session_ids)
             idx += 1
         else:
             session_ids = None
