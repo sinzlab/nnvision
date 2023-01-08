@@ -17,8 +17,8 @@ try:
     from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
     from ..tables.main import Recording
     from nnfabrik.main import Model
-except ModuleNotFoundError:
-    print("dj database connection could not be established. no access to pretrained models available.")
+except:
+    print("datajoint connection not established, skipping model imports from nnfabrik tables")
 
 try:
     from neuralpredictors.layers.cores import Stacked2dCore
