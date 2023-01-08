@@ -16,7 +16,8 @@ setup(
         "scikit-image==0.19.1",
         "numpy==1.22.0",
         'nnfabrik',
-        'neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout'
+        'neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout',
+        'mei @ git+https://github.com/sinzlab/mei.git@inception_loop',
     ],
 )
 
