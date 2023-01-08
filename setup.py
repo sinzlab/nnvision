@@ -15,5 +15,8 @@ setup(
         "einops",
         "scikit-image==0.19.1",
         "numpy==1.22.0",
+        'nnfabrik',
+        'neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout'
     ],
 )
+
