@@ -57,7 +57,9 @@ data_info = {
 }
 
 dirname = os.path.dirname(__file__)
-filename = os.path.join(dirname, 'model_storage/v4_multihead_attention_SOTA.pth.tar')
+
+filename = os.path.join(dirname, '../../../model_weights/v4_multihead_attention_SOTA.pth.tar')
+print(filename)
 state_dict = torch.load(filename)
 
 v4_multihead_attention_model = get_model(
