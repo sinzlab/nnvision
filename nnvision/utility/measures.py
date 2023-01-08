@@ -212,6 +212,7 @@ def model_predictions_shuffled(
                             (
                                 model(
                                     images.to(device), data_key=data_key, **batch_dict
+
                                 )
                                 .detach()
                                 .cpu()
@@ -282,6 +283,7 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
     return target, output
 
 
+
 def get_avg_correlations(
     model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
 ):
@@ -331,6 +333,7 @@ def get_correlations(
 ):
     if "test" in dataloaders:
         dataloaders = dataloaders["test"]
+
     correlations = {}
     with eval_state(model) if not is_ensemble_function(
         model
