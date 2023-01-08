@@ -1,4 +1,5 @@
 import torch
+import os
 
 import nnvision
 import nnfabrik
@@ -55,7 +56,10 @@ data_info = {
     },
 }
 
-state_dict = torch.load("./model_storage/v4_multihead_attention_SOTA.pth.tar")
+dirname = os.path.dirname(__file__)
+filename = os.path.join(dirname, './model_storage/v4_multihead_attention_SOTA.pth.tar')
+state_dict = torch.load(filename)
+
 v4_multihead_attention_model = get_model(
     model_fn, model_config, seed=10, data_info=data_info, state_dict=state_dict
 )
