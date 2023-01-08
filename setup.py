@@ -16,8 +16,6 @@ setup(
         "einops",
         "scikit-image==0.19.1",
         "numpy==1.22.0",
-        "ax>=0.52.0",
-        "ax_platform>=0.2.3",
         "datajoint>=0.12.7",
         "GitPython>=3.1.30",
         "matplotlib>=3.3.2",
