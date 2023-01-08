@@ -455,7 +455,8 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
                     shared_features=shared_features,
                     shared_grid=shared_grid,
                     source_grid=source_grid,
-
+                ),
+            )
         self.gamma_readout = gamma_readout
         self.gamma_grid_dispersion = gamma_grid_dispersion
 
