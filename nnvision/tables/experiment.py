@@ -4,7 +4,8 @@ import datajoint as dj
 from scipy import ndimage
 
 from nnfabrik.utility.dj_helpers import CustomSchema
-schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
+
+schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
 
 @schema
@@ -17,6 +18,7 @@ class StaticImageClass(dj.Lookup):
 
     def pull(self, restrictions=None):
         from .external import stim
+
         restrictions = dict() if restrictions is None else restrictions
         self.insert(
             (stim.StaticImageClass & restrictions).fetch(), skip_duplicates=True
@@ -53,6 +55,7 @@ class StaticImage(dj.Manual):
 
     def pull(self, key):
         from .external import stim
+
         parent_keys = (stim.StaticImage & key).fetch()
         self.insert(parent_keys, skip_duplicates=True)
 
@@ -60,7 +63,9 @@ class StaticImage(dj.Manual):
             child_keys = (stim.StaticImage.Image & parent_key & key).fetch(as_dict=True)
             self.Image().insert(child_keys, skip_duplicates=True)
 
-            child_keys = (stim.StaticImage.ImageNet & parent_key & key).fetch(as_dict=True)
+            child_keys = (stim.StaticImage.ImageNet & parent_key & key).fetch(
+                as_dict=True
+            )
             self.ImageNet().insert(child_keys, skip_duplicates=True)
 
 
@@ -74,6 +79,7 @@ class GaussianCLMaskedControl(dj.Manual):
     image_mask_key       : longblob
     image                : longblob
     """
+
 
 @schema
 class GaussianCLMaskedMEI(dj.Manual):
@@ -93,6 +99,7 @@ class GaussianCLMaskedMEI(dj.Manual):
     image                : longblob
     """
 
+
 @schema
 class ShiftCLMaskedControl(dj.Manual):
     definition = """
@@ -105,6 +112,7 @@ class ShiftCLMaskedControl(dj.Manual):
     shift_mask_key       : longblob
     image                : longblob
     """
+
 
 @schema
 class ShiftCLMaskedMEI(dj.Manual):
@@ -127,8 +135,11 @@ class ShiftCLMaskedMEI(dj.Manual):
     """
 
 
-from nnvision.utility.experiment_helpers.image_processing import shift_image_based_on_masks
+from nnvision.utility.experiment_helpers.image_processing import (
+    shift_image_based_on_masks,
+)
 from scipy.ndimage import center_of_mass
+
 
 @schema
 class GaussianCLMaskedControlExpanded(dj.Computed):
@@ -149,9 +160,11 @@ class GaussianCLMaskedControlExpanded(dj.Computed):
     """
 
     def make(self, key):
-        primary_keys, secondary_keys, mask = (GaussianCLMaskedControl & key).fetch1("KEY", "image_mask_key", "image_mask")
+        primary_keys, secondary_keys, mask = (GaussianCLMaskedControl & key).fetch1(
+            "KEY", "image_mask_key", "image_mask"
+        )
         com_h, com_w = center_of_mass(mask)
-        insert_key = {**primary_keys, **secondary_keys, 'com_h': com_h, 'com_w': com_w}
+        insert_key = {**primary_keys, **secondary_keys, "com_h": com_h, "com_w": com_w}
         self.insert1(insert_key)
 
 
@@ -179,18 +192,21 @@ class ShiftCLMaskedControlExpanded(dj.Computed):
         keys = (ShiftCLMaskedControl & key).fetch1()
 
         com_h, com_w = center_of_mass(keys["shift_mask"])
-        shifted_mask = shift_image_based_on_masks(keys["image_mask"], keys["image_mask"], [keys["shift_mask"]])[0]
+        shifted_mask = shift_image_based_on_masks(
+            keys["image_mask"], keys["image_mask"], [keys["shift_mask"]]
+        )[0]
         image_mei_seed = keys["image_mask_key"]["mei_seed"]
         shift_mei_seed = keys["shift_mask_key"]["mei_seed"]
 
-
-        insert_key = {**keys,
-                      **keys["image_mask_key"],
-                      'com_h': com_h,
-                      'com_w': com_w,
-                      'image_mei_seed': image_mei_seed,
-                      'shift_mei_seed': shift_mei_seed,
-                      'shifted_mask': shifted_mask}
+        insert_key = {
+            **keys,
+            **keys["image_mask_key"],
+            "com_h": com_h,
+            "com_w": com_w,
+            "image_mei_seed": image_mei_seed,
+            "shift_mei_seed": shift_mei_seed,
+            "shifted_mask": shifted_mask,
+        }
         self.insert1(insert_key, ignore_extra_fields=True)
 
 
@@ -206,7 +222,7 @@ class GaussianCLMaskedMEIExpanded(dj.Computed):
     def make(self, key):
         primary_keys, mask = (GaussianCLMaskedMEI & key).fetch1("KEY", "image_mask")
         com_h, com_w = center_of_mass(mask)
-        insert_key = {**primary_keys, 'com_h': com_h, 'com_w': com_w}
+        insert_key = {**primary_keys, "com_h": com_h, "com_w": com_w}
         self.insert1(insert_key)
 
 
@@ -222,14 +238,20 @@ class ShiftCLMaskedMEIExpanded(dj.Computed):
     """
 
     def make(self, key):
-        primary_keys, shift_key, shift_mask, image_mask = (ShiftCLMaskedMEI & key).fetch1("KEY", "shift_mask_key", "shift_mask", "image_mask")
+        primary_keys, shift_key, shift_mask, image_mask = (
+            ShiftCLMaskedMEI & key
+        ).fetch1("KEY", "shift_mask_key", "shift_mask", "image_mask")
         com_h, com_w = center_of_mass(shift_mask)
 
-        shifted_mask = shift_image_based_on_masks(image_mask, image_mask, [shift_mask])[0]
+        shifted_mask = shift_image_based_on_masks(image_mask, image_mask, [shift_mask])[
+            0
+        ]
         shift_mei_seed = shift_key["mei_seed"]
-        insert_key = {**primary_keys,
-                      'com_h': com_h,
-                      'com_w': com_w,
-                      'shifted_mask': shifted_mask,
-                      'shift_mei_seed':shift_mei_seed }
+        insert_key = {
+            **primary_keys,
+            "com_h": com_h,
+            "com_w": com_w,
+            "shifted_mask": shifted_mask,
+            "shift_mei_seed": shift_mei_seed,
+        }
         self.insert1(insert_key)

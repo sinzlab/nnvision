@@ -6,7 +6,9 @@ from skimage import morphology
 from skimage.transform import rescale
 
 
-def generate_mask(mei, gaussian_sigma=1, zscore_thresh=0.25, closing_iters=2, return_centroids=False):
+def generate_mask(
+    mei, gaussian_sigma=1, zscore_thresh=0.25, closing_iters=2, return_centroids=False
+):
 
     if type(mei) == torch.Tensor:
         mei = mei.detach().cpu().numpy().squeeze()

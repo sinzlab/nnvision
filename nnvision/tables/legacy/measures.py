@@ -3,14 +3,23 @@ from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
 from .main import MonkeyExperiment
 
 from nnvision.utility.dj_helpers import get_default_args
-from nnvision.utility.measures import get_oracles, get_repeats, get_FEV, get_explainable_var, get_correlations, get_poisson_loss, \
-    get_avg_correlations, get_oracles_corrected, get_model_rf_size
+from nnvision.utility.measures import (
+    get_oracles,
+    get_repeats,
+    get_FEV,
+    get_explainable_var,
+    get_correlations,
+    get_poisson_loss,
+    get_avg_correlations,
+    get_oracles_corrected,
+    get_model_rf_size,
+)
 from nnvision.tables.utility import DataCache
 from nnfabrik.template import ScoringBase, MeasuresBase, SummaryMeasuresBase
 from nnfabrik.utility.dj_helpers import CustomSchema
 from nnfabrik.builder import resolve_model
 
-schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
 
 @schema
@@ -32,6 +41,7 @@ class OracleScore(MeasuresBase):
     measure_attribute = "oracle_score"
     data_cache = DataCache
 
+
 @schema
 class OracleScoreCorrected(MeasuresBase):
     dataset_table = Dataset
@@ -51,7 +61,9 @@ class ModelRFSize(SummaryMeasuresBase):
 
     def make(self, key):
         model_config = (self.dataset_table & key).fetch1("model_config")
-        default_args = get_default_args(resolve_model((self.dataset_table & key).fetch1("model_fn")))
+        default_args = get_default_args(
+            resolve_model((self.dataset_table & key).fetch1("model_fn"))
+        )
         default_args.update(model_config)
         key[self.measure_attribute] = self.measure_function(default_args)
         self.insert1(key, ignore_extra_fields=True)

@@ -4,7 +4,7 @@ import datajoint as dj
 from ..utility.measures import get_oracles, get_explainable_var
 from nnfabrik.main import Dataset
 
-schema = dj.schema(dj.config.get('schema_name', 'nnfabrik_core'))
+schema = dj.schema(dj.config.get("schema_name", "nnfabrik_core"))
 print("Schema name: {}".format(dj.config["schema_name"]))
 
 
@@ -82,7 +82,7 @@ class MonkeyExperiment(dj.Computed):
         dataloaders = (Dataset & key).get_dataloader()
 
         filenames = dataset_config["neuronal_data_files"]
-        experiment_name, brain_area = dataset_config["dataset"].split('_')
+        experiment_name, brain_area = dataset_config["dataset"].split("_")
 
         oracles = get_oracles(dataloaders["test"], as_dict=True)
         explainable_var = get_explainable_var(dataloaders["test"], as_dict=True)
@@ -95,53 +95,70 @@ class MonkeyExperiment(dj.Computed):
 
             data_key = str(raw_data["session_id"])
 
-            unit_ids = raw_data["unit_ids"] if "unit_ids" in raw_data else np.arange(
-                raw_data["testing_responses"].shape[1])
+            unit_ids = (
+                raw_data["unit_ids"]
+                if "unit_ids" in raw_data
+                else np.arange(raw_data["testing_responses"].shape[1])
+            )
 
-            electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
-                                                                                                      dtype=np.double)
+            electrode = (
+                raw_data["electrode_nums"]
+                if "electrode_nums" in raw_data
+                else np.zeros_like(unit_ids, dtype=np.double)
+            )
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
             y_grid = raw_data["y_grid_location"] if "y_grid_location" in raw_data else 0
-            relative_depth = raw_data[
-                "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
-                                                                                                   dtype=np.double)
-            session_dict[data_key] = dict(animal_id=raw_data["subject_id"],
-                                          n_neurons=int(len(unit_ids)),
-                                          x_grid=x_grid,
-                                          y_grid=y_grid)
+            relative_depth = (
+                raw_data["relative_micron_depth"]
+                if "relative_micron_depth" in raw_data
+                else np.zeros_like(unit_ids, dtype=np.double)
+            )
+            session_dict[data_key] = dict(
+                animal_id=raw_data["subject_id"],
+                n_neurons=int(len(unit_ids)),
+                x_grid=x_grid,
+                y_grid=y_grid,
+            )
 
-            session_dict[data_key]['unit_id'] = unit_ids
-            session_dict[data_key]['electrode'] = electrode
-            session_dict[data_key]['x_grid'] = x_grid
-            session_dict[data_key]['y_grid'] = y_grid
-            session_dict[data_key]['relative_depth'] = relative_depth
+            session_dict[data_key]["unit_id"] = unit_ids
+            session_dict[data_key]["electrode"] = electrode
+            session_dict[data_key]["x_grid"] = x_grid
+            session_dict[data_key]["y_grid"] = y_grid
+            session_dict[data_key]["relative_depth"] = relative_depth
 
             responses = dataloaders["train"][data_key].dataset[:].targets
 
             avg_firing = responses.mean(dim=0)
             fano_factor = responses.var(dim=0) / (responses.mean(dim=0) + 1e-9)
-            session_dict[data_key]['avg_firing'] = avg_firing.numpy()
-            session_dict[data_key]['fano_factor'] = fano_factor.numpy()
+            session_dict[data_key]["avg_firing"] = avg_firing.numpy()
+            session_dict[data_key]["fano_factor"] = fano_factor.numpy()
 
-            session_dict[data_key]['unit_oracles'] = oracles[data_key]
-            session_dict[data_key]['unit_explainable_variance'] = explainable_var[data_key]
+            session_dict[data_key]["unit_oracles"] = oracles[data_key]
+            session_dict[data_key]["unit_explainable_variance"] = explainable_var[
+                data_key
+            ]
 
         key["brain_area"] = brain_area
         key["experiment_name"] = experiment_name
         key["n_sessions"] = len(session_dict)
-        key["total_n_neurons"] = int(np.sum([v["n_neurons"] for v in session_dict.values()]))
-        key["avg_oracle"] = np.nanmean(np.hstack([v["unit_oracles"] for v in session_dict.values()]))
+        key["total_n_neurons"] = int(
+            np.sum([v["n_neurons"] for v in session_dict.values()])
+        )
+        key["avg_oracle"] = np.nanmean(
+            np.hstack([v["unit_oracles"] for v in session_dict.values()])
+        )
         key["avg_explainable_var"] = np.nanmean(
-            np.hstack([v["unit_explainable_variance"] for v in session_dict.values()]))
+            np.hstack([v["unit_explainable_variance"] for v in session_dict.values()])
+        )
 
         self.insert1(key, ignore_extra_fields=True)
 
         for k, v in session_dict.items():
-            key['session_id'] = k
-            key['animal_id'] = str(v["animal_id"])
-            key['n_neurons'] = v["n_neurons"]
-            key['x_grid'] = v["x_grid"]
-            key['y_grid'] = v["y_grid"]
+            key["session_id"] = k
+            key["animal_id"] = str(v["animal_id"])
+            key["n_neurons"] = v["n_neurons"]
+            key["x_grid"] = v["x_grid"]
+            key["y_grid"] = v["y_grid"]
 
             self.Sessions().insert1(key, ignore_extra_fields=True)
 
@@ -150,14 +167,16 @@ class MonkeyExperiment(dj.Computed):
                 key["unit_position"] = i
                 self.Units().insert1(key, ignore_extra_fields=True)
 
-                key['unit_avg_firing'] = session_dict[k]['avg_firing'][i]
-                key['unit_fano_factor'] = session_dict[k]['fano_factor'][i]
+                key["unit_avg_firing"] = session_dict[k]["avg_firing"][i]
+                key["unit_fano_factor"] = session_dict[k]["fano_factor"][i]
                 self.UnitStatistics().insert1(key, ignore_extra_fields=True)
 
-                key['unit_oracle'] = session_dict[k]['unit_oracles'][i]
-                key['unit_explainable_var'] = session_dict[k]['unit_explainable_variance'][i]
+                key["unit_oracle"] = session_dict[k]["unit_oracles"][i]
+                key["unit_explainable_var"] = session_dict[k][
+                    "unit_explainable_variance"
+                ][i]
                 self.UnitMeasures().insert1(key, ignore_extra_fields=True)
 
-                key['electrode'] = session_dict[k]['electrode'][i]
-                key['relative_depth'] = session_dict[k]['relative_depth'][i]
+                key["electrode"] = session_dict[k]["electrode"][i]
+                key["relative_depth"] = session_dict[k]["relative_depth"][i]
                 self.UnitPhysiology().insert1(key, ignore_extra_fields=True)

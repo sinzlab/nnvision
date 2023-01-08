@@ -26,9 +26,20 @@ class TransferLearningCore(Core2d, nn.Module):
     """
     A Class to create a Core based on a model class from torchvision.models.
     """
-    def __init__(self, input_channels, tr_model_fn, model_layer, pretrained=True,
-                 final_batchnorm=True, final_nonlinearity=True,
-                 bias=False, momentum=0.1, fine_tune = False, **kwargs):
+
+    def __init__(
+        self,
+        input_channels,
+        tr_model_fn,
+        model_layer,
+        pretrained=True,
+        final_batchnorm=True,
+        final_nonlinearity=True,
+        bias=False,
+        momentum=0.1,
+        fine_tune=False,
+        **kwargs
+    ):
         """
         Args:
             input_channels: number of input channgels
@@ -42,38 +53,44 @@ class TransferLearningCore(Core2d, nn.Module):
             fine_tune: boolean, sets all weights to trainable if True
             **kwargs:
         """
-        print('Ignoring input {} when creating {}'.format(repr(kwargs), self.__class__.__name__))
+        print(
+            "Ignoring input {} when creating {}".format(
+                repr(kwargs), self.__class__.__name__
+            )
+        )
         super().__init__()
 
-        #getattr(self, tr_model_fn)
-        tr_model_fn         = globals()[tr_model_fn]
+        # getattr(self, tr_model_fn)
+        tr_model_fn = globals()[tr_model_fn]
 
         self.input_channels = input_channels
-        self.tr_model_fn    = tr_model_fn
+        self.tr_model_fn = tr_model_fn
 
-        tr_model            = tr_model_fn(pretrained=pretrained)
-        self.model_layer    = model_layer
+        tr_model = tr_model_fn(pretrained=pretrained)
+        self.model_layer = model_layer
         self.features = nn.Sequential()
 
         tr_features = nn.Sequential(*list(tr_model.features.children())[:model_layer])
-        
+
         # Remove the bias of the last conv layer if not :bias:
         if not bias:
-            if 'bias' in tr_features[-1]._parameters:
+            if "bias" in tr_features[-1]._parameters:
                 zeros = torch.zeros_like(tr_features[-1].bias)
                 tr_features[-1].bias.data = zeros
-        
+
         # Fix pretrained parameters during training parameters
         if not fine_tune:
             for param in tr_features.parameters():
                 param.requires_grad = False
 
-        self.features.add_module('TransferLearning', tr_features)
+        self.features.add_module("TransferLearning", tr_features)
         print(self.features)
         if final_batchnorm:
-            self.features.add_module('OutBatchNorm', nn.BatchNorm2d(self.outchannels, momentum=momentum))
+            self.features.add_module(
+                "OutBatchNorm", nn.BatchNorm2d(self.outchannels, momentum=momentum)
+            )
         if final_nonlinearity:
-            self.features.add_module('OutNonlin', nn.ReLU(inplace=True))
+            self.features.add_module("OutNonlin", nn.ReLU(inplace=True))
 
     def forward(self, x):
         if self.input_channels == 1:
@@ -89,42 +106,42 @@ class TransferLearningCore(Core2d, nn.Module):
         Returns: dimensions of the output, after a forward pass through the model
         """
         found_out_channels = False
-        i=1
+        i = 1
         while not found_out_channels:
-            if 'out_channels' in self.features.TransferLearning[-i].__dict__:
+            if "out_channels" in self.features.TransferLearning[-i].__dict__:
                 found_out_channels = True
             else:
-                i = i+1
+                i = i + 1
         return self.features.TransferLearning[-i].out_channels
 
 
 class SE2dCore(Core2d, nn.Module):
     def __init__(
-            self,
-            input_channels,
-            hidden_channels,
-            input_kern,
-            hidden_kern,
-            layers=3,
-            gamma_input=0.0,
-            gamma_hidden=0.0,
-            skip=0,
-            final_nonlinearity=True,
-            final_batch_norm=True,
-            bias=False,
-            momentum=0.1,
-            pad_input=True,
-            batch_norm=True,
-            hidden_dilation=1,
-            laplace_padding=None,
-            input_regularizer="LaplaceL2norm",
-            stack=None,
-            se_reduction=32,
-            n_se_blocks=1,
-            depth_separable=False,
-            attention_conv=False,
-            linear=False,
-            first_layer_stride=1,
+        self,
+        input_channels,
+        hidden_channels,
+        input_kern,
+        hidden_kern,
+        layers=3,
+        gamma_input=0.0,
+        gamma_hidden=0.0,
+        skip=0,
+        final_nonlinearity=True,
+        final_batch_norm=True,
+        bias=False,
+        momentum=0.1,
+        pad_input=True,
+        batch_norm=True,
+        hidden_dilation=1,
+        laplace_padding=None,
+        input_regularizer="LaplaceL2norm",
+        stack=None,
+        se_reduction=32,
+        n_se_blocks=1,
+        depth_separable=False,
+        attention_conv=False,
+        linear=False,
+        first_layer_stride=1,
     ):
         """
         Args:
@@ -158,14 +175,18 @@ class SE2dCore(Core2d, nn.Module):
         super().__init__()
 
         assert not bias or not batch_norm, "bias and batch_norm should not both be true"
-        assert not depth_separable or not attention_conv, "depth_separable and attention_conv should not both be true"
+        assert (
+            not depth_separable or not attention_conv
+        ), "depth_separable and attention_conv should not both be true"
 
         regularizer_config = (
             dict(padding=laplace_padding, kernel=input_kern)
             if input_regularizer == "GaussianLaplaceL2"
             else dict(padding=laplace_padding)
         )
-        self._input_weights_regularizer = regularizers.__dict__[input_regularizer](**regularizer_config)
+        self._input_weights_regularizer = regularizers.__dict__[input_regularizer](
+            **regularizer_config
+        )
 
         self.layers = layers
         self.depth_separable = depth_separable
@@ -179,7 +200,9 @@ class SE2dCore(Core2d, nn.Module):
         if stack is None:
             self.stack = range(self.layers)
         else:
-            self.stack = [*range(self.layers)[stack:]] if isinstance(stack, int) else stack
+            self.stack = (
+                [*range(self.layers)[stack:]] if isinstance(stack, int) else stack
+            )
 
         # --- first layer
         layer = OrderedDict()
@@ -205,10 +228,15 @@ class SE2dCore(Core2d, nn.Module):
             layer = OrderedDict()
             hidden_padding = ((hidden_kern[l - 1] - 1) * hidden_dilation + 1) // 2
             if depth_separable:
-                layer["ds_conv"] = DepthSeparableConv2d(hidden_channels, hidden_channels,
-                                                        kernel_size=hidden_kern[l - 1],
-                                                        dilation=hidden_dilation, padding=hidden_padding, bias=False,
-                                                        stride=1)
+                layer["ds_conv"] = DepthSeparableConv2d(
+                    hidden_channels,
+                    hidden_channels,
+                    kernel_size=hidden_kern[l - 1],
+                    dilation=hidden_dilation,
+                    padding=hidden_padding,
+                    bias=False,
+                    stride=1,
+                )
             elif attention_conv:
                 layer["conv"] = AttentionConv(
                     hidden_channels if not skip > 1 else min(skip, l) * hidden_channels,
@@ -233,7 +261,9 @@ class SE2dCore(Core2d, nn.Module):
                 layer["nonlin"] = nn.ELU(inplace=True)
 
             if (self.layers - l) <= self.n_se_blocks:
-                layer["seg_ex_block"] = SQ_EX_Block(in_ch=hidden_channels, reduction=se_reduction)
+                layer["seg_ex_block"] = SQ_EX_Block(
+                    in_ch=hidden_channels, reduction=se_reduction
+                )
 
             self.features.add_module("layer{}".format(l), nn.Sequential(layer))
 
@@ -243,7 +273,9 @@ class SE2dCore(Core2d, nn.Module):
         ret = []
         for l, feat in enumerate(self.features):
             do_skip = l >= 1 and self.skip > 1
-            input_ = feat(input_ if not do_skip else torch.cat(ret[-min(self.skip, l):], dim=1))
+            input_ = feat(
+                input_ if not do_skip else torch.cat(ret[-min(self.skip, l) :], dim=1)
+            )
             if l in self.stack:
                 ret.append(input_)
         return torch.cat(ret, dim=1)
@@ -256,34 +288,53 @@ class SE2dCore(Core2d, nn.Module):
         for l in range(1, self.layers):
             if self.depth_separable:
                 for ds_i in range(3):
-                    ret = ret + self.features[l].ds_conv[ds_i].weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+                    ret = (
+                        ret
+                        + self.features[l]
+                        .ds_conv[ds_i]
+                        .weight.pow(2)
+                        .sum(3, keepdim=True)
+                        .sum(2, keepdim=True)
+                        .sqrt()
+                        .mean()
+                    )
             else:
-                ret = ret + self.features[l].conv.weight.pow(2).sum(3, keepdim=True).sum(2, keepdim=True).sqrt().mean()
+                ret = (
+                    ret
+                    + self.features[l]
+                    .conv.weight.pow(2)
+                    .sum(3, keepdim=True)
+                    .sum(2, keepdim=True)
+                    .sqrt()
+                    .mean()
+                )
         return ret / ((self.layers - 1) if self.layers > 1 else 1)
 
     def regularizer(self):
-        return self.gamma_input * self.laplace() + self.gamma_hidden * self.group_sparsity()
+        return (
+            self.gamma_input * self.laplace()
+            + self.gamma_hidden * self.group_sparsity()
+        )
 
     @property
     def outchannels(self):
         return len(self.features) * self.hidden_channels
 
 
-
 class TaskDrivenCore3(Core2d, nn.Module):
     def __init__(
-            self,
-            input_channels,
-            model_name,
-            layer_name,
-            pretrained=True,
-            bias=False,
-            final_batchnorm=True,
-            final_nonlinearity=True,
-            momentum=0.1,
-            fine_tune=False,
-            replace_downsampling=False,
-            **kwargs
+        self,
+        input_channels,
+        model_name,
+        layer_name,
+        pretrained=True,
+        bias=False,
+        final_batchnorm=True,
+        final_nonlinearity=True,
+        momentum=0.1,
+        fine_tune=False,
+        replace_downsampling=False,
+        **kwargs
     ):
         """
         Core from pretrained networks on image tasks.
@@ -301,12 +352,17 @@ class TaskDrivenCore3(Core2d, nn.Module):
         """
         if kwargs:
             warnings.warn(
-                "Ignoring input {} when creating {}".format(repr(kwargs), self.__class__.__name__), UserWarning
+                "Ignoring input {} when creating {}".format(
+                    repr(kwargs), self.__class__.__name__
+                ),
+                UserWarning,
             )
         super().__init__()
 
         if not "resnet" in model_name and (replace_conv_stride or replace_pooling):
-            raise ValueError("replacing conv or pooling layers is only implemented for the ResNet")
+            raise ValueError(
+                "replacing conv or pooling layers is only implemented for the ResNet"
+            )
 
         self.input_channels = input_channels
         self.momentum = momentum
@@ -317,17 +373,51 @@ class TaskDrivenCore3(Core2d, nn.Module):
         # Download model and cut after specified layer
         self.model = getattr(ptrnets, model_name)(pretrained=pretrained)
         if replace_downsampling:
-            torch.save(self.model.state_dict(), 'model_weights')
+            torch.save(self.model.state_dict(), "model_weights")
 
-            self.model.conv1 = nn.Conv2d(3,64,7, padding=(3, 3), bias=False, dilation=2)
-            self.model.layer2[0].conv2 = nn.Conv2d(128, 128, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
-            self.model.layer3[0].conv2 = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
-            self.model.layer4[0].conv2 = nn.Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), dilation=2, padding=(2, 2), bias=False)
+            self.model.conv1 = nn.Conv2d(
+                3, 64, 7, padding=(3, 3), bias=False, dilation=2
+            )
+            self.model.layer2[0].conv2 = nn.Conv2d(
+                128,
+                128,
+                kernel_size=(3, 3),
+                stride=(1, 1),
+                dilation=2,
+                padding=(2, 2),
+                bias=False,
+            )
+            self.model.layer3[0].conv2 = nn.Conv2d(
+                256,
+                256,
+                kernel_size=(3, 3),
+                stride=(1, 1),
+                dilation=2,
+                padding=(2, 2),
+                bias=False,
+            )
+            self.model.layer4[0].conv2 = nn.Conv2d(
+                512,
+                512,
+                kernel_size=(3, 3),
+                stride=(1, 1),
+                dilation=2,
+                padding=(2, 2),
+                bias=False,
+            )
 
-            self.model.layer2[0].downsample[0] = nn.Conv2d(256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False)
-            self.model.layer3[0].downsample[0] = nn.Conv2d(512, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False)
-            self.model.layer4[0].downsample[0] = nn.Conv2d(1024, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False)
-            self.model.maxpool = nn.MaxPool2d(kernel_size=3, stride=1, padding=1, dilation=1, ceil_mode=False)
+            self.model.layer2[0].downsample[0] = nn.Conv2d(
+                256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False
+            )
+            self.model.layer3[0].downsample[0] = nn.Conv2d(
+                512, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False
+            )
+            self.model.layer4[0].downsample[0] = nn.Conv2d(
+                1024, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False
+            )
+            self.model.maxpool = nn.MaxPool2d(
+                kernel_size=3, stride=1, padding=1, dilation=1, ceil_mode=False
+            )
 
             self.model.load_state_dict(torch.load("model_weights"), strict=True)
             os.remove("model_weights")
@@ -337,22 +427,26 @@ class TaskDrivenCore3(Core2d, nn.Module):
 
         # Decide whether to probe the model with a forward hook or to clip the model by replicating architecture of the model up to layer :layer_name:
 
-        x = torch.randn(1,3,224,224).to(self.device)
-        #model_clipped = clip_model(self.model, self.layer_name)
-        #clip_out = model_clipped(x)
+        x = torch.randn(1, 3, 224, 224).to(self.device)
+        # model_clipped = clip_model(self.model, self.layer_name)
+        # clip_out = model_clipped(x)
         try:
-            self.model.eval();
+            self.model.eval()
             model_clipped = clip_model(self.model, self.layer_name)
-            clip_out = model_clipped(x);
+            clip_out = model_clipped(x)
         except:
-            warnings.warn('Unable to clip model {} at layer {}. Using a probe instead'.format(model_name, self.layer_name))
+            warnings.warn(
+                "Unable to clip model {} at layer {}. Using a probe instead".format(
+                    model_name, self.layer_name
+                )
+            )
             self.use_probe = True
 
         self.model_probe = self.probe_model()
 
         # Remove the bias of the last conv layer if not :bias:
         if not bias and not self.use_probe:
-            if 'bias' in model_clipped[-1]._parameters:
+            if "bias" in model_clipped[-1]._parameters:
                 if model_clipped[-1].bias is not None:
                     zeros = torch.zeros_like(model_clipped[-1].bias)
                     model_clipped[-1].bias.data = zeros
@@ -362,25 +456,27 @@ class TaskDrivenCore3(Core2d, nn.Module):
             for param in model_clipped.parameters():
                 param.requires_grad = False
 
-
         # Stack model modules
         self.features = nn.Sequential()
 
-        if not(self.use_probe): self.features.add_module("TaskDriven", model_clipped)
+        if not (self.use_probe):
+            self.features.add_module("TaskDriven", model_clipped)
 
         if final_batchnorm:
-            self.features.add_module("OutBatchNorm", nn.BatchNorm2d(self.outchannels, momentum=self.momentum))
+            self.features.add_module(
+                "OutBatchNorm", nn.BatchNorm2d(self.outchannels, momentum=self.momentum)
+            )
         if final_nonlinearity:
             self.features.add_module("OutNonlin", nn.ReLU(inplace=True))
 
         # Remove model module if not(self.use_probe):
 
-        if not(self.use_probe):
+        if not (self.use_probe):
             del self.model
 
     def forward(self, input_):
         # If model is designed for RBG input but input is greyscale, repeat the same input 3 times
-        #TODO Add what to do if two channels are passed in (i.e. the previous image)
+        # TODO Add what to do if two channels are passed in (i.e. the previous image)
 
         if len(input_.shape) == 3:
             input_ = input_[:, None, ...]
@@ -407,7 +503,7 @@ class TaskDrivenCore3(Core2d, nn.Module):
         layer, the last conv layer in the network is used.
         Returns: Number of output channels
         """
-        x = torch.randn(1,3,224,224).to(self.device)
+        x = torch.randn(1, 3, 224, 224).to(self.device)
         if self.use_probe:
             outch = self.model_probe(x).shape[1]
         else:
@@ -415,15 +511,18 @@ class TaskDrivenCore3(Core2d, nn.Module):
         return outch
 
     def regularizer(self):
-        return 0   # useful for final loss
+        return 0  # useful for final loss
 
     def probe_model(self):
 
-        assert self.layer_name in [n for n,_ in self.model.named_modules()], 'No module named {}'.format(self.layer_name)
+        assert self.layer_name in [
+            n for n, _ in self.model.named_modules()
+        ], "No module named {}".format(self.layer_name)
         hook = hook_model_module(self.model, self.layer_name)
+
         def func(x):
             try:
-                self.model(x);
+                self.model(x)
             except:
                 pass
             return hook(self.layer_name)

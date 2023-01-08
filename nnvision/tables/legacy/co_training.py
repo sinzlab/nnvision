@@ -5,7 +5,7 @@ from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
 from featurevis import integration
 
-schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
+schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
 
 @schema
@@ -56,7 +56,7 @@ class MultiExperiment(dj.Computed):
         filenames = dataset_config["sua_data_files"]
         filenames_mua = dataset_config["mua_data_files"]
 
-        experiment_name, brain_area = dataset_config["dataset"].split('_')
+        experiment_name, brain_area = dataset_config["dataset"].split("_")
 
         session_dict = {}
 
@@ -80,53 +80,63 @@ class MultiExperiment(dj.Computed):
                 print("session {} does not exist in MUA. Skipping ...".format(data_key))
                 continue
 
-            unit_ids = raw_data["unit_ids"] if "unit_ids" in raw_data else np.arange(
-                raw_data["testing_responses"].shape[1])
+            unit_ids = (
+                raw_data["unit_ids"]
+                if "unit_ids" in raw_data
+                else np.arange(raw_data["testing_responses"].shape[1])
+            )
 
-            electrode = raw_data["electrode_nums"] if "electrode_nums" in raw_data else np.zeros_like(unit_ids,
-                                                                                                      dtype=np.double)
+            electrode = (
+                raw_data["electrode_nums"]
+                if "electrode_nums" in raw_data
+                else np.zeros_like(unit_ids, dtype=np.double)
+            )
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
             y_grid = raw_data["y_grid_location"] if "y_grid_location" in raw_data else 0
-            relative_depth = raw_data[
-                "relative_micron_depth"] if "relative_micron_depth" in raw_data else np.zeros_like(unit_ids,
-                                                                                                   dtype=np.double)
+            relative_depth = (
+                raw_data["relative_micron_depth"]
+                if "relative_micron_depth" in raw_data
+                else np.zeros_like(unit_ids, dtype=np.double)
+            )
 
             unit_ids = np.concatenate([unit_ids, unit_ids_mua])
             electrode = np.concatenate([electrode, electrode_mua])
             relative_depth = np.concatenate([relative_depth, relative_depth_mua])
 
-            session_dict[data_key] = dict(animal_id=raw_data["subject_id"],
-                                          n_neurons=int(len(unit_ids)),
-                                          x_grid=x_grid,
-                                          y_grid=y_grid)
+            session_dict[data_key] = dict(
+                animal_id=raw_data["subject_id"],
+                n_neurons=int(len(unit_ids)),
+                x_grid=x_grid,
+                y_grid=y_grid,
+            )
 
-            session_dict[data_key]['unit_id'] = unit_ids
-            session_dict[data_key]['electrode'] = electrode
-            session_dict[data_key]['x_grid'] = x_grid
-            session_dict[data_key]['y_grid'] = y_grid
-            session_dict[data_key]['relative_depth'] = relative_depth
-
-
+            session_dict[data_key]["unit_id"] = unit_ids
+            session_dict[data_key]["electrode"] = electrode
+            session_dict[data_key]["x_grid"] = x_grid
+            session_dict[data_key]["y_grid"] = y_grid
+            session_dict[data_key]["relative_depth"] = relative_depth
 
         key["brain_area"] = brain_area
         key["experiment_name"] = experiment_name
         key["n_sessions"] = len(session_dict)
-        key["total_n_neurons"] = int(np.sum([v["n_neurons"] for v in session_dict.values()]))
+        key["total_n_neurons"] = int(
+            np.sum([v["n_neurons"] for v in session_dict.values()])
+        )
 
         self.insert1(key, ignore_extra_fields=True)
 
         for k, v in session_dict.items():
-            key['data_key'] = k
-            key['animal_id'] = str(v["animal_id"])
-            key['n_neurons'] = v["n_neurons"]
-            key['x_grid'] = v["x_grid"]
-            key['y_grid'] = v["y_grid"]
+            key["data_key"] = k
+            key["animal_id"] = str(v["animal_id"])
+            key["n_neurons"] = v["n_neurons"]
+            key["x_grid"] = v["x_grid"]
+            key["y_grid"] = v["y_grid"]
 
             self.Sessions().insert1(key, ignore_extra_fields=True)
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
                 key["unit_id"] = int(neuron_id)
                 key["unit_index"] = i
-                key['electrode'] = session_dict[k]['electrode'][i]
-                key['relative_depth'] = session_dict[k]['relative_depth'][i]
+                key["electrode"] = session_dict[k]["electrode"][i]
+                key["relative_depth"] = session_dict[k]["relative_depth"][i]
                 self.Units().insert1(key, ignore_extra_fields=True)

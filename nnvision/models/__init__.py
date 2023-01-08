@@ -11,7 +11,12 @@ from .models import (
     stacked2d_core_dn_linear_readout,
     se_core_remapped_gauss_readout,
 )
+
 try:
-    from .ptrmodels import task_core_gauss_readout, task_core_point_readout, custom_task_core_shared_multihead_attention
+    from .ptrmodels import (
+        task_core_gauss_readout,
+        task_core_point_readout,
+        custom_task_core_shared_multihead_attention,
+    )
 except:
     pass

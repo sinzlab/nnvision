@@ -3,42 +3,52 @@ import torch
 import torch.utils.data as utils
 import numpy as np
 import pickle
-#from retina.retina import warp_image
+
+# from retina.retina import warp_image
 from collections import namedtuple, Iterable
 import os
 from pathlib import Path
 from neuralpredictors.data.samplers import RepeatsBatchSampler
-from .utility import get_validation_split, ImageCache, get_cached_loader, get_cached_loader_extended, get_fraction_of_training_images, get_crop_from_stimulus_location
+from .utility import (
+    get_validation_split,
+    ImageCache,
+    get_cached_loader,
+    get_cached_loader_extended,
+    get_fraction_of_training_images,
+    get_crop_from_stimulus_location,
+)
 from nnfabrik.utility.nn_helpers import set_random_seed, get_dims_for_loader_dict
 from neuralpredictors.utils import get_module_output
 from nnfabrik.utility.dj_helpers import make_hash
 from tqdm import tqdm
 import scipy
 
-def monkey_static_loader(dataset,
-                         neuronal_data_files,
-                         image_cache_path,
-                         batch_size=64,
-                         seed=None,
-                         train_frac=0.8,
-                         subsample=1,
-                         crop=((96, 96), (96, 96)),
-                         scale=1.,
-                         time_bins_sum=tuple(range(12)),
-                         avg=False,
-                         image_file=None,
-                         return_data_info=False,
-                         store_data_info=True,
-                         image_frac=1.,
-                         image_selection_seed=None,
-                         randomize_image_selection=True,
-                         img_mean=None,
-                         img_std=None,
-                         stimulus_location=None,
-                         monitor_scaling_factor=4.57,
-                         include_prev_image=False,
-                         include_trial_id=False,
-                         ):
+
+def monkey_static_loader(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    img_mean=None,
+    img_std=None,
+    stimulus_location=None,
+    monitor_scaling_factor=4.57,
+    include_prev_image=False,
+    include_trial_id=False,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -82,7 +92,7 @@ def monkey_static_loader(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+    dataloaders = {"train": {}, "validation": {}, "test": {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -91,17 +101,19 @@ def monkey_static_loader(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     if stimulus_location is not None:
-        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+        crop = get_crop_from_stimulus_location(
+            stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor
+        )
 
     if not isinstance(image_frac, Iterable):
         image_frac = [image_frac for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -111,29 +123,52 @@ def monkey_static_loader(dataset,
             return data_info
         img_mean = list(data_info.values())[0]["img_mean"]
         img_std = list(data_info.values())[0]["img_std"]
-        
+
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
 
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=True,
+            )
         else:
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
 
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
             cache.zscore_images(update_stats=True)
             img_mean = cache.img_mean
-            img_std  = cache.img_std
-    
-    
+            img_std = cache.img_std
+
     n_images = len(cache)
     data_info = {}
 
     # set up parameters for the different dataset types
-    if dataset == 'PlosCB19_V1':
+    if dataset == "PlosCB19_V1":
         # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
         # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
         # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
@@ -143,10 +178,10 @@ def monkey_static_loader(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
-                                                             train_frac=train_frac,
-                                                             seed=seed)
-    
+    all_train_ids, all_validation_ids = get_validation_split(
+        n_images=n_images * train_test_split, train_frac=train_frac, seed=seed
+    )
+
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
 
@@ -161,31 +196,45 @@ def monkey_static_loader(dataset,
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
         if include_prev_image and not "training_prior_image_ids" in raw_data:
-            raise ValueError("No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
+            raise ValueError(
+                "No previous image IDs present in the provided data files. Set 'include_prev_image' to False"
+            )
 
         if include_prev_image:
-            prev_training_image_ids = raw_data["training_prior_image_ids"] - image_id_offset
-            prev_testing_image_ids = raw_data["testing_prior_image_ids"] - image_id_offset
+            prev_training_image_ids = (
+                raw_data["training_prior_image_ids"] - image_id_offset
+            )
+            prev_testing_image_ids = (
+                raw_data["testing_prior_image_ids"] - image_id_offset
+            )
 
-        if dataset != 'PlosCB19_V1':
+        if dataset != "PlosCB19_V1":
             if len(responses_test.shape) != 3:
                 responses_test = responses_test[None, ...]
                 responses_train = responses_train[None, ...]
                 # correct the shape of the responses for a session that was exported incorrectly
-                if data_key != '3653663964522':
+                if data_key != "3653663964522":
                     warnings.warn("Pickle file with invalid response shape detected")
 
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
             if time_bins_sum is not None:  # then average over given time bins
-                responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
-                responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+                responses_train = (np.mean if avg else np.sum)(
+                    responses_train[:, :, time_bins_sum], axis=-1
+                )
+                responses_test = (np.mean if avg else np.sum)(
+                    responses_test[:, :, time_bins_sum], axis=-1
+                )
 
         if image_frac[i] < 1:
             if randomize_image_selection:
-                image_selection_seed = int(image_selection_seed*image_frac[i])
-            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac[i], seed=image_selection_seed)
+                image_selection_seed = int(image_selection_seed * image_frac[i])
+            idx_out = get_fraction_of_training_images(
+                image_ids=training_image_ids,
+                fraction=image_frac[i],
+                seed=image_selection_seed,
+            )
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
@@ -204,7 +253,9 @@ def monkey_static_loader(dataset,
 
         if include_trial_id:
             test_trial_ids = scipy.stats.zscore(range(len(testing_image_ids)))
-            all_train_trial_ids = scipy.stats.zscore(range(len(training_image_ids) + len(validation_image_ids)))
+            all_train_trial_ids = scipy.stats.zscore(
+                range(len(training_image_ids) + len(validation_image_ids))
+            )
             train_trial_ids = all_train_trial_ids[train_idx]
             val_trial_ids = all_train_trial_ids[val_idx]
 
@@ -222,30 +273,35 @@ def monkey_static_loader(dataset,
             args_val.insert(1 + include_prev_image, val_trial_ids)
             args_test.insert(1 + include_prev_image, test_trial_ids)
 
-        train_loader = get_cached_loader(*args_train,
-                                         batch_size=batch_size,
-                                         image_cache=cache,
-                                         include_trial_id=include_trial_id,
-                                         include_prev_image=include_prev_image,)
+        train_loader = get_cached_loader(
+            *args_train,
+            batch_size=batch_size,
+            image_cache=cache,
+            include_trial_id=include_trial_id,
+            include_prev_image=include_prev_image,
+        )
 
-        val_loader = get_cached_loader(*args_val,
-                                       batch_size=batch_size,
-                                       image_cache=cache,
-                                       include_trial_id=include_trial_id,
-                                       include_prev_image=include_prev_image,)
+        val_loader = get_cached_loader(
+            *args_val,
+            batch_size=batch_size,
+            image_cache=cache,
+            include_trial_id=include_trial_id,
+            include_prev_image=include_prev_image,
+        )
 
-        test_loader = get_cached_loader(*args_test,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=cache,
-                                        repeat_condition=testing_image_ids,
-                                        include_prev_image=include_prev_image,
-                                        include_trial_id=include_trial_id)
+        test_loader = get_cached_loader(
+            *args_test,
+            batch_size=None,
+            shuffle=None,
+            image_cache=cache,
+            repeat_condition=testing_image_ids,
+            include_prev_image=include_prev_image,
+            include_trial_id=include_trial_id,
+        )
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
         dataloaders["test"][data_key] = test_loader
-
 
     if store_data_info and not os.path.exists(stats_path):
 
@@ -257,13 +313,15 @@ def monkey_static_loader(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
-        stats_path_base =  str(Path(stats_path).parent)
+        stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
             os.mkdir(stats_path_base)
         with open(stats_path, "wb") as pkl:
@@ -271,32 +329,34 @@ def monkey_static_loader(dataset,
 
     return dataloaders if not return_data_info else data_info
 
-def monkey_static_loader_combined(dataset,
-                         neuronal_data_files,
-                         image_cache_path,
-                         batch_size=64,
-                         seed=None,
-                         train_frac=0.8,
-                         subsample=1,
-                         crop=((96, 96), (96, 96)),
-                         scale=1.,
-                         time_bins_sum=tuple(range(12)),
-                         avg=False,
-                         image_file=None,
-                         return_data_info=False,
-                         store_data_info=True,
-                         image_frac=1.,
-                         image_selection_seed=None,
-                         randomize_image_selection=True,
-                         img_mean=None,
-                         img_std=None,
-                         stimulus_location=None,
-                         monitor_scaling_factor=4.57,
-                         include_prev_image=False,
-                         include_trial_id=False,
-                         include_bools = True,
-                         include_n_neurons = False
-                         ):
+
+def monkey_static_loader_combined(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    img_mean=None,
+    img_std=None,
+    stimulus_location=None,
+    monitor_scaling_factor=4.57,
+    include_prev_image=False,
+    include_trial_id=False,
+    include_bools=True,
+    include_n_neurons=False,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times.
 
@@ -345,7 +405,7 @@ def monkey_static_loader_combined(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+    dataloaders = {"train": {}, "validation": {}, "test": {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -354,17 +414,19 @@ def monkey_static_loader_combined(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     if stimulus_location is not None:
-        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+        crop = get_crop_from_stimulus_location(
+            stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor
+        )
 
     if not isinstance(image_frac, Iterable):
         image_frac = [image_frac for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -376,27 +438,50 @@ def monkey_static_loader_combined(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean= img_mean, img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
 
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=True,
+            )
         else:
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True, normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
 
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
             cache.zscore_images(update_stats=True)
             img_mean = cache.img_mean
-            img_std  = cache.img_std
-
+            img_std = cache.img_std
 
     n_images = len(cache)
     data_info = {}
 
     # set up parameters for the different dataset types
-    if dataset == 'PlosCB19_V1':
+    if dataset == "PlosCB19_V1":
         # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
         # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
         # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
@@ -406,38 +491,59 @@ def monkey_static_loader_combined(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    #get train- and validation IDs from helper function
-    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
-                                                             train_frac=train_frac,
-                                                             seed=seed)
+    # get train- and validation IDs from helper function
+    all_train_ids, all_validation_ids = get_validation_split(
+        n_images=n_images * train_test_split, train_frac=train_frac, seed=seed
+    )
 
-    n_neurons = np.zeros(len(neuronal_data_files),dtype=np.uint8) #save number of neurons for easier access
-    max_repeats = 0 #save number of max repeats in test dataset
-    all_testing_ids = np.array([], dtype=np.uint16) #unique testing
+    n_neurons = np.zeros(
+        len(neuronal_data_files), dtype=np.uint8
+    )  # save number of neurons for easier access
+    max_repeats = 0  # save number of max repeats in test dataset
+    all_testing_ids = np.array([], dtype=np.uint16)  # unique testing
 
-    #cycle through all datafiles to get the total number of neurons accross all sessions, the unique testing image ids and the maximum number of repeats for them
+    # cycle through all datafiles to get the total number of neurons accross all sessions, the unique testing image ids and the maximum number of repeats for them
     for i, datapath in enumerate(neuronal_data_files):
 
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
 
-        n_neurons[i] = raw_data['unit_ids'].shape[0] #get number of neurons recorded for each session
+        n_neurons[i] = raw_data["unit_ids"].shape[
+            0
+        ]  # get number of neurons recorded for each session
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
-        max_repeats =max(np.max(np.unique(testing_image_ids, return_counts=True)[1]),max_repeats) #figure out maximum number of repeats for testing images
-        all_testing_ids = np.unique(np.concatenate((all_testing_ids, testing_image_ids)))
+        max_repeats = max(
+            np.max(np.unique(testing_image_ids, return_counts=True)[1]), max_repeats
+        )  # figure out maximum number of repeats for testing images
+        all_testing_ids = np.unique(
+            np.concatenate((all_testing_ids, testing_image_ids))
+        )
 
-    all_responses_train = np.zeros((len(all_train_ids),np.sum(n_neurons))) #shape: (number of training image IDs, number of neurons)
-    all_responses_val = np.zeros((len(all_validation_ids),np.sum(n_neurons))) # shape: (number of validation image IDs, number neurons)
-    all_train_bools = np.full((len(all_train_ids),np.sum(n_neurons)),False) #booleans signify whether a neurons was shown a particular image during a particular session
-    all_val_bools = np.full((len(all_validation_ids),np.sum(n_neurons)),False)
+    all_responses_train = np.zeros(
+        (len(all_train_ids), np.sum(n_neurons))
+    )  # shape: (number of training image IDs, number of neurons)
+    all_responses_val = np.zeros(
+        (len(all_validation_ids), np.sum(n_neurons))
+    )  # shape: (number of validation image IDs, number neurons)
+    all_train_bools = np.full(
+        (len(all_train_ids), np.sum(n_neurons)), False
+    )  # booleans signify whether a neurons was shown a particular image during a particular session
+    all_val_bools = np.full((len(all_validation_ids), np.sum(n_neurons)), False)
 
     all_testing_ids_unique = all_testing_ids
-    all_testing_ids = np.repeat(all_testing_ids,max_repeats) #repeat the ids for the max number of repeats to have space for all the answers
-    all_responses_test = np.zeros((len(all_testing_ids),np.sum(n_neurons))) #shape: (number of testing IDs (with repetitions), number of neurons)
-    all_test_bools = np.full((len(all_testing_ids),np.sum(n_neurons)),False)
+    all_testing_ids = np.repeat(
+        all_testing_ids, max_repeats
+    )  # repeat the ids for the max number of repeats to have space for all the answers
+    all_responses_test = np.zeros(
+        (len(all_testing_ids), np.sum(n_neurons))
+    )  # shape: (number of testing IDs (with repetitions), number of neurons)
+    all_test_bools = np.full((len(all_testing_ids), np.sum(n_neurons)), False)
 
-
-    for i, datapath in tqdm(enumerate(neuronal_data_files),total=len(neuronal_data_files),desc="Files Processing"):
+    for i, datapath in tqdm(
+        enumerate(neuronal_data_files),
+        total=len(neuronal_data_files),
+        desc="Files Processing",
+    ):
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
 
@@ -446,133 +552,146 @@ def monkey_static_loader_combined(dataset,
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
-
         responses_test = responses_test.transpose((2, 0, 1))
         responses_train = responses_train.transpose((2, 0, 1))
 
         if time_bins_sum is not None:  # then average over given time bins
-            responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
-            responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+            responses_train = (np.mean if avg else np.sum)(
+                responses_train[:, :, time_bins_sum], axis=-1
+            )
+            responses_test = (np.mean if avg else np.sum)(
+                responses_test[:, :, time_bins_sum], axis=-1
+            )
 
-        #neuron indices for this session
+        # neuron indices for this session
         n_start = np.sum(n_neurons[0:i])
-        n_end = np.sum(n_neurons[0:i+1])
+        n_end = np.sum(n_neurons[0 : i + 1])
 
-        #go through all train ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
+        # go through all train ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
         for k, train_id in enumerate(all_train_ids):
             if train_id in training_image_ids:
                 j = np.where(train_id == training_image_ids)
                 all_responses_train[k][n_start:n_end] = responses_train[j]
                 all_train_bools[k][n_start:n_end] = True
 
-        #go through all validation ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
+        # go through all validation ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
         for k, val_id in enumerate(all_validation_ids):
             if val_id in training_image_ids:
                 j = np.where(val_id == training_image_ids)
                 all_responses_val[k][n_start:n_end] = responses_train[j]
                 all_val_bools[k][n_start:n_end] = True
 
-        #go through all test ids, add the responses for all repeats in the appropriate space
+        # go through all test ids, add the responses for all repeats in the appropriate space
         for k, test_id in enumerate(all_testing_ids_unique):
             idxs = np.where(test_id == testing_image_ids)[0]
             for j, idx in enumerate(idxs):
-                all_responses_test[k*max_repeats + j][n_start:n_end] = responses_test[idx]
-                all_test_bools[k*max_repeats + j][n_start:n_end] = True
+                all_responses_test[k * max_repeats + j][n_start:n_end] = responses_test[
+                    idx
+                ]
+                all_test_bools[k * max_repeats + j][n_start:n_end] = True
 
-    #delete rows with nothing in them to prevent miscalculation later
+    # delete rows with nothing in them to prevent miscalculation later
     all_responses_train = all_responses_train[~(~all_train_bools).all(axis=1)]
-    all_train_ids= all_train_ids[~(~all_train_bools).all(axis=1)]
+    all_train_ids = all_train_ids[~(~all_train_bools).all(axis=1)]
     all_train_bools = all_train_bools[~(~all_train_bools).all(axis=1)]
 
     all_responses_val = all_responses_val[~(~all_val_bools).all(axis=1)]
-    all_validation_ids= all_validation_ids[~(~all_val_bools).all(axis=1)]
+    all_validation_ids = all_validation_ids[~(~all_val_bools).all(axis=1)]
     all_val_bools = all_val_bools[~(~all_val_bools).all(axis=1)]
 
     all_responses_test = all_responses_test[~(~all_test_bools).all(axis=1)]
-    all_testing_ids= all_testing_ids[~(~all_test_bools).all(axis=1)]
+    all_testing_ids = all_testing_ids[~(~all_test_bools).all(axis=1)]
     all_test_bools = all_test_bools[~(~all_test_bools).all(axis=1)]
 
-    #arguments for dataloader always include image IDs and responses
+    # arguments for dataloader always include image IDs and responses
     args_train = [all_train_ids, all_responses_train]
     args_val = [all_validation_ids, all_responses_val]
     args_test = [all_testing_ids, all_responses_test]
 
-    #include bools and n_neurons to args for dataloaders
+    # include bools and n_neurons to args for dataloaders
     if include_bools:
         args_train.insert(1, all_train_bools)
         args_val.insert(1, all_val_bools)
         args_test.insert(1, all_test_bools)
         if include_n_neurons:
-            n_neurons = np.insert(np.cumsum(n_neurons),0,0).astype(np.int64) #make n_neurons cumulative sum with 0 in front for easier indexing
+            n_neurons = np.insert(np.cumsum(n_neurons), 0, 0).astype(
+                np.int64
+            )  # make n_neurons cumulative sum with 0 in front for easier indexing
             args_train.insert(2, n_neurons)
             args_val.insert(2, n_neurons)
             args_test.insert(2, n_neurons)
     else:
         n_neurons = None
 
-    train_loader = get_cached_loader_extended(*args_train,
-                                     batch_size=batch_size,
-                                     image_cache=cache,
-                                     include_trial_id=include_trial_id,
-                                     include_bools = include_bools,
-                                     include_n_neurons = include_n_neurons,
-                                     include_prev_image=include_prev_image,)
+    train_loader = get_cached_loader_extended(
+        *args_train,
+        batch_size=batch_size,
+        image_cache=cache,
+        include_trial_id=include_trial_id,
+        include_bools=include_bools,
+        include_n_neurons=include_n_neurons,
+        include_prev_image=include_prev_image,
+    )
 
-    val_loader = get_cached_loader_extended(*args_val,
-                                   batch_size=batch_size,
-                                   image_cache=cache,
-                                   include_trial_id=include_trial_id,
-                                   include_bools = include_bools,
-                                   include_n_neurons = include_n_neurons,
-                                   include_prev_image=include_prev_image,)
+    val_loader = get_cached_loader_extended(
+        *args_val,
+        batch_size=batch_size,
+        image_cache=cache,
+        include_trial_id=include_trial_id,
+        include_bools=include_bools,
+        include_n_neurons=include_n_neurons,
+        include_prev_image=include_prev_image,
+    )
 
-    test_loader = get_cached_loader_extended(*args_test,
-                                    batch_size=None,
-                                    shuffle=None,
-                                    image_cache=cache,
-                                    repeat_condition=all_testing_ids,
-                                    include_bools = include_bools,
-                                    include_n_neurons = include_n_neurons,
-                                    include_prev_image=include_prev_image,
-                                    include_trial_id=include_trial_id)
+    test_loader = get_cached_loader_extended(
+        *args_test,
+        batch_size=None,
+        shuffle=None,
+        image_cache=cache,
+        repeat_condition=all_testing_ids,
+        include_bools=include_bools,
+        include_n_neurons=include_n_neurons,
+        include_prev_image=include_prev_image,
+        include_trial_id=include_trial_id,
+    )
 
-    data_key = 'all_sessions'
+    data_key = "all_sessions"
     dataloaders["train"][data_key] = train_loader
     dataloaders["validation"][data_key] = val_loader
     dataloaders["test"][data_key] = test_loader
 
-
     return dataloaders if not return_data_info else data_info
 
 
-def monkey_static_loader_extended(dataset,
-                         neuronal_data_files,
-                         image_cache_path,
-                         batch_size=64,
-                         seed=None,
-                         train_frac=0.8,
-                         subsample=1,
-                         crop=((96, 96), (96, 96)),
-                         scale=1.,
-                         time_bins_sum=tuple(range(12)),
-                         avg=False,
-                         image_file=None,
-                         return_data_info=False,
-                         store_data_info=True,
-                         image_frac=1.,
-                         image_selection_seed=None,
-                         randomize_image_selection=True,
-                         img_mean=None,
-                         img_std=None,
-                         stimulus_location=None,
-                         monitor_scaling_factor=4.57,
-                         include_prev_image=False,
-                         num_prev_images = 0,
-                         include_trial_id=False,
-                         include_prev_responses=False,
-                         include_next_image = False,
-                         include_other_resps = False
-                         ):
+def monkey_static_loader_extended(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    img_mean=None,
+    img_std=None,
+    stimulus_location=None,
+    monitor_scaling_factor=4.57,
+    include_prev_image=False,
+    num_prev_images=0,
+    include_trial_id=False,
+    include_prev_responses=False,
+    include_next_image=False,
+    include_other_resps=False,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments, extended with the number of prev images and the possibility to include the previous responses.
 
@@ -616,7 +735,7 @@ def monkey_static_loader_extended(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+    dataloaders = {"train": {}, "validation": {}, "test": {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -625,17 +744,19 @@ def monkey_static_loader_extended(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     if stimulus_location is not None:
-        crop = get_crop_from_stimulus_location(stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor)
+        crop = get_crop_from_stimulus_location(
+            stimulus_location, crop, monitor_scaling_factor=monitor_scaling_factor
+        )
 
     if not isinstance(image_frac, Iterable):
         image_frac = [image_frac for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -647,17 +768,39 @@ def monkey_static_loader_extended(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
 
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=True,
+            )
         else:
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                               normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
 
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
             cache.zscore_images(update_stats=True)
@@ -668,7 +811,7 @@ def monkey_static_loader_extended(dataset,
     data_info = {}
 
     # set up parameters for the different dataset types
-    if dataset == 'PlosCB19_V1':
+    if dataset == "PlosCB19_V1":
         # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
         # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
         # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
@@ -678,9 +821,9 @@ def monkey_static_loader_extended(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
-                                                             train_frac=train_frac,
-                                                             seed=seed)
+    all_train_ids, all_validation_ids = get_validation_split(
+        n_images=n_images * train_test_split, train_frac=train_frac, seed=seed
+    )
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
@@ -696,68 +839,83 @@ def monkey_static_loader_extended(dataset,
 
         if include_prev_image and not "training_prior_image_ids" in raw_data:
             raise ValueError(
-                "No previous image IDs present in the provided data files. Set 'include_prev_image' to False")
+                "No previous image IDs present in the provided data files. Set 'include_prev_image' to False"
+            )
 
         if include_prev_image or include_prev_responses:
-            prior_training_image_ids = raw_data["training_prior_image_ids"] - image_id_offset
-            prior_testing_image_ids = raw_data["testing_prior_image_ids"] - image_id_offset
+            prior_training_image_ids = (
+                raw_data["training_prior_image_ids"] - image_id_offset
+            )
+            prior_testing_image_ids = (
+                raw_data["testing_prior_image_ids"] - image_id_offset
+            )
 
         if include_prev_image and (num_prev_images == 0):
             raise ValueError(
-                "Include_prev_images True, but num_prev_images is zero. Set 'num_prev_images' to a positive number")
+                "Include_prev_images True, but num_prev_images is zero. Set 'num_prev_images' to a positive number"
+            )
 
         if not include_prev_image and (num_prev_images != 0):
             raise ValueError(
-                "Include_prev_images False, but num_prev_images is zero. Set 'include_prev_images' to True")
+                "Include_prev_images False, but num_prev_images is zero. Set 'include_prev_images' to True"
+            )
 
         if include_prev_image:
-            prev_training_image_ids = np.zeros((num_prev_images, len(training_image_ids)))
+            prev_training_image_ids = np.zeros(
+                (num_prev_images, len(training_image_ids))
+            )
             prev_testing_image_ids = np.zeros((num_prev_images, len(testing_image_ids)))
-            temp_prev_training =  prior_training_image_ids
+            temp_prev_training = prior_training_image_ids
             temp_prev_testing = prior_testing_image_ids
             prev_training_image_ids[0] = prior_training_image_ids
             prev_testing_image_ids[0] = prior_testing_image_ids
-            for j in range(num_prev_images-1):
+            for j in range(num_prev_images - 1):
                 temp_prev_training = np.insert(temp_prev_training.copy(), 0, 0)[:-1]
                 temp_prev_testing = np.insert(temp_prev_testing.copy(), 0, 0)[:-1]
-                prev_training_image_ids[j+1] = temp_prev_training
-                prev_testing_image_ids[j+1] = temp_prev_testing
+                prev_training_image_ids[j + 1] = temp_prev_training
+                prev_testing_image_ids[j + 1] = temp_prev_testing
 
         if include_next_image:
             next_training_image_ids = np.append(training_image_ids.copy(), 0)[1:]
             next_testing_image_ids = np.append(testing_image_ids.copy(), 0)[1:]
 
-
-        if dataset != 'PlosCB19_V1':
+        if dataset != "PlosCB19_V1":
             if len(responses_test.shape) != 3:
                 responses_test = responses_test[None, ...]
                 responses_train = responses_train[None, ...]
                 # correct the shape of the responses for a session that was exported incorrectly
-                if data_key != '3653663964522':
+                if data_key != "3653663964522":
                     warnings.warn("Pickle file with invalid response shape detected")
 
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
             if time_bins_sum is not None:  # then average over given time bins
-                responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
-                responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+                responses_train = (np.mean if avg else np.sum)(
+                    responses_train[:, :, time_bins_sum], axis=-1
+                )
+                responses_test = (np.mean if avg else np.sum)(
+                    responses_test[:, :, time_bins_sum], axis=-1
+                )
 
         if image_frac[i] < 1:
             if randomize_image_selection:
                 image_selection_seed = int(image_selection_seed * image_frac[i])
-            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac[i],
-                                                      seed=image_selection_seed)
+            idx_out = get_fraction_of_training_images(
+                image_ids=training_image_ids,
+                fraction=image_frac[i],
+                seed=image_selection_seed,
+            )
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
         if include_other_resps:
             other_resps_train = responses_train
             other_resps_test = np.zeros(responses_test.shape)
-            _, first_ids = np.unique(testing_image_ids,return_index=True)
+            _, first_ids = np.unique(testing_image_ids, return_index=True)
             for first_id in first_ids:
-                idx = np.where(testing_image_ids ==testing_image_ids[first_id])
-                idx2 = np.roll(idx,1)
+                idx = np.where(testing_image_ids == testing_image_ids[first_id])
+                idx2 = np.roll(idx, 1)
                 other_resps_test[idx] = responses_test[idx2]
 
         train_idx = np.isin(training_image_ids, all_train_ids)
@@ -771,15 +929,21 @@ def monkey_static_loader_extended(dataset,
 
         if include_prev_image:
             all_prev_training_image_ids = prev_training_image_ids
-            prev_validation_image_ids = np.zeros((num_prev_images, np.count_nonzero(val_idx)))
-            prev_training_image_ids = np.zeros((num_prev_images, np.count_nonzero(train_idx)))
+            prev_validation_image_ids = np.zeros(
+                (num_prev_images, np.count_nonzero(val_idx))
+            )
+            prev_training_image_ids = np.zeros(
+                (num_prev_images, np.count_nonzero(train_idx))
+            )
             for i in range(num_prev_images):
                 prev_validation_image_ids[i] = all_prev_training_image_ids[i][val_idx]
                 prev_training_image_ids[i] = all_prev_training_image_ids[i][train_idx]
 
         if include_trial_id:
             test_trial_ids = scipy.stats.zscore(range(len(testing_image_ids)))
-            all_train_trial_ids = scipy.stats.zscore(range(len(training_image_ids) + len(validation_image_ids)))
+            all_train_trial_ids = scipy.stats.zscore(
+                range(len(training_image_ids) + len(validation_image_ids))
+            )
             train_trial_ids = all_train_trial_ids[train_idx]
             val_trial_ids = all_train_trial_ids[val_idx]
 
@@ -810,51 +974,93 @@ def monkey_static_loader_extended(dataset,
             args_test.insert(1 + include_prev_image, prior_testing_image_ids)
 
         if include_trial_id:
-            args_train.insert(1 + include_prev_image + include_prev_responses, train_trial_ids)
-            args_val.insert(1 + include_prev_image + include_prev_responses, val_trial_ids)
-            args_test.insert(1 + include_prev_image + include_prev_responses, test_trial_ids)
+            args_train.insert(
+                1 + include_prev_image + include_prev_responses, train_trial_ids
+            )
+            args_val.insert(
+                1 + include_prev_image + include_prev_responses, val_trial_ids
+            )
+            args_test.insert(
+                1 + include_prev_image + include_prev_responses, test_trial_ids
+            )
 
         if include_next_image:
-            args_train.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_training_image_ids)
-            args_val.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_validation_image_ids)
-            args_test.insert(1 + include_prev_image + include_trial_id + include_prev_responses, next_testing_image_ids)
+            args_train.insert(
+                1 + include_prev_image + include_trial_id + include_prev_responses,
+                next_training_image_ids,
+            )
+            args_val.insert(
+                1 + include_prev_image + include_trial_id + include_prev_responses,
+                next_validation_image_ids,
+            )
+            args_test.insert(
+                1 + include_prev_image + include_trial_id + include_prev_responses,
+                next_testing_image_ids,
+            )
 
         if include_other_resps:
-            args_train.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_train)
-            args_val.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_validation)
-            args_test.insert(1 + include_prev_image + include_prev_responses + include_trial_id + include_next_image, other_resps_test)
+            args_train.insert(
+                1
+                + include_prev_image
+                + include_prev_responses
+                + include_trial_id
+                + include_next_image,
+                other_resps_train,
+            )
+            args_val.insert(
+                1
+                + include_prev_image
+                + include_prev_responses
+                + include_trial_id
+                + include_next_image,
+                other_resps_validation,
+            )
+            args_test.insert(
+                1
+                + include_prev_image
+                + include_prev_responses
+                + include_trial_id
+                + include_next_image,
+                other_resps_test,
+            )
 
-        train_loader = get_cached_loader_extended(*args_train,
-                                         batch_size=batch_size,
-                                         image_cache=cache,
-                                         include_trial_id=include_trial_id,
-                                         include_prev_image=include_prev_image,
-                                         num_prev_images=num_prev_images,
-                                         include_prev_responses=include_prev_responses,
-                                         include_next_image=include_next_image,
-                                         include_other_resps = include_other_resps)
+        train_loader = get_cached_loader_extended(
+            *args_train,
+            batch_size=batch_size,
+            image_cache=cache,
+            include_trial_id=include_trial_id,
+            include_prev_image=include_prev_image,
+            num_prev_images=num_prev_images,
+            include_prev_responses=include_prev_responses,
+            include_next_image=include_next_image,
+            include_other_resps=include_other_resps,
+        )
 
-        val_loader = get_cached_loader_extended(*args_val,
-                                       batch_size=batch_size,
-                                       image_cache=cache,
-                                       include_trial_id=include_trial_id,
-                                       include_prev_image=include_prev_image,
-                                       num_prev_images=num_prev_images,
-                                       include_prev_responses=include_prev_responses,
-                                       include_next_image=include_next_image,
-                                       include_other_resps = include_other_resps)
+        val_loader = get_cached_loader_extended(
+            *args_val,
+            batch_size=batch_size,
+            image_cache=cache,
+            include_trial_id=include_trial_id,
+            include_prev_image=include_prev_image,
+            num_prev_images=num_prev_images,
+            include_prev_responses=include_prev_responses,
+            include_next_image=include_next_image,
+            include_other_resps=include_other_resps,
+        )
 
-        test_loader = get_cached_loader_extended(*args_test,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=cache,
-                                        repeat_condition=testing_image_ids,
-                                        include_prev_image=include_prev_image,
-                                        include_trial_id=include_trial_id,
-                                        num_prev_images=num_prev_images,
-                                        include_prev_responses=include_prev_responses,
-                                        include_next_image=include_next_image,
-                                        include_other_resps = include_other_resps)
+        test_loader = get_cached_loader_extended(
+            *args_test,
+            batch_size=None,
+            shuffle=None,
+            image_cache=cache,
+            repeat_condition=testing_image_ids,
+            include_prev_image=include_prev_image,
+            include_trial_id=include_trial_id,
+            num_prev_images=num_prev_images,
+            include_prev_responses=include_prev_responses,
+            include_next_image=include_next_image,
+            include_other_resps=include_other_resps,
+        )
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
@@ -862,11 +1068,15 @@ def monkey_static_loader_extended(dataset,
 
     if store_data_info and not os.path.exists(stats_path):
 
-        #in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
-        try: #if the prev_resps are added as a separate input, this will cause an error
-            in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        # in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields
+        try:  # if the prev_resps are added as a separate input, this will cause an error
+            in_name, out_name = next(
+                iter(list(dataloaders["train"].values())[0])
+            )._fields
         except:
-            in_name, out_name,prev_resps = next(iter(list(dataloaders["train"].values())[0]))._fields
+            in_name, out_name, prev_resps = next(
+                iter(list(dataloaders["train"].values())[0])
+            )._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -874,11 +1084,13 @@ def monkey_static_loader_extended(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
         stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
@@ -889,23 +1101,25 @@ def monkey_static_loader_extended(dataset,
     return dataloaders if not return_data_info else data_info
 
 
-def monkey_mua_sua_loader(dataset,
-                         neuronal_data_files,
-                         mua_data_files,
-                         image_cache_path,
-                         batch_size=64,
-                         seed=None,
-                         train_frac=0.8,
-                         subsample=1,
-                         crop=((96, 96), (96, 96)),
-                         scale=1.,
-                         time_bins_sum=tuple(range(12)),
-                         avg=False,
-                         image_file=None,
-                         return_data_info=False,
-                         store_data_info=True,
-                         mua_selector=None,
-                         add_eye_movement=None):
+def monkey_mua_sua_loader(
+    dataset,
+    neuronal_data_files,
+    mua_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    mua_selector=None,
+    add_eye_movement=None,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -949,7 +1163,7 @@ def monkey_mua_sua_loader(dataset,
     dataset_config = locals()
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {}, 'validation': {}, 'test': {}}
+    dataloaders = {"train": {}, "validation": {}, "test": {}}
 
     if not isinstance(time_bins_sum, Iterable):
         time_bins_sum = tuple(range(time_bins_sum))
@@ -958,11 +1172,11 @@ def monkey_mua_sua_loader(dataset,
         crop = [(crop, crop), (crop, crop)]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
 
@@ -975,12 +1189,26 @@ def monkey_mua_sua_loader(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
         # Initialize cache with no normalization
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                           normalize=False)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            transform=True,
+            normalize=False,
+        )
 
         # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
         cache.zscore_images(update_stats=True)
@@ -991,7 +1219,7 @@ def monkey_mua_sua_loader(dataset,
     data_info = {}
 
     # set up parameters for the different dataset types
-    if dataset == 'PlosCB19_V1':
+    if dataset == "PlosCB19_V1":
         # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
         # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
         # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
@@ -1001,9 +1229,9 @@ def monkey_mua_sua_loader(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
-                                                             train_frac=train_frac,
-                                                             seed=seed)
+    all_train_ids, all_validation_ids = get_validation_split(
+        n_images=n_images * train_test_split, train_frac=train_frac, seed=seed
+    )
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
@@ -1020,18 +1248,28 @@ def monkey_mua_sua_loader(dataset,
 
         if add_eye_movement:
             if "avg_horizontal_eye_position_training_images" in raw_data:
-                eye_pos_h_train = raw_data["avg_horizontal_eye_position_training_images"].astype(np.float32)
-                eye_pos_v_train = raw_data["avg_vertical_eye_position_training_images"].astype(np.float32)
-                eye_pos_h_test = raw_data["avg_horizontal_eye_position_testing_images"].astype(np.float32)
-                eye_pos_v_test = raw_data["avg_vertical_eye_position_testing_images"].astype(np.float32)
+                eye_pos_h_train = raw_data[
+                    "avg_horizontal_eye_position_training_images"
+                ].astype(np.float32)
+                eye_pos_v_train = raw_data[
+                    "avg_vertical_eye_position_training_images"
+                ].astype(np.float32)
+                eye_pos_h_test = raw_data[
+                    "avg_horizontal_eye_position_testing_images"
+                ].astype(np.float32)
+                eye_pos_v_test = raw_data[
+                    "avg_vertical_eye_position_testing_images"
+                ].astype(np.float32)
 
                 eye_pos_train = np.vstack([eye_pos_h_train, eye_pos_v_train]).T
                 eye_pos_train = scipy.stats.zscore(eye_pos_train)
                 eye_pos_test = np.vstack([eye_pos_h_test, eye_pos_v_test]).T
                 eye_pos_test = scipy.stats.zscore(eye_pos_test)
             else:
-                raise(FileNotFoundError, "Eye movement data is not found in the pickle file.")
-
+                raise (
+                    FileNotFoundError,
+                    "Eye movement data is not found in the pickle file.",
+                )
 
         for mua_data_path in mua_data_files:
             with open(mua_data_path, "rb") as mua_pkl:
@@ -1042,9 +1280,15 @@ def monkey_mua_sua_loader(dataset,
                     selected_mua = mua_selector[data_key]
                 else:
                     selected_mua = np.ones(len(mua_data["unit_ids"])).astype(bool)
-                mua_responses_train = mua_data["training_responses"].astype(np.float32)[selected_mua]
-                mua_responses_test = mua_data["testing_responses"].astype(np.float32)[selected_mua]
-                mua_training_image_ids = mua_data["training_image_ids"] - image_id_offset
+                mua_responses_train = mua_data["training_responses"].astype(np.float32)[
+                    selected_mua
+                ]
+                mua_responses_test = mua_data["testing_responses"].astype(np.float32)[
+                    selected_mua
+                ]
+                mua_training_image_ids = (
+                    mua_data["training_image_ids"] - image_id_offset
+                )
                 mua_testing_image_ids = mua_data["testing_image_ids"] - image_id_offset
                 break
 
@@ -1052,24 +1296,35 @@ def monkey_mua_sua_loader(dataset,
             print("session {} does not exist in MUA. Skipping MUA".format(data_key))
         else:
             if not np.array_equal(training_image_ids, mua_training_image_ids):
-                raise ValueError("Training image IDs do not match between the spike sorted data and mua data")
+                raise ValueError(
+                    "Training image IDs do not match between the spike sorted data and mua data"
+                )
             if not np.array_equal(testing_image_ids, mua_testing_image_ids):
-                raise ValueError("Testing image IDs do not match between the spike sorted data and mua data")
+                raise ValueError(
+                    "Testing image IDs do not match between the spike sorted data and mua data"
+                )
 
             if len(responses_train.shape) < 3:
                 responses_train = responses_train[None, ...]
                 responses_test = responses_test[None, ...]
-            responses_train = np.concatenate([responses_train, mua_responses_train], axis=0)
-            responses_test = np.concatenate([responses_test, mua_responses_test], axis=0)
+            responses_train = np.concatenate(
+                [responses_train, mua_responses_train], axis=0
+            )
+            responses_test = np.concatenate(
+                [responses_test, mua_responses_test], axis=0
+            )
 
-
-        if dataset != 'PlosCB19_V1':
+        if dataset != "PlosCB19_V1":
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
             if time_bins_sum is not None:  # then average over given time bins
-                responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
-                responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
+                responses_train = (np.mean if avg else np.sum)(
+                    responses_train[:, :, time_bins_sum], axis=-1
+                )
+                responses_test = (np.mean if avg else np.sum)(
+                    responses_test[:, :, time_bins_sum], axis=-1
+                )
 
         train_idx = np.isin(training_image_ids, all_train_ids)
         val_idx = np.isin(training_image_ids, all_validation_ids)
@@ -1084,26 +1339,50 @@ def monkey_mua_sua_loader(dataset,
         training_image_ids = training_image_ids[train_idx]
 
         if add_eye_movement:
-            train_loader = get_cached_loader(training_image_ids, responses_train, eye_pos_train, batch_size=batch_size,
-                                             image_cache=cache)
-            val_loader = get_cached_loader(validation_image_ids, responses_val, eye_pos_val, batch_size=batch_size,
-                                           image_cache=cache)
-            test_loader = get_cached_loader(testing_image_ids,
-                                            responses_test,
-                                            eye_pos_test,
-                                            batch_size=None,
-                                            shuffle=None,
-                                            image_cache=cache,
-                                            repeat_condition=testing_image_ids)
+            train_loader = get_cached_loader(
+                training_image_ids,
+                responses_train,
+                eye_pos_train,
+                batch_size=batch_size,
+                image_cache=cache,
+            )
+            val_loader = get_cached_loader(
+                validation_image_ids,
+                responses_val,
+                eye_pos_val,
+                batch_size=batch_size,
+                image_cache=cache,
+            )
+            test_loader = get_cached_loader(
+                testing_image_ids,
+                responses_test,
+                eye_pos_test,
+                batch_size=None,
+                shuffle=None,
+                image_cache=cache,
+                repeat_condition=testing_image_ids,
+            )
         else:
-            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
-            val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-            test_loader = get_cached_loader(testing_image_ids,
-                                            responses_test,
-                                            batch_size=None,
-                                            shuffle=None,
-                                            image_cache=cache,
-                                            repeat_condition=testing_image_ids)
+            train_loader = get_cached_loader(
+                training_image_ids,
+                responses_train,
+                batch_size=batch_size,
+                image_cache=cache,
+            )
+            val_loader = get_cached_loader(
+                validation_image_ids,
+                responses_val,
+                batch_size=batch_size,
+                image_cache=cache,
+            )
+            test_loader = get_cached_loader(
+                testing_image_ids,
+                responses_test,
+                batch_size=None,
+                shuffle=None,
+                image_cache=cache,
+                repeat_condition=testing_image_ids,
+            )
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
@@ -1111,7 +1390,9 @@ def monkey_mua_sua_loader(dataset,
 
     if store_data_info and not os.path.exists(stats_path):
 
-        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields[:2]
+        in_name, out_name = next(iter(list(dataloaders["train"].values())[0]))._fields[
+            :2
+        ]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders["train"])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -1119,11 +1400,13 @@ def monkey_mua_sua_loader(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
         stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
@@ -1134,28 +1417,30 @@ def monkey_mua_sua_loader(dataset,
     return dataloaders if not return_data_info else data_info
 
 
-def monkey_static_loader_closed_loop(dataset,
-                         neuronal_data_files,
-                         image_cache_path,
-                         batch_size=64,
-                         seed=None,
-                         train_frac=0.8,
-                         subsample=1,
-                         crop=((96, 96), (96, 96)),
-                         scale=1.,
-                         time_bins_sum=tuple(range(12)),
-                         avg=False,
-                         image_file=None,
-                         return_data_info=False,
-                         store_data_info=True,
-                         image_frac=1.,
-                         image_selection_seed=None,
-                         randomize_image_selection=True,
-                         stimulus_location=None,
-                         img_mean=None,
-                         img_std=None,
-                         include_mei_training=False,
-                         include_control_training=False):
+def monkey_static_loader_closed_loop(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    stimulus_location=None,
+    img_mean=None,
+    img_std=None,
+    include_mei_training=False,
+    include_control_training=False,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -1199,17 +1484,21 @@ def monkey_static_loader_closed_loop(dataset,
     dataset_config = locals()
 
     if include_mei_training and include_control_training:
-        raise ValueError("the entire test can not be included into the training set. Set either 'include_mei_training' "
-                         "or 'include_control_training' to False.")
+        raise ValueError(
+            "the entire test can not be included into the training set. Set either 'include_mei_training' "
+            "or 'include_control_training' to False."
+        )
 
     # initialize dataloaders as empty dict
-    dataloaders = {'train': {},
-                   'validation': {},
-                   'test': {},
-                   'test_mei_uncropped': {},
-                   'test_control_uncropped': {},
-                   'test_mei_cropped': {},
-                   'test_control_cropped': {}}
+    dataloaders = {
+        "train": {},
+        "validation": {},
+        "test": {},
+        "test_mei_uncropped": {},
+        "test_control_uncropped": {},
+        "test_mei_cropped": {},
+        "test_control_cropped": {},
+    }
 
     if include_mei_training or include_control_training:
         dataloaders["validation_extended"] = {}
@@ -1227,12 +1516,12 @@ def monkey_static_loader_closed_loop(dataset,
         stimulus_location = [stimulus_location for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
 
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -1244,17 +1533,39 @@ def monkey_static_loader_closed_loop(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=True,
+            )
         else:
 
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                               normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
 
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
             cache.zscore_images(update_stats=True)
@@ -1268,7 +1579,7 @@ def monkey_static_loader_closed_loop(dataset,
         TestImageCaches = {}
 
     # set up parameters for the different dataset types
-    if dataset == 'PlosCB19_V1':
+    if dataset == "PlosCB19_V1":
         # for the "Amadeus V1" Dataset, recorded by Santiago Cadena, there was no specified test set.
         # instead, the last 20% of the dataset were classified as test set. To make sure that the test set
         # of this dataset will always stay identical, the `train_test_split` value is hardcoded here.
@@ -1278,9 +1589,9 @@ def monkey_static_loader_closed_loop(dataset,
         train_test_split = 1
         image_id_offset = 0
 
-    all_train_ids, all_validation_ids = get_validation_split(n_images=n_images * train_test_split,
-                                                             train_frac=train_frac,
-                                                             seed=seed)
+    all_train_ids, all_validation_ids = get_validation_split(
+        n_images=n_images * train_test_split, train_frac=train_frac, seed=seed
+    )
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
@@ -1294,9 +1605,13 @@ def monkey_static_loader_closed_loop(dataset,
         responses_test = raw_data["testing_responses"].astype(np.float32)
 
         mei_uncropped_responses = raw_data["mei_uncropped_responses"].astype(np.float32)
-        control_uncropped_responses = raw_data["control_uncropped_responses"].astype(np.float32)
+        control_uncropped_responses = raw_data["control_uncropped_responses"].astype(
+            np.float32
+        )
         mei_cropped_responses = raw_data["mei_cropped_responses"].astype(np.float32)
-        control_cropped_responses = raw_data["control_cropped_responses"].astype(np.float32)
+        control_cropped_responses = raw_data["control_cropped_responses"].astype(
+            np.float32
+        )
 
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
@@ -1306,29 +1621,45 @@ def monkey_static_loader_closed_loop(dataset,
         control_uncropped_ids = raw_data["control_uncropped_ids"]
         control_cropped_ids = raw_data["control_cropped_ids"]
 
-
-        if dataset != 'PlosCB19_V1':
+        if dataset != "PlosCB19_V1":
             responses_test = responses_test.transpose((2, 0, 1))
             responses_train = responses_train.transpose((2, 0, 1))
 
             mei_uncropped_responses = mei_uncropped_responses.transpose((2, 0, 1))
-            control_uncropped_responses = control_uncropped_responses.transpose((2, 0, 1))
+            control_uncropped_responses = control_uncropped_responses.transpose(
+                (2, 0, 1)
+            )
             mei_cropped_responses = mei_cropped_responses.transpose((2, 0, 1))
             control_cropped_responses = control_cropped_responses.transpose((2, 0, 1))
 
             if time_bins_sum is not None:  # then average over given time bins
-                responses_train = (np.mean if avg else np.sum)(responses_train[:, :, time_bins_sum], axis=-1)
-                responses_test = (np.mean if avg else np.sum)(responses_test[:, :, time_bins_sum], axis=-1)
-                mei_uncropped_responses = (np.mean if avg else np.sum)(mei_uncropped_responses[:, :, time_bins_sum], axis=-1)
-                control_uncropped_responses = (np.mean if avg else np.sum)(control_uncropped_responses[:, :, time_bins_sum], axis=-1)
-                mei_cropped_responses = (np.mean if avg else np.sum)(mei_cropped_responses[:, :, time_bins_sum], axis=-1)
-                control_cropped_responses = (np.mean if avg else np.sum)(control_cropped_responses[:, :, time_bins_sum], axis=-1)
+                responses_train = (np.mean if avg else np.sum)(
+                    responses_train[:, :, time_bins_sum], axis=-1
+                )
+                responses_test = (np.mean if avg else np.sum)(
+                    responses_test[:, :, time_bins_sum], axis=-1
+                )
+                mei_uncropped_responses = (np.mean if avg else np.sum)(
+                    mei_uncropped_responses[:, :, time_bins_sum], axis=-1
+                )
+                control_uncropped_responses = (np.mean if avg else np.sum)(
+                    control_uncropped_responses[:, :, time_bins_sum], axis=-1
+                )
+                mei_cropped_responses = (np.mean if avg else np.sum)(
+                    mei_cropped_responses[:, :, time_bins_sum], axis=-1
+                )
+                control_cropped_responses = (np.mean if avg else np.sum)(
+                    control_cropped_responses[:, :, time_bins_sum], axis=-1
+                )
 
         if image_frac[i] < 1:
             if randomize_image_selection:
                 image_selection_seed = int(image_selection_seed * image_frac)
-            idx_out = get_fraction_of_training_images(image_ids=training_image_ids, fraction=image_frac,
-                                                      seed=image_selection_seed)
+            idx_out = get_fraction_of_training_images(
+                image_ids=training_image_ids,
+                fraction=image_frac,
+                seed=image_selection_seed,
+            )
             training_image_ids = training_image_ids[idx_out]
             responses_train = responses_train[idx_out]
 
@@ -1368,81 +1699,145 @@ def monkey_static_loader_closed_loop(dataset,
             training_image_ids_original = training_image_ids_original[train_idx]
 
         if stimulus_location is not None:
-            training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
+            training_crop = get_crop_from_stimulus_location(
+                stimulus_location[i], crop, monitor_scaling_factor=4.57
+            )
             test_crop = crop - np.clip(training_crop, -999, 0)
 
             if img_mean is not None:
-                TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale,
-                                   img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+                TrainImageCaches[data_key] = ImageCache(
+                    path=image_cache_path,
+                    subsample=subsample,
+                    crop=training_crop,
+                    scale=scale,
+                    img_mean=img_mean,
+                    img_std=img_std,
+                    transform=True,
+                    normalize=True,
+                )
 
-                TestImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=test_crop, scale=scale,
-                                   img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
+                TestImageCaches[data_key] = ImageCache(
+                    path=image_cache_path,
+                    subsample=subsample,
+                    crop=test_crop,
+                    scale=scale,
+                    img_mean=img_mean,
+                    img_std=img_std,
+                    transform=True,
+                    normalize=True,
+                )
 
             else:
-                TrainImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=training_crop, scale=scale, transform=True,
-                                   normalize=False)
+                TrainImageCaches[data_key] = ImageCache(
+                    path=image_cache_path,
+                    subsample=subsample,
+                    crop=training_crop,
+                    scale=scale,
+                    transform=True,
+                    normalize=False,
+                )
                 TrainImageCaches[data_key].zscore_images(update_stats=True)
 
-
-
-            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size,
-                                             image_cache=TrainImageCaches[data_key])
+            train_loader = get_cached_loader(
+                training_image_ids,
+                responses_train,
+                batch_size=batch_size,
+                image_cache=TrainImageCaches[data_key],
+            )
             if include_mei_training or include_control_training:
-                val_loader = get_cached_loader(validation_image_ids_original, responses_val_original, batch_size=batch_size,
-                                               image_cache=TrainImageCaches[data_key])
-                val_loader_extended = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
-                                               image_cache=TrainImageCaches[data_key])
+                val_loader = get_cached_loader(
+                    validation_image_ids_original,
+                    responses_val_original,
+                    batch_size=batch_size,
+                    image_cache=TrainImageCaches[data_key],
+                )
+                val_loader_extended = get_cached_loader(
+                    validation_image_ids,
+                    responses_val,
+                    batch_size=batch_size,
+                    image_cache=TrainImageCaches[data_key],
+                )
             else:
-                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
-                                               image_cache=TrainImageCaches[data_key])
+                val_loader = get_cached_loader(
+                    validation_image_ids,
+                    responses_val,
+                    batch_size=batch_size,
+                    image_cache=TrainImageCaches[data_key],
+                )
         else:
-            train_loader = get_cached_loader(training_image_ids, responses_train, batch_size=batch_size, image_cache=cache)
+            train_loader = get_cached_loader(
+                training_image_ids,
+                responses_train,
+                batch_size=batch_size,
+                image_cache=cache,
+            )
             if include_mei_training or include_control_training:
-                val_loader_extended = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size, image_cache=cache)
-                val_loader = get_cached_loader(validation_image_ids_original,
-                                                responses_val_original,
-                                                batch_size=batch_size,
-                                                image_cache=cache)
+                val_loader_extended = get_cached_loader(
+                    validation_image_ids,
+                    responses_val,
+                    batch_size=batch_size,
+                    image_cache=cache,
+                )
+                val_loader = get_cached_loader(
+                    validation_image_ids_original,
+                    responses_val_original,
+                    batch_size=batch_size,
+                    image_cache=cache,
+                )
             else:
-                val_loader = get_cached_loader(validation_image_ids, responses_val, batch_size=batch_size,
-                                               image_cache=cache)
+                val_loader = get_cached_loader(
+                    validation_image_ids,
+                    responses_val,
+                    batch_size=batch_size,
+                    image_cache=cache,
+                )
 
             TestImageCaches[data_key] = cache
 
-        test_loader = get_cached_loader(testing_image_ids,
-                                        responses_test,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=TestImageCaches[data_key],
-                                        repeat_condition=testing_image_ids)
+        test_loader = get_cached_loader(
+            testing_image_ids,
+            responses_test,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=testing_image_ids,
+        )
 
-        mei_uncropped_loader = get_cached_loader(mei_uncropped_ids,
-                                        mei_uncropped_responses,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=TestImageCaches[data_key],
-                                        repeat_condition=mei_uncropped_ids)
+        mei_uncropped_loader = get_cached_loader(
+            mei_uncropped_ids,
+            mei_uncropped_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=mei_uncropped_ids,
+        )
 
-        control_uncropped_loader = get_cached_loader(control_uncropped_ids,
-                                        control_uncropped_responses,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=TestImageCaches[data_key],
-                                        repeat_condition=control_uncropped_ids)
+        control_uncropped_loader = get_cached_loader(
+            control_uncropped_ids,
+            control_uncropped_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=control_uncropped_ids,
+        )
 
-        mei_cropped_loader = get_cached_loader(mei_cropped_ids,
-                                       mei_cropped_responses,
-                                       batch_size=None,
-                                       shuffle=None,
-                                       image_cache=TestImageCaches[data_key],
-                                       repeat_condition=mei_cropped_ids)
+        mei_cropped_loader = get_cached_loader(
+            mei_cropped_ids,
+            mei_cropped_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=mei_cropped_ids,
+        )
 
-        control_cropped_loader = get_cached_loader(control_cropped_ids,
-                                           control_cropped_responses,
-                                           batch_size=None,
-                                           shuffle=None,
-                                           image_cache=TestImageCaches[data_key],
-                                           repeat_condition=control_cropped_ids)
+        control_cropped_loader = get_cached_loader(
+            control_cropped_ids,
+            control_cropped_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=control_cropped_ids,
+        )
 
         dataloaders["train"][data_key] = train_loader
         dataloaders["validation"][data_key] = val_loader
@@ -1466,11 +1861,13 @@ def monkey_static_loader_closed_loop(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
         stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
@@ -1481,27 +1878,29 @@ def monkey_static_loader_closed_loop(dataset,
     return dataloaders if not return_data_info else data_info
 
 
-def monkey_static_loader_mua_cl(dataset,
-                                     neuronal_data_files,
-                                     image_cache_path,
-                                     batch_size=64,
-                                     seed=None,
-                                     train_frac=0.8,
-                                     subsample=1,
-                                     crop=((96, 96), (96, 96)),
-                                     scale=1.,
-                                     time_bins_sum=tuple(range(12)),
-                                     avg=False,
-                                     image_file=None,
-                                     return_data_info=False,
-                                     store_data_info=True,
-                                     image_frac=1.,
-                                     image_selection_seed=None,
-                                     randomize_image_selection=True,
-                                     stimulus_location=None,
-                                     img_mean=None,
-                                     img_std=None,
-                                     dataloader_keys=None):
+def monkey_static_loader_mua_cl(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    stimulus_location=None,
+    img_mean=None,
+    img_std=None,
+    dataloader_keys=None,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -1561,12 +1960,12 @@ def monkey_static_loader_mua_cl(dataset,
         stimulus_location = [stimulus_location for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
 
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -1578,17 +1977,39 @@ def monkey_static_loader_mua_cl(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=True)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=True,
+        )
     else:
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=True)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=True,
+            )
         else:
 
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                               normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
 
             # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
             cache.zscore_images(update_stats=True)
@@ -1601,13 +2022,14 @@ def monkey_static_loader_mua_cl(dataset,
         TestImageCaches = {}
 
     # initialize dataloaders as empty dict
-    dataloaders = {'test': {},
-                   'natural_imgs': {},
-                   'noise_mei_resnet': {},
-                   'noise_mei_cnn': {},
-                   'natural_mei_resnet': {},
-                   'natural_mei_cnn': {},}
-
+    dataloaders = {
+        "test": {},
+        "natural_imgs": {},
+        "noise_mei_resnet": {},
+        "noise_mei_cnn": {},
+        "natural_mei_resnet": {},
+        "natural_mei_cnn": {},
+    }
 
     # cycling through all datafiles to fill the dataloaders with an entry per session
     for i, datapath in enumerate(neuronal_data_files):
@@ -1620,10 +2042,16 @@ def monkey_static_loader_mua_cl(dataset,
 
         test_image_responses = raw_data["test_image_responses"].astype(np.float32)
         natural_image_responses = raw_data["natural_image_responses"].astype(np.float32)
-        noise_mei_resnet_responses = raw_data["noise_mei_resnet_responses"].astype(np.float32)
+        noise_mei_resnet_responses = raw_data["noise_mei_resnet_responses"].astype(
+            np.float32
+        )
         noise_mei_cnn_responses = raw_data["noise_mei_cnn_responses"].astype(np.float32)
-        natural_mei_resnet_responses = raw_data["natural_mei_resnet_responses"].astype(np.float32)
-        natural_mei_cnn_responses = raw_data["natural_mei_cnn_responses"].astype(np.float32)
+        natural_mei_resnet_responses = raw_data["natural_mei_resnet_responses"].astype(
+            np.float32
+        )
+        natural_mei_cnn_responses = raw_data["natural_mei_cnn_responses"].astype(
+            np.float32
+        )
 
         test_image_ids = raw_data["test_image_ids"].astype(np.int64)
 
@@ -1641,63 +2069,86 @@ def monkey_static_loader_mua_cl(dataset,
         natural_mei_cnn_responses = natural_mei_cnn_responses.transpose((2, 0, 1))
 
         if time_bins_sum is not None:  # then average over given time bins
-            test_image_responses = (np.mean if avg else np.sum)(test_image_responses[:, :, time_bins_sum], axis=-1)
-            natural_image_responses = (np.mean if avg else np.sum)(natural_image_responses[:, :, time_bins_sum], axis=-1)
-            noise_mei_resnet_responses = (np.mean if avg else np.sum)(noise_mei_resnet_responses[:, :, time_bins_sum], axis=-1)
-            noise_mei_cnn_responses = (np.mean if avg else np.sum)(noise_mei_cnn_responses[:, :, time_bins_sum], axis=-1)
-            natural_mei_resnet_responses = (np.mean if avg else np.sum)(natural_mei_resnet_responses[:, :, time_bins_sum], axis=-1)
-            natural_mei_cnn_responses = (np.mean if avg else np.sum)(natural_mei_cnn_responses[:, :, time_bins_sum], axis=-1)
+            test_image_responses = (np.mean if avg else np.sum)(
+                test_image_responses[:, :, time_bins_sum], axis=-1
+            )
+            natural_image_responses = (np.mean if avg else np.sum)(
+                natural_image_responses[:, :, time_bins_sum], axis=-1
+            )
+            noise_mei_resnet_responses = (np.mean if avg else np.sum)(
+                noise_mei_resnet_responses[:, :, time_bins_sum], axis=-1
+            )
+            noise_mei_cnn_responses = (np.mean if avg else np.sum)(
+                noise_mei_cnn_responses[:, :, time_bins_sum], axis=-1
+            )
+            natural_mei_resnet_responses = (np.mean if avg else np.sum)(
+                natural_mei_resnet_responses[:, :, time_bins_sum], axis=-1
+            )
+            natural_mei_cnn_responses = (np.mean if avg else np.sum)(
+                natural_mei_cnn_responses[:, :, time_bins_sum], axis=-1
+            )
 
+        # training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
+        # test_crop = crop - np.clip(training_crop, -999, 0)
 
-        #training_crop = get_crop_from_stimulus_location(stimulus_location[i], crop, monitor_scaling_factor=4.57)
-        #test_crop = crop - np.clip(training_crop, -999, 0)
-
-        #TestImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=test_crop, scale=scale,
+        # TestImageCaches[data_key] = ImageCache(path=image_cache_path, subsample=subsample, crop=test_crop, scale=scale,
         #                                       img_mean=img_mean, img_std=img_std, transform=True, normalize=True)
 
         TestImageCaches[data_key] = cache
 
-        test_loader = get_cached_loader(test_image_ids,
-                                        test_image_responses,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=TestImageCaches[data_key],
-                                        repeat_condition=test_image_ids)
+        test_loader = get_cached_loader(
+            test_image_ids,
+            test_image_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=test_image_ids,
+        )
 
-        natural_img_loader = get_cached_loader(natural_image_ids,
-                                        natural_image_responses,
-                                        batch_size=None,
-                                        shuffle=None,
-                                        image_cache=TestImageCaches[data_key],
-                                        repeat_condition=natural_image_ids)
+        natural_img_loader = get_cached_loader(
+            natural_image_ids,
+            natural_image_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=natural_image_ids,
+        )
 
-        noise_mei_resnet_loader = get_cached_loader(noise_mei_resnet_ids,
-                                                 noise_mei_resnet_responses,
-                                                 batch_size=None,
-                                                 shuffle=None,
-                                                 image_cache=TestImageCaches[data_key],
-                                                 repeat_condition=noise_mei_resnet_ids)
+        noise_mei_resnet_loader = get_cached_loader(
+            noise_mei_resnet_ids,
+            noise_mei_resnet_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=noise_mei_resnet_ids,
+        )
 
-        noise_mei_cnn_loader = get_cached_loader(noise_mei_cnn_ids,
-                                                     noise_mei_cnn_responses,
-                                                     batch_size=None,
-                                                     shuffle=None,
-                                                     image_cache=TestImageCaches[data_key],
-                                                     repeat_condition=noise_mei_cnn_ids)
+        noise_mei_cnn_loader = get_cached_loader(
+            noise_mei_cnn_ids,
+            noise_mei_cnn_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=noise_mei_cnn_ids,
+        )
 
-        natural_mei_resnet_loader = get_cached_loader(natural_mei_resnet_ids,
-                                               natural_mei_resnet_responses,
-                                               batch_size=None,
-                                               shuffle=None,
-                                               image_cache=TestImageCaches[data_key],
-                                               repeat_condition=natural_mei_resnet_ids)
+        natural_mei_resnet_loader = get_cached_loader(
+            natural_mei_resnet_ids,
+            natural_mei_resnet_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=natural_mei_resnet_ids,
+        )
 
-        natural_mei_cnn_loader = get_cached_loader(natural_mei_cnn_ids,
-                                                   natural_mei_cnn_responses,
-                                                   batch_size=None,
-                                                   shuffle=None,
-                                                   image_cache=TestImageCaches[data_key],
-                                                   repeat_condition=natural_mei_cnn_ids)
+        natural_mei_cnn_loader = get_cached_loader(
+            natural_mei_cnn_ids,
+            natural_mei_cnn_responses,
+            batch_size=None,
+            shuffle=None,
+            image_cache=TestImageCaches[data_key],
+            repeat_condition=natural_mei_cnn_ids,
+        )
 
         dataloaders["test"][data_key] = test_loader
         dataloaders["natural_imgs"][data_key] = natural_img_loader
@@ -1705,7 +2156,6 @@ def monkey_static_loader_mua_cl(dataset,
         dataloaders["noise_mei_cnn"][data_key] = noise_mei_cnn_loader
         dataloaders["natural_mei_resnet"][data_key] = natural_mei_resnet_loader
         dataloaders["natural_mei_cnn"][data_key] = natural_mei_cnn_loader
-
 
     if store_data_info and not os.path.exists(stats_path):
 
@@ -1717,11 +2167,13 @@ def monkey_static_loader_mua_cl(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
         stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):
@@ -1732,29 +2184,31 @@ def monkey_static_loader_mua_cl(dataset,
     return dataloaders if not return_data_info else data_info
 
 
-def monkey_v4_cl(dataset,
-                neuronal_data_files,
-                image_cache_path,
-                batch_size=64,
-                seed=None,
-                train_frac=0.8,
-                subsample=1,
-                crop=((96, 96), (96, 96)),
-                scale=1.,
-                time_bins_sum=tuple(range(12)),
-                avg=False,
-                image_file=None,
-                return_data_info=False,
-                store_data_info=True,
-                image_frac=1.,
-                image_selection_seed=None,
-                randomize_image_selection=True,
-                stimulus_location=None,
-                img_mean=None,
-                img_std=None,
-                dataloader_keys=None,
-                zscore_images=True,
-                 test_image_path=None,):
+def monkey_v4_cl(
+    dataset,
+    neuronal_data_files,
+    image_cache_path,
+    batch_size=64,
+    seed=None,
+    train_frac=0.8,
+    subsample=1,
+    crop=((96, 96), (96, 96)),
+    scale=1.0,
+    time_bins_sum=tuple(range(12)),
+    avg=False,
+    image_file=None,
+    return_data_info=False,
+    store_data_info=True,
+    image_frac=1.0,
+    image_selection_seed=None,
+    randomize_image_selection=True,
+    stimulus_location=None,
+    img_mean=None,
+    img_std=None,
+    dataloader_keys=None,
+    zscore_images=True,
+    test_image_path=None,
+):
     """
     Function that returns cached dataloaders for monkey ephys experiments.
 
@@ -1814,12 +2268,12 @@ def monkey_v4_cl(dataset,
         stimulus_location = [stimulus_location for i in neuronal_data_files]
 
     # clean up image path because of legacy folder structure
-    image_cache_path = image_cache_path.split('individual')[0]
+    image_cache_path = image_cache_path.split("individual")[0]
 
     # Load image statistics if present
     stats_filename = make_hash(dataset_config)
 
-    stats_path = os.path.join(image_cache_path, 'statistics/', stats_filename)
+    stats_path = os.path.join(image_cache_path, "statistics/", stats_filename)
 
     # Get mean and std
     if os.path.exists(stats_path):
@@ -1831,27 +2285,73 @@ def monkey_v4_cl(dataset,
         img_std = list(data_info.values())[0]["img_std"]
 
         # Initialize cache
-        cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                           img_std=img_std, transform=True, normalize=zscore_images)
+        cache = ImageCache(
+            path=image_cache_path,
+            subsample=subsample,
+            crop=crop,
+            scale=scale,
+            img_mean=img_mean,
+            img_std=img_std,
+            transform=True,
+            normalize=zscore_images,
+        )
         if test_image_path is not None:
-            oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                                          img_std=img_std, transform=True, normalize=zscore_images)
+            oracle_cache = ImageCache(
+                path=test_image_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=zscore_images,
+            )
     else:
         if img_mean is not None:
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                               img_std=img_std, transform=True, normalize=zscore_images)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                img_mean=img_mean,
+                img_std=img_std,
+                transform=True,
+                normalize=zscore_images,
+            )
             if test_image_path is not None:
-                oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                                   img_std=img_std, transform=True, normalize=zscore_images)
+                oracle_cache = ImageCache(
+                    path=test_image_path,
+                    subsample=subsample,
+                    crop=crop,
+                    scale=scale,
+                    img_mean=img_mean,
+                    img_std=img_std,
+                    transform=True,
+                    normalize=zscore_images,
+                )
         else:
             # Initialize cache with no normalization
-            cache = ImageCache(path=image_cache_path, subsample=subsample, crop=crop, scale=scale, transform=True,
-                               normalize=False)
+            cache = ImageCache(
+                path=image_cache_path,
+                subsample=subsample,
+                crop=crop,
+                scale=scale,
+                transform=True,
+                normalize=False,
+            )
             if test_image_path is not None:
-                oracle_cache = ImageCache(path=test_image_path, subsample=subsample, crop=crop, scale=scale, img_mean=img_mean,
-                                          img_std=img_std, transform=True, normalize=False)
+                oracle_cache = ImageCache(
+                    path=test_image_path,
+                    subsample=subsample,
+                    crop=crop,
+                    scale=scale,
+                    img_mean=img_mean,
+                    img_std=img_std,
+                    transform=True,
+                    normalize=False,
+                )
             if zscore_images:
-            # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
+                # Compute mean and std of transformed images and zscore data (the cache wil be filled so first epoch will be fast)
                 cache.zscore_images(update_stats=True)
                 img_mean = cache.img_mean
                 img_std = cache.img_std
@@ -1861,8 +2361,8 @@ def monkey_v4_cl(dataset,
     if stimulus_location is not None:
         TestImageCaches, OracleImageCaches = {}, {}
 
-    dataloaders = {k:{} for k in dataloader_keys}
-    pickle_file_dict = {k:{} for k in ['responses', 'ids']}
+    dataloaders = {k: {} for k in dataloader_keys}
+    pickle_file_dict = {k: {} for k in ["responses", "ids"]}
 
     for i, datapath in enumerate(neuronal_data_files):
         with open(datapath, "rb") as pkl:
@@ -1874,28 +2374,41 @@ def monkey_v4_cl(dataset,
             OracleImageCaches[data_key] = oracle_cache
 
         for stim_key in dataloader_keys:
-            pickle_file_dict["responses"][stim_key] = raw_data[stim_key+"_responses"].astype(np.float32).transpose((2, 0, 1))
-            pickle_file_dict["ids"][stim_key] = raw_data[stim_key+"_ids"].astype(np.int64)
+            pickle_file_dict["responses"][stim_key] = (
+                raw_data[stim_key + "_responses"]
+                .astype(np.float32)
+                .transpose((2, 0, 1))
+            )
+            pickle_file_dict["ids"][stim_key] = raw_data[stim_key + "_ids"].astype(
+                np.int64
+            )
             if time_bins_sum is not None:  # then average over given time bins
-                pickle_file_dict["responses"][stim_key] = (np.mean if avg else np.sum)(pickle_file_dict["responses"][stim_key][:, :, time_bins_sum], axis=-1)
+                pickle_file_dict["responses"][stim_key] = (np.mean if avg else np.sum)(
+                    pickle_file_dict["responses"][stim_key][:, :, time_bins_sum],
+                    axis=-1,
+                )
 
             if stim_key == "test_image" and test_image_path is not None:
                 stim_key_cache = OracleImageCaches[data_key]
             else:
                 stim_key_cache = TestImageCaches[data_key]
 
-            loader = get_cached_loader(pickle_file_dict["ids"][stim_key],
-                                       pickle_file_dict["responses"][stim_key],
-                                       batch_size=None,
-                                       shuffle=None,
-                                       image_cache=stim_key_cache,
-                                       repeat_condition=pickle_file_dict["ids"][stim_key])
+            loader = get_cached_loader(
+                pickle_file_dict["ids"][stim_key],
+                pickle_file_dict["responses"][stim_key],
+                batch_size=None,
+                shuffle=None,
+                image_cache=stim_key_cache,
+                repeat_condition=pickle_file_dict["ids"][stim_key],
+            )
 
             dataloaders[stim_key][data_key] = loader
 
     if store_data_info and not os.path.exists(stats_path):
 
-        in_name, out_name = next(iter(list(dataloaders[dataloader_keys[0]].values())[0]))._fields
+        in_name, out_name = next(
+            iter(list(dataloaders[dataloader_keys[0]].values())[0])
+        )._fields
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders[dataloader_keys[0]])
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -1903,11 +2416,13 @@ def monkey_v4_cl(dataset,
         input_channels = {k: v[in_name][1] for k, v in session_shape_dict.items()}
 
         for data_key in session_shape_dict:
-            data_info[data_key] = dict(input_dimensions=in_shapes_dict[data_key],
-                                       input_channels=input_channels[data_key],
-                                       output_dimension=n_neurons_dict[data_key],
-                                       img_mean=img_mean,
-                                       img_std=img_std)
+            data_info[data_key] = dict(
+                input_dimensions=in_shapes_dict[data_key],
+                input_channels=input_channels[data_key],
+                output_dimension=n_neurons_dict[data_key],
+                img_mean=img_mean,
+                img_std=img_std,
+            )
 
         stats_path_base = str(Path(stats_path).parent)
         if not os.path.exists(stats_path_base):

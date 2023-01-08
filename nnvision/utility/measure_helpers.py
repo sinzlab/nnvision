@@ -18,25 +18,38 @@ def get_subset_of_repeats(outputs, repeat_limit, randomize=True):
     limited_output = []
     for repetitions in outputs:
         n_repeats = repetitions.shape[0]
-        limited_output.append(repetitions[:repeat_limit, ] if not randomize else repetitions[
-            np.random.choice(n_repeats, repeat_limit if repeat_limit < n_repeats else n_repeats, replace=False)])
+        limited_output.append(
+            repetitions[
+                :repeat_limit,
+            ]
+            if not randomize
+            else repetitions[
+                np.random.choice(
+                    n_repeats,
+                    repeat_limit if repeat_limit < n_repeats else n_repeats,
+                    replace=False,
+                )
+            ]
+        )
     return limited_output
 
 
 def is_ensemble_function(model):
-    return (isinstance(model, types.FunctionType))
+    return isinstance(model, types.FunctionType)
 
 
 def get_cosine_mask(width, height, pixelsPerDegree, fadeStartDegrees):
 
     fadeStartPixels = round(fadeStartDegrees * pixelsPerDegree)
     widthBegin = -(width / 2)
-    widthEnd = (width / 2)
+    widthEnd = width / 2
     heightBegin = -(width / 2)
-    heightEnd = (width / 2)
+    heightEnd = width / 2
 
     # Make grid of values for entire extent of image
-    x, y = np.meshgrid(np.arange(widthBegin, widthEnd), np.arange(heightBegin, heightEnd))
+    x, y = np.meshgrid(
+        np.arange(widthBegin, widthEnd), np.arange(heightBegin, heightEnd)
+    )
     thresholdRadius = fadeStartPixels / 2
     # Take norm of grid because disk will be circular
     normXY = np.sqrt(np.square(x) + np.square(y))
@@ -44,7 +57,9 @@ def get_cosine_mask(width, height, pixelsPerDegree, fadeStartDegrees):
     disk = np.zeros((width, height))
     for i in range(len(normXY)):
         for j in range(len(normXY)):
-            value = int(int(normXY[i, j] >= thresholdRadius) & int(normXY[i, j] <= width / 2))
+            value = int(
+                int(normXY[i, j] >= thresholdRadius) & int(normXY[i, j] <= width / 2)
+            )
             disk[i, j] = int(value)
     alteredDisk = disk * (normXY - thresholdRadius) / remainingRadius
     fill = np.zeros((width, height))
@@ -77,12 +92,16 @@ def get_cosine_mask_px(width, height, radius, fadeout):
     radius = radius / 2
     fadeout = fadeout / 2
 
-    x, y = np.meshgrid(np.arange(widthBegin, widthEnd), np.arange(heightBegin, heightEnd))
+    x, y = np.meshgrid(
+        np.arange(widthBegin, widthEnd), np.arange(heightBegin, heightEnd)
+    )
     normXY = np.sqrt(np.square(x) + np.square(y))
 
-    disk = (np.array((normXY >= radius) & (normXY <= (radius + fadeout))).astype(np.float32))
+    disk = np.array((normXY >= radius) & (normXY <= (radius + fadeout))).astype(
+        np.float32
+    )
     filled_disc = disk * (normXY - radius) / fadeout if fadeout > 0 else disk
     surround = np.array(normXY >= (radius + fadeout)).astype(np.float32)
     finalDisk = (math.pi) / 2 * (filled_disc + surround)
-    mask = np.cos(finalDisk).clip(0,1)
+    mask = np.cos(finalDisk).clip(0, 1)
     return mask

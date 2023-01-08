@@ -18,12 +18,12 @@ from torch.utils.data import DataLoader
 from torch.nn import Module, ModuleList
 
 from typing import Dict, Any
+
 Key = Dict[str, Any]
 Dataloaders = Dict[str, DataLoader]
 
-schema = CustomSchema(dj.config.get('nnfabrik.schema_name', 'nnfabrik_core'))
-resolve_target_fn = partial(resolve_fn, default_base='targets')
-
+schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
+resolve_target_fn = partial(resolve_fn, default_base="targets")
 
 
 @schema
@@ -31,7 +31,9 @@ class Method(mixins.MEIMethodMixin, dj.Lookup):
     seed_table = MEISeed
     excluded_keys = ["transparency", "transparency_weight"]
 
-    def generate_mei(self, dataloaders: Dataloaders, model: Module, key: Key, seed: int) -> Dict[str, Any]:
+    def generate_mei(
+        self, dataloaders: Dataloaders, model: Module, key: Key, seed: int
+    ) -> Dict[str, Any]:
         method_fn, method_config = (self & key).fetch1("method_fn", "method_config")
         self.insert_key_in_ops(method_config=method_config, key=key)
         method_fn = self.import_func(method_fn)
@@ -41,7 +43,7 @@ class Method(mixins.MEIMethodMixin, dj.Lookup):
     def insert_key_in_ops(self, method_config, key):
         for k, v in method_config.items():
             if k not in self.excluded_keys:
-                if 'kwargs' in v:
+                if "kwargs" in v:
                     if "key" in v["kwargs"]:
                         v["kwargs"]["key"] = key
 
@@ -55,14 +57,18 @@ class MethodGroup(mixins.MEIMethodMixin, dj.Lookup):
 class Ensemble(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
     dataset_table = Dataset
     trained_model_table = TrainedModel
+
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
 
 
 @schema
-class SharedReadoutTrainedEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
+class SharedReadoutTrainedEnsembleModel(
+    mixins.TrainedEnsembleModelTemplateMixin, dj.Manual
+):
     dataset_table = Dataset
     trained_model_table = SharedReadoutTrainedModel
+
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
 
@@ -115,11 +121,13 @@ class MEITargetFunctions(dj.Manual):
 
     @property
     def fn_config(self):
-        target_fn, target_config = self.fetch1('target_fn', 'target_config')
+        target_fn, target_config = self.fetch1("target_fn", "target_config")
         target_config = cleanup_numpy_scalar(target_config)
         return target_fn, target_config
 
-    def add_entry(self, target_fn, target_config, target_comment='', skip_duplicates=False):
+    def add_entry(
+        self, target_fn, target_config, target_comment="", skip_duplicates=False
+    ):
         """
         Add a new entry to the TargetFunction table.
 
@@ -137,20 +145,24 @@ class MEITargetFunctions(dj.Manual):
         try:
             resolve_target_fn(target_fn)
         except (NameError, TypeError) as e:
-            warnings.warn(str(e) + '\nTable entry rejected')
+            warnings.warn(str(e) + "\nTable entry rejected")
             return
 
         target_hash = make_hash(target_config)
-        key = dict(target_fn=target_fn, target_hash=target_hash,
-                   target_config=target_config, target_comment=target_comment)
+        key = dict(
+            target_fn=target_fn,
+            target_hash=target_hash,
+            target_config=target_config,
+            target_comment=target_comment,
+        )
 
         existing = self.proj() & key
         if existing:
             if skip_duplicates:
-                warnings.warn('Corresponding entry found. Skipping...')
+                warnings.warn("Corresponding entry found. Skipping...")
                 key = (self & (existing)).fetch1()
             else:
-                raise ValueError('Corresponding entry already exists')
+                raise ValueError("Corresponding entry already exists")
         else:
             self.insert1(key)
 
@@ -173,7 +185,9 @@ class MEITargetUnits(dj.Manual):
     unit_comment:      varchar(128)
     """
 
-    def add_entry(self, unit_ids, data_key=None, unit_comment='', skip_duplicates=False):
+    def add_entry(
+        self, unit_ids, data_key=None, unit_comment="", skip_duplicates=False
+    ):
         """
         Add a new entry to the TargetFunction table.
 
@@ -189,15 +203,20 @@ class MEITargetUnits(dj.Manual):
         """
 
         unit_hash = make_hash([unit_ids, data_key])
-        key = dict(unit_hash=unit_hash, unit_ids=unit_ids, data_key=data_key, unit_comment=unit_comment)
+        key = dict(
+            unit_hash=unit_hash,
+            unit_ids=unit_ids,
+            data_key=data_key,
+            unit_comment=unit_comment,
+        )
 
         existing = self.proj() & key
         if existing:
             if skip_duplicates:
-                warnings.warn('Corresponding entry found. Skipping...')
+                warnings.warn("Corresponding entry found. Skipping...")
                 key = (self & (existing)).fetch1()
             else:
-                raise ValueError('Corresponding entry already exists')
+                raise ValueError("Corresponding entry already exists")
         else:
             self.insert1(key)
 
@@ -227,14 +246,20 @@ class MEIObjective(dj.Computed):
         comments.append((self.target_fn_table & key).fetch1("target_comment"))
         comments.append((self.target_unit_table & key).fetch1("unit_comment"))
 
-        key["objective_comment"] = ', '.join(comments)
+        key["objective_comment"] = ", ".join(comments)
         key["objective_hash"] = objective_hash
         self.insert1(key)
 
-    def get_output_selected_model(self, model: Module, key: Key) -> constrained_output_model:
+    def get_output_selected_model(
+        self, model: Module, key: Key
+    ) -> constrained_output_model:
         target_fn = (self.target_fn_table & key).get_target_fn()
-        unit_ids, data_key = (self.target_unit_table & key).fetch1("unit_ids", "data_key")
-        return self.constrained_output_model(model, unit_ids, target_fn, forward_kwargs=dict(data_key=data_key))
+        unit_ids, data_key = (self.target_unit_table & key).fetch1(
+            "unit_ids", "data_key"
+        )
+        return self.constrained_output_model(
+            model, unit_ids, target_fn, forward_kwargs=dict(data_key=data_key)
+        )
 
 
 @schema
@@ -275,6 +300,7 @@ class MEIPrototype(mixins.MEITemplateMixin, dj.Computed):
 class TransferEnsembleModel(mixins.TrainedEnsembleModelTemplateMixin, dj.Manual):
     dataset_table = Dataset
     trained_model_table = TrainedTransferModel
+
     class Member(mixins.TrainedEnsembleModelTemplateMixin.Member, dj.Part):
         pass
 
@@ -315,7 +341,7 @@ class MEIObjectiveFunction(dj.Manual):
         return target_fn, target_config
 
     def add_entry(
-            self, target_fn, target_config, target_comment="", skip_duplicates=False
+        self, target_fn, target_config, target_comment="", skip_duplicates=False
     ):
         """
         Add a new entry to the TargetFunction table.
@@ -378,13 +404,13 @@ class MEIObjectiveUnit(dj.Manual):
     dataset_table = Dataset
 
     def add_entry(
-            self,
-            dataset_fn,
-            dataset_hash,
-            unit_indices=None,
-            data_key=None,
-            unit_comment="",
-            skip_duplicates=False,
+        self,
+        dataset_fn,
+        dataset_hash,
+        unit_indices=None,
+        data_key=None,
+        unit_comment="",
+        skip_duplicates=False,
     ):
         """
         Add a new entry to the TargetFunction table.
@@ -401,7 +427,7 @@ class MEIObjectiveUnit(dj.Manual):
         """
 
         dataloaders = (
-                self.dataset_table & dict(dataset_fn=dataset_fn, dataset_hash=dataset_hash)
+            self.dataset_table & dict(dataset_fn=dataset_fn, dataset_hash=dataset_hash)
         ).get_dataloader()
         data_keys = list(dataloaders["train"].keys())
         if data_key is None and len(data_keys) == 1:
@@ -457,10 +483,16 @@ class MEIObjectiveTable(dj.Computed):
         key["objective_comment"] = ", ".join(comments)
         self.insert1(key)
 
-    def get_output_selected_model(self, model: Module, key: Key) -> constrained_output_model:
+    def get_output_selected_model(
+        self, model: Module, key: Key
+    ) -> constrained_output_model:
         target_fn = (self.target_fn_table & key).get_target_fn()
-        unit_indices, data_key = (self.target_unit_table & key).fetch1("unit_indices", "data_key")
-        return self.constrained_output_model(model, unit_indices, target_fn, forward_kwargs=dict(data_key=data_key))
+        unit_indices, data_key = (self.target_unit_table & key).fetch1(
+            "unit_indices", "data_key"
+        )
+        return self.constrained_output_model(
+            model, unit_indices, target_fn, forward_kwargs=dict(data_key=data_key)
+        )
 
 
 @schema

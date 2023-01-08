@@ -17,7 +17,11 @@ class Shifter:
 
 class StaticAffineShifter(Shifter, ModuleDict):
     def __init__(self, data_keys, input_channels, bias=True, gamma_shifter=0, **kwargs):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__()
         self.gamma_shifter = gamma_shifter
         for k in data_keys:
@@ -37,7 +41,11 @@ class StaticAffineShifter(Shifter, ModuleDict):
 
 class StaticAffine(nn.Linear):
     def __init__(self, input_channels, output_channels, bias=True, **kwargs):
-        log.info("Ignoring input {} when creating {}".format(pformat(kwargs, indent=20), self.__class__.__name__))
+        log.info(
+            "Ignoring input {} when creating {}".format(
+                pformat(kwargs, indent=20), self.__class__.__name__
+            )
+        )
         super().__init__(input_channels, output_channels, bias=bias)
 
     def forward(self, input):
