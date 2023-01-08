@@ -55,12 +55,13 @@ def model_predictions_repeats(
                 with device_state(model, device) if not is_ensemble_function(
                         model
                 ) else contextlib.nullcontext():
-                    output.append(
-                        model(images.to(device), data_key=data_key, **batch._asdict(), repeat_channel_dim=repeat_channel_dim)
-                            .detach()
-                            .cpu()
-                            .numpy()
-                    )
+                    with torch.no_grad():
+                        output.append(
+                            model(images.to(device), data_key=data_key, **batch._asdict(), repeat_channel_dim=repeat_channel_dim)
+                                .detach()
+                                .cpu()
+                                .numpy()
+                        )
 
     # Forward unique images once
     if len(output) == 0:
