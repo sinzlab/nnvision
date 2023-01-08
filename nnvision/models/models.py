@@ -60,7 +60,7 @@ def se_core_gauss_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -510,7 +510,7 @@ def se_core_point_readout(dataloaders, seed, hidden_channels=32, input_kern=13, 
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -608,7 +608,7 @@ def stacked2d_core_gaussian_readout(dataloaders, seed, hidden_channels=32, input
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -704,7 +704,7 @@ def vgg_core_gauss_readout(dataloaders, seed,
 
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -790,7 +790,7 @@ def vgg_core_full_gauss_readout(dataloaders, seed,
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -871,7 +871,7 @@ def se_core_spatialXfeature_readout(dataloaders, seed, hidden_channels=32, input
 
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -1860,7 +1860,7 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
             dataloaders = dataloaders["train"]
 
         # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
-        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
 
         session_shape_dict = get_dims_for_loader_dict(dataloaders)
         n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
@@ -1920,7 +1920,7 @@ def se_core_selfattention_readout(dataloaders, seed, hidden_channels=32, input_k
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
