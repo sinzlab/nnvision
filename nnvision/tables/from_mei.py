@@ -29,7 +29,7 @@ resolve_target_fn = partial(resolve_fn, default_base='targets')
 @schema
 class Method(mixins.MEIMethodMixin, dj.Lookup):
     seed_table = MEISeed
-    excluded_keys = ["transparency", ]
+    excluded_keys = ["transparency", "transparency_weight"]
 
     def generate_mei(self, dataloaders: Dataloaders, model: Module, key: Key, seed: int) -> Dict[str, Any]:
         method_fn, method_config = (self & key).fetch1("method_fn", "method_config")
