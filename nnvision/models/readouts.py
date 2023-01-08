@@ -455,45 +455,16 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
                     shared_features=shared_features,
                     shared_grid=shared_grid,
                     source_grid=source_grid,
-                    **kwargs,
-                ),
-            )
 
-        self.context_regularizer = kwargs.get("context_regularizer", False)
-        self.gamma_context_regularizer = kwargs.get("gamma_context_regularizer", 3)
-        self.prev_regularizer = kwargs.get("prev_regularizer", False)
-        self.gamma_prev_regularizer = kwargs.get("gamma_prev_regularizer", 3)
         self.gamma_readout = gamma_readout
         self.gamma_grid_dispersion = gamma_grid_dispersion
 
     def regularizer(self, data_key):
         if hasattr(FullGaussian2d, "mu_dispersion"):
-            if self.context_regularizer and self.prev_regularizer:
-                return (
-                    self[data_key].feature_l1(average=False) * self.gamma_readout
-                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
-                    + self[data_key].context_modulator_l1()
-                    * self.gamma_context_regularizer
-                    + self[data_key].prev_modulator_l1() * self.gamma_prev_regularizer
-                )
-            elif self.context_regularizer:
-                return (
-                    self[data_key].feature_l1(average=False) * self.gamma_readout
-                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
-                    + self[data_key].context_modulator_l1()
-                    * self.gamma_context_regularizer
-                )
-            elif self.prev_regularizer:
-                return (
-                    self[data_key].feature_l1(average=False) * self.gamma_readout
-                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
-                    + self[data_key].prev_modulator_l1() * self.gamma_prev_regularizer
-                )
-            else:
-                return (
-                    self[data_key].feature_l1(average=False) * self.gamma_readout
-                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
-                )
+            return (
+                self[data_key].feature_l1(average=False) * self.gamma_readout
+                + self[data_key].mu_dispersion * self.gamma_grid_dispersion
+            )
         else:
             return self[data_key].feature_l1(average=False) * self.gamma_readout
 

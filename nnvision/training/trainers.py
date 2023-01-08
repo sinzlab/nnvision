@@ -106,6 +106,7 @@ def nnvision_trainer(
         resps = args[1].to(device)
         return loss_scale * criterion(preds, resps) + model.regularizer(data_key)
 
+
     ##### Model training ####################################################################################################
     model.to(device)
     set_random_seed(seed)
@@ -202,6 +203,7 @@ def nnvision_trainer(
             total=n_iterations,
             desc="Epoch {}".format(epoch),
         ):
+
             loss = full_objective(
                 model, dataloaders["train"], data_key, *data[:2], **data._asdict()
             )

@@ -374,6 +374,7 @@ class RecordingInterface(dj.Computed):
                 electrode = [electrode]
                 relative_depth = [relative_depth]
 
+
             unit_ids = np.concatenate([unit_ids, unit_ids_mua])
             unit_type = np.concatenate([unit_type, unit_types_mua])
             unit_type_int = []
@@ -426,6 +427,7 @@ class RecordingInterface(dj.Computed):
                 key["unit_index"] = (
                     i if combined_neuron_counter is None else combined_neuron_counter
                 )
+
                 key["unit_type"] = int(
                     (session_dict[k]["unit_type"][i]).astype(np.float)
                 )

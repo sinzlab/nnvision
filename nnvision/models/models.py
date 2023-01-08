@@ -109,6 +109,7 @@ def se_core_gauss_readout(
         else input_channels[0]
     )
 
+
     set_random_seed(seed)
 
     core = SE2dCore(
@@ -2837,7 +2838,7 @@ def transfere_core_shared_multihead_attention(
     freeze_core=True,
     freeze_readout=True,
     data_info=None,
-    **kwargs,
+    **kwargs
 ):
 
     # set default values that are in line with parameter expansion

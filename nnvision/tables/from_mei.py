@@ -31,6 +31,7 @@ class Method(mixins.MEIMethodMixin, dj.Lookup):
     seed_table = MEISeed
     excluded_keys = ["transparency", "transparency_weight"]
 
+
     def generate_mei(
         self, dataloaders: Dataloaders, model: Module, key: Key, seed: int
     ) -> Dict[str, Any]:
