@@ -1,5 +1,7 @@
 from .monkey_loaders import (
     monkey_static_loader,
+    monkey_static_loader_combined,
+    monkey_static_loader_extended,
     monkey_mua_sua_loader,
     monkey_static_loader_closed_loop,
     monkey_static_loader_mua_cl,

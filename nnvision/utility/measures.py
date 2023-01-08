@@ -41,6 +41,7 @@ def model_predictions_repeats(
                 images[0, :1, ...],
             )
         ), "All images in the batch should be equal"
+
         unique_images = torch.cat(
             (
                 unique_images,
@@ -59,17 +60,18 @@ def model_predictions_repeats(
                 with device_state(model, device) if not is_ensemble_function(
                     model
                 ) else contextlib.nullcontext():
-                    output.append(
-                        model(
-                            images.to(device),
-                            data_key=data_key,
-                            **batch._asdict(),
-                            repeat_channel_dim=repeat_channel_dim
+                    with torch.no_grad():
+                        output.append(
+                            model(
+                                images.to(device),
+                                data_key=data_key,
+                                **batch._asdict(),
+                                repeat_channel_dim=repeat_channel_dim
+                            )
+                            .detach()
+                            .cpu()
+                            .numpy()
                         )
-                        .detach()
-                        .cpu()
-                        .numpy()
-                    )
 
     # Forward unique images once
     if len(output) == 0:
@@ -161,6 +163,68 @@ def model_predictions_repeats_legacy(
     return target, output
 
 
+def model_predictions_shuffled(
+    model,
+    dataloader,
+    data_key,
+    device="cuda",
+    broadcast_to_target=False,
+    zeroed_out=False,
+):
+    """
+    computes model predictions for a given dataloader and a model, with the responses shuffled
+    Returns:
+        target: ground truth, i.e. neuronal firing rates of the neurons
+        output: responses as predicted by the network
+    """
+
+    target, output = torch.empty(0), torch.empty(0)
+    for batch in dataloader:
+
+        images, responses = batch[:2]
+        if len(images.shape) == 5:
+            images = images.squeeze(dim=0)
+            responses = responses.squeeze(dim=0)
+        # check that all images in batch are equal
+        assert torch.all(
+            torch.eq(
+                images[-1, :1, ...],
+                images[0, :1, ...],
+            )
+        ), "All images in the batch should be equal"
+        # shuffle responses as input for context responses
+        batch_dict = batch._asdict()
+        for i in np.arange(batch_dict["targets"].shape[0] - 1):
+            with device_state(model, device) if not is_ensemble_function(
+                model
+            ) else contextlib.nullcontext():
+                with torch.no_grad():
+                    targets_shifted = batch_dict["targets"]
+                    targets_shifted = np.roll(targets_shifted, 1, axis=0)
+                    batch_dict["targets"] = torch.from_numpy(targets_shifted)
+                    if zeroed_out:
+                        batch_dict["targets"] = torch.from_numpy(
+                            np.zeros_like(targets_shifted)
+                        )
+                    output = torch.cat(
+                        (
+                            output,
+                            (
+                                model(
+                                    images.to(device), data_key=data_key, **batch_dict
+
+                                )
+                                .detach()
+                                .cpu()
+                            ),
+                        ),
+                        dim=0,
+                    )
+            target = torch.cat((target, responses.detach().cpu()), dim=0)
+
+    return target.numpy(), output.numpy()
+
+
 def model_predictions(model, dataloader, data_key, device="cpu"):
     """
     computes model predictions for a given dataloader and a model
@@ -170,8 +234,16 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
     """
 
     target, output = torch.empty(0), torch.empty(0)
+    batch = next(iter(dataloader))
+    if "bools" in batch._fields:
+        mask_flag = True
+        masks = torch.empty(0, dtype=np.bool)
+    else:
+        mask_flag = False
     for batch in dataloader:
         images, responses = batch[:2]
+        if mask_flag:
+            mask = batch.bools
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
@@ -198,8 +270,18 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
                         dim=0,
                     )
             target = torch.cat((target, responses.detach().cpu()), dim=0)
+            if mask_flag:
+                masks = torch.cat((masks, mask))
 
-    return target.numpy(), output.numpy()
+    if mask_flag:
+        target = np.ma.masked_array(target, mask=~masks)
+        output = np.ma.masked_array(output, mask=~masks)
+    else:
+        target = target.numpy()
+        output = output.numpy()
+
+    return target, output
+
 
 
 def get_avg_correlations(
@@ -249,6 +331,9 @@ def get_avg_correlations(
 def get_correlations(
     model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
 ):
+    if "test" in dataloaders:
+        dataloaders = dataloaders["test"]
+
     correlations = {}
     with eval_state(model) if not is_ensemble_function(
         model
@@ -258,7 +343,49 @@ def get_correlations(
                 dataloader=v, model=model, data_key=k, device=device
             )
             correlations[k] = corr(target, output, axis=0)
+            if np.any(np.isnan(correlations[k])):
+                warnings.warn(
+                    "{}% NaNs , NaNs will be set to Zero.".format(
+                        np.isnan(correlations[k]).mean() * 100
+                    )
+                )
+            correlations[k][np.isnan(correlations[k])] = 0
 
+    if not as_dict:
+        correlations = (
+            np.hstack([v for v in correlations.values()])
+            if per_neuron
+            else np.mean(np.hstack([v for v in correlations.values()]))
+        )
+    return correlations
+
+
+def get_correlations_shuffled(
+    model,
+    dataloaders,
+    device="cpu",
+    as_dict=False,
+    per_neuron=True,
+    zeroed_out=False,
+    **kwargs
+):
+    if "test" in dataloaders:
+        dataloaders = dataloaders["test"]
+    correlations = {}
+    with eval_state(model) if not is_ensemble_function(
+        model
+    ) else contextlib.nullcontext():
+        for k, v in dataloaders.items():
+            print(k)
+            target, output = model_predictions_shuffled(
+                dataloader=v,
+                model=model,
+                data_key=k,
+                device=device,
+                zeroed_out=zeroed_out,
+            )
+            correlations[k] = corr(target, output, axis=0)
+            print(k)
             if np.any(np.isnan(correlations[k])):
                 warnings.warn(
                     "{}% NaNs , NaNs will be set to Zero.".format(

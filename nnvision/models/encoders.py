@@ -15,12 +15,14 @@ class Encoder(nn.Module):
         if repeat_channel_dim is not None:
             x = x.repeat(1, repeat_channel_dim, 1, 1)
             x[:, 1:, ...] = 0
+
         x = self.core(x)
 
         x = self.readout(x, data_key=data_key, **kwargs)
         if kwargs.get("output_attn_weights", False):
             x, attention_weights = x
-            return F.elu(x + self.offset), attention_weights
+            return F.elu(x + self.offset) + 1, attention_weights
+
         return F.elu(x + self.offset) + 1
 
     def regularizer(self, data_key):

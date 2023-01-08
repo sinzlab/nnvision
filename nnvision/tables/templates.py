@@ -1,5 +1,7 @@
 import datajoint as dj
 import numpy as np
+from copy import deepcopy
+
 from nnfabrik.templates.trained_model import TrainedModelBase
 from nnfabrik.main import Dataset
 
@@ -109,7 +111,8 @@ class ScoringBase(dj.Computed):
         return np.mean(np.hstack([v for v in unit_scores_dict.values()]))
 
     def insert_unit_measures(self, key, unit_measures_dict):
-        key = key.copy()
+        key = deepcopy(key)
+        keys_for_inserting = []
         for data_key, unit_scores in unit_measures_dict.items():
             for unit_index, unit_score in enumerate(unit_scores):
                 if "unit_id" in key:
@@ -121,7 +124,8 @@ class ScoringBase(dj.Computed):
                 key["unit_id"] = unit_id
                 key["unit_{}".format(self.measure_attribute)] = unit_score
                 key["data_key"] = data_key
-                self.Units.insert1(key, ignore_extra_fields=True)
+                keys_for_inserting.append(key.copy())
+        self.Units.insert(keys_for_inserting, ignore_extra_fields=True)
 
     def make(self, key):
         self.connection.ping()

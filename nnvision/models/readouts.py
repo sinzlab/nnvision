@@ -407,6 +407,7 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
         share_grid,
         shared_match_ids,
         gamma_grid_dispersion=0,
+        **kwargs
     ):
         # super init to get the _module attribute
         super().__init__()
@@ -454,8 +455,7 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
                     shared_features=shared_features,
                     shared_grid=shared_grid,
                     source_grid=source_grid,
-                ),
-            )
+
         self.gamma_readout = gamma_readout
         self.gamma_grid_dispersion = gamma_grid_dispersion
 
