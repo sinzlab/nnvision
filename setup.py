@@ -27,4 +27,10 @@ setup(
         "neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout",
         "mei @ git+https://github.com/sinzlab/mei.git@inception_loop",
     ],
+    include_package_data=True,
+    package_data={
+        "": [
+            "*.pth.tar",
+        ],
+    },
 )
