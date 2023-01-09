@@ -11,6 +11,7 @@ setup(
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
     packages=find_packages(exclude=[]),
+    package_dir={'nnvision': 'nnvision'},
     install_requires=[
         "setuptools>=50.3.2",
         "einops",
@@ -27,4 +28,13 @@ setup(
         "neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout",
         "mei @ git+https://github.com/sinzlab/mei.git@inception_loop",
     ],
+    package_data={
+        "nnvison": [
+            "data/model_weights/*.pth.tar",
+            "data/model_weights/*.pth",
+            "data/model_weights/*.tar",
+            "data/model_weights/v4_multihead_attention_SOTA.pth.tar",
+
+        ],
+    },
 )
