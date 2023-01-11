@@ -441,6 +441,156 @@ class MultipleFullGaussian2d(MultiReadout, torch.nn.ModuleDict):
         self.gamma_context_regularizer = kwargs.get("gamma_context_regularizer", 3)
         self.prev_regularizer = kwargs.get("prev_regularizer", False)
         self.gamma_prev_regularizer = kwargs.get("gamma_prev_regularizer", 3)
+        if self.context_regularizer:
+            print("context regularizer, gamma:")
+            print(self.gamma_context_regularizer)
+        if self.prev_regularizer:
+            print("prev regularizer, gamma:")
+            print(self.gamma_prev_regularizer)
+        self.gamma_readout = gamma_readout
+        self.gamma_grid_dispersion = gamma_grid_dispersion
+
+    def regularizer(self, data_key):
+        if hasattr(FullGaussian2d, "mu_dispersion"):
+            if self.context_regularizer and self.prev_regularizer:
+                return (
+                    self[data_key].feature_l1(average=False) * self.gamma_readout
+                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
+                    + self[data_key].context_modulator_l1()
+                    * self.gamma_context_regularizer
+                    + self[data_key].prev_modulator_l1() * self.gamma_prev_regularizer
+                )
+            elif self.context_regularizer:
+                return (
+                    self[data_key].feature_l1(average=False) * self.gamma_readout
+                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
+                    + self[data_key].context_modulator_l1()
+                    * self.gamma_context_regularizer
+                )
+            elif self.prev_regularizer:
+                return (
+                    self[data_key].feature_l1(average=False) * self.gamma_readout
+                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
+                    + self[data_key].prev_modulator_l1() * self.gamma_prev_regularizer
+                )
+            else:
+                return (
+                    self[data_key].feature_l1(average=False) * self.gamma_readout
+                    + self[data_key].mu_dispersion * self.gamma_grid_dispersion
+                )
+        else:
+            return self[data_key].feature_l1(average=False) * self.gamma_readout
+
+
+class MultipleFullGaussian2dModulators(MultiReadout, torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        init_mu_range,
+        init_sigma,
+        bias,
+        gamma_readout,
+        gauss_type,
+        grid_mean_predictor,
+        grid_mean_predictor_type,
+        source_grids,
+        share_features,
+        share_grid,
+        shared_match_ids,
+        prev_resps,
+        prev_hidden_layers,
+        prev_hidden_features,
+        prev_combine_addition,
+        bias_prev,
+        other_resps,
+        other_hidden_layers,
+        other_hidden_features,
+        other_combine_addition,
+        context_resps,
+        context_hidden_layers,
+        context_hidden_features,
+        context_combine_addition,
+        bias_context,
+        n_neurons,
+        gamma_grid_dispersion=0,
+        **kwargs
+    ):
+        # super init to get the _module attribute
+        super().__init__()
+        k0 = None
+        for i, k in enumerate(n_neurons_dict):
+            k0 = k0 or k
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            outdims = n_neurons_dict[k]
+
+            source_grid = None
+            shared_grid = None
+            if grid_mean_predictor is not None:
+                if grid_mean_predictor_type == "cortex":
+                    source_grid = source_grids[k]
+                else:
+                    raise KeyError(
+                        "grid mean predictor {} does not exist".format(
+                            grid_mean_predictor_type
+                        )
+                    )
+            elif share_grid:
+                shared_grid = {
+                    "match_ids": shared_match_ids[k],
+                    "shared_grid": None if i == 0 else self[k0].shared_grid,
+                }
+
+            if share_features:
+                shared_features = {
+                    "match_ids": shared_match_ids[k],
+                    "shared_features": None if i == 0 else self[k0].shared_features,
+                }
+            else:
+                shared_features = None
+            self.add_module(
+                k,
+                FullGaussian2dModulators(
+                    in_shape=in_shape,
+                    outdims=outdims,
+                    init_mu_range=init_mu_range,
+                    init_sigma=init_sigma,
+                    bias=bias,
+                    gauss_type=gauss_type,
+                    grid_mean_predictor=grid_mean_predictor,
+                    shared_features=shared_features,
+                    shared_grid=shared_grid,
+                    source_grid=source_grid,
+                    prev_resps=prev_resps,
+                    prev_hidden_layers=prev_hidden_layers,
+                    prev_hidden_features=prev_hidden_features,
+                    prev_combine_addition=prev_combine_addition,
+                    bias_prev=bias_prev,
+                    other_resps=other_resps,
+                    other_hidden_layers=other_hidden_layers,
+                    other_hidden_features=other_hidden_features,
+                    other_combine_addition=other_combine_addition,
+                    context_resps=context_resps,
+                    context_hidden_layers=context_hidden_layers,
+                    context_hidden_features=context_hidden_features,
+                    context_combine_addition=context_combine_addition,
+                    bias_context=bias_context,
+                    n_neurons=n_neurons,
+                    **kwargs,
+                ),
+            )
+
+        self.context_regularizer = kwargs.get("context_regularizer", False)
+        self.gamma_context_regularizer = kwargs.get("gamma_context_regularizer", 3)
+        self.prev_regularizer = kwargs.get("prev_regularizer", False)
+        self.gamma_prev_regularizer = kwargs.get("gamma_prev_regularizer", 3)
+        if self.context_regularizer:
+            print("context regularizer, gamma:")
+            print(self.gamma_context_regularizer)
+        if self.prev_regularizer:
+            print("prev regularizer, gamma:")
+            print(self.gamma_prev_regularizer)
         self.gamma_readout = gamma_readout
         self.gamma_grid_dispersion = gamma_grid_dispersion
 

@@ -10,6 +10,7 @@ from .models import (
     augmented_full_readout,
     stacked2d_core_dn_linear_readout,
     se_core_remapped_gauss_readout,
+    se_core_full_gauss_readout_modulators,
 )
 
 from .ptrmodels import (
