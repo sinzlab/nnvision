@@ -29,10 +29,7 @@ def model_predictions_repeats(
     target, output = [], []
     unique_images = torch.empty(0).to(device)
     batch = next(iter(dataloader))
-    if (
-        "bools" in batch._fields
-    ):  # if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
-        mask_flag = True
+    mask_flag = hasattr(batch._fields, "bools") #if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
 
     for batch in dataloader:
         images, responses = batch[:2]

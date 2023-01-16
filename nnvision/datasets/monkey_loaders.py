@@ -358,6 +358,7 @@ def monkey_static_loader_combined(
     include_n_neurons=False,
     include_session_ids=False,
     include_prev_responses=False,
+    include_context_zeroed=False,
 ):
     """
     Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times.
@@ -694,6 +695,19 @@ def monkey_static_loader_combined(
         args_test.insert(idx, session_ids)
         idx += 1
 
+    if (
+        include_context_zeroed
+    ):  # include responses with every 15th response zeroed out to compare to previous responses
+        resps_train_zeroed = np.copy(all_responses_train)
+        resps_train_zeroed[::15] = 0
+        args_train.insert(idx, resps_train_zeroed)
+        resps_val_zeroed = np.copy(all_responses_val)
+        resps_val_zeroed[::15] = 0
+        args_val.insert(idx, resps_val_zeroed)
+        resps_test_zeroed = np.copy(all_responses_test)
+        resps_test_zeroed[::15] = 0
+        args_test.insert(idx, resps_test_zeroed)
+
     train_loader = get_cached_loader_extended(
         *args_train,
         batch_size=batch_size,
@@ -704,6 +718,7 @@ def monkey_static_loader_combined(
         include_prev_image=include_prev_image,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
+        include_context_zeroed=include_context_zeroed,
     )
 
     val_loader = get_cached_loader_extended(
@@ -716,6 +731,7 @@ def monkey_static_loader_combined(
         include_prev_image=include_prev_image,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
+        include_context_zeroed=include_context_zeroed,
     )
 
     test_loader = get_cached_loader_extended(
@@ -730,6 +746,7 @@ def monkey_static_loader_combined(
         include_trial_id=include_trial_id,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
+        include_context_zeroed=include_context_zeroed,
     )
 
     data_key = "all_sessions"

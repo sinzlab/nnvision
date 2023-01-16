@@ -376,6 +376,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
         bools=None,
         n_neurons=None,
         session_ids=None,
+        context_zeroed=None,
     ):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError(
@@ -390,6 +391,9 @@ class CachedTensorDatasetExtended(utils.Dataset):
         if other_resps:
             names = names + ("other_resps",)
 
+        if context_zeroed:
+            names = names + ("context_zeroed",)
+
         if bools:
             names = names + ("bools",)
 
@@ -400,6 +404,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
         self.num_prev_images = num_prev_images
         self.trial_id = trial_id
         self.prev_responses = prev_responses
+        self.context_zeroed = context_zeroed
         self.next_img = next_img
         self.other_resps = other_resps
         self.bools = bools
@@ -500,6 +505,12 @@ class CachedTensorDatasetExtended(utils.Dataset):
 
             if self.other_resps:
                 other_resps = self.tensors[idx][index]
+                idx += 1
+                full_img = img
+
+            if self.context_zeroed:
+                context_zeroed = self.tensors[idx][index]
+                idx += 1
                 full_img = img
 
             targets = self.tensors[-1][index]
@@ -514,6 +525,9 @@ class CachedTensorDatasetExtended(utils.Dataset):
 
             if self.other_resps:
                 tensors_expanded.append(other_resps)
+
+            if self.context_zeroed:
+                tensors_expanded.append(context_zeroed)
 
             if self.bools:
                 tensors_expanded.append(bools)
@@ -603,6 +617,7 @@ def get_cached_loader_extended(
     include_bools=False,
     include_n_neurons=False,
     include_session_ids=False,
+    include_context_zeroed=False,
 ):
     """
 
@@ -676,6 +691,10 @@ def get_cached_loader_extended(
 
         if include_other_resps:
             tensors.append(torch.from_numpy(args[idx]).to(torch.float))
+            idx += 1
+
+        if include_context_zeroed:
+            tensors.append(torch.from_numpy(args[idx]).to(torch.float))
 
     if len(args) > 2 and "eye_position" in names:
         eye_position = torch.tensor(args[2]).to(torch.float)
@@ -695,6 +714,7 @@ def get_cached_loader_extended(
         bools=include_bools,
         n_neurons=n_neurons,
         session_ids=session_ids,
+        context_zeroed=include_context_zeroed,
     )
     sampler = (
         RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
