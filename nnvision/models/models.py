@@ -27,7 +27,7 @@ from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
 
 try:
-    from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel
+    from ..tables.from_nnfabrik import TrainedTransferModel, TrainedModel, TrainedModelDJ
     from ..tables.main import Recording
     from nnfabrik.main import Model
 except ModuleNotFoundError:
@@ -1526,6 +1526,8 @@ def simple_core_transfer(
         core_transfer_table = TrainedTransferModel
     elif core_transfer_table == "TrainedModel":
         core_transfer_table = TrainedModel
+    elif core_transfer_table == "TrainedModelDJ":
+        core_transfer_table = TrainedModelDJ
 
     if readout_transfer_table is None:
         readout_transfer_table = TrainedModel
