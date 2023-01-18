@@ -70,7 +70,7 @@ singularity run \
 --nv \
 --env-file .env \
 --no-home  \
---bind $SCRATCH:/data/,/home/sinz/_shared/:/sinz_shared,$HOME/projects/:$HOME/projects/  \
+--bind /home/sinz/_shared/:/data,$HOME/projects/:$HOME/projects/  \
 singularity_img.sif  \
 ./run.py
         """

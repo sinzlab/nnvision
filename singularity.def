@@ -1,18 +1,17 @@
 BootStrap: shub
-From: sinzlab/pytorch-singularity:v3.8-torch1.5.0-dj0.12.4
+From: sinzlab/pytorch-singularity:v3.8-torch1.7.0-dj0.12.7
 
 %labels
 MAINTAINER Arne Nix <arnenix@gmail.com>
 %post
     # install third-party libraries
-    git clone https://github.com/sinzlab/nnfabrik.git
-    git clone -b readout_position_regularizer https://github.com/KonstantinWilleke/neuralpredictors
-    git clone -b konsti_monkey_experiments https://github.com/sinzlab/mei
-    python -m pip install -e ./nnfabrik
-    python -m pip install -e ./mei
-    python -m pip install -e ./neuralpredictors
-    python -m pip install git+https://github.com/sacadena/ptrnets
-    python -m pip install git+https://github.com/dicarlolab/CORnet
+    git clone -b inception_loop https://github.com/sinzlab/mei
+    git clone -b elena_combined https://github.com/konstantinwilleke/nnvision
+    python3.8 -m pip install --upgrade pip
+    python3.8 -m pip install git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7
+    python3.8 -m pip install git+https://github.com/dicarlolab/CORnet
+    python3.8 -m pip install --no-use-pep517 -e ./nnvision
+    python3.8 -m pip install --no-use-pep517 -e ./mei
 %environment
     
 %startscript
