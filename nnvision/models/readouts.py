@@ -12,6 +12,11 @@ from neuralpredictors.layers.readouts import (
     RemappedGaussian2d,
     AttentionReadout,
 )
+
+try:
+    from neuralpredictors.layers.slot_attention import SlotAttention
+except:
+    pass
 from neuralpredictors.layers.legacy import Gaussian2d
 from neuralpredictors.layers.attention_readout import (
     Attention2d,
@@ -211,6 +216,169 @@ class MultipleMultiHeadAttention2d(torch.nn.ModuleDict):
         return (
             self[data_key].feature_l1(average=False) * self.gamma_features
             + self[data_key].query_l1(average=False) * self.gamma_query
+        )
+
+
+class SharedSlotAttention2d(torch.nn.ModuleDict):
+    def __init__(
+        self,
+        core,
+        in_shape_dict,
+        n_neurons_dict,
+        bias,
+        gamma_features=0,
+        gamma_query=0,
+        gamma_embedding=0,
+        use_pos_enc=True,
+        learned_pos=False,
+        heads=1,
+        scale=False,
+        key_embedding=False,
+        value_embedding=False,
+        temperature=(False, 1.0),  # (learnable-per-neuron, value)
+        dropout_pos=0.1,
+        layer_norm=False,
+        stack_pos_encoding=False,
+        n_pos_channels=None,
+        embed_out_dim=None,
+        slot_num_iterations=1,  # begin slot_attention arguments
+        num_slots=10,
+        slot_size=None,
+        slot_input_size=None,
+        slot_mlp_hidden_size_factor=2,
+        slot_epsilon=1e-8,
+        draw_slots=True,
+        use_slot_gru=True,
+        use_weighted_mean=True,
+        full_skip=False,
+    ):
+
+        if bool(n_pos_channels) ^ bool(stack_pos_encoding):
+            raise ValueError(
+                "when stacking the position embedding, the number of channels must be specified."
+                "Similarly, when not stacking the position embedding, n_pos_channels must be None"
+            )
+
+        super().__init__()
+        self.n_data_keys = len(n_neurons_dict.keys())
+        self.heads = heads
+        self.key_embedding = key_embedding
+        self.value_embedding = value_embedding
+        self.use_pos_enc = use_pos_enc
+
+        # get output of first dim
+        k = list(in_shape_dict.keys())[0]
+        in_shape = get_module_output(core, in_shape_dict[k])[1:]
+
+        c, w, h = in_shape
+        if n_pos_channels and stack_pos_encoding:
+            c = c + n_pos_channels
+        c_out = c if not embed_out_dim else embed_out_dim
+
+        d_model = n_pos_channels if n_pos_channels else c
+        if self.use_pos_enc:
+            self.position_embedding = PositionalEncoding2D(
+                d_model=d_model,
+                width=w,
+                height=h,
+                learned=learned_pos,
+                dropout=dropout_pos,
+                stack_channels=stack_pos_encoding,
+            )
+
+        self.slot_size = slot_size if slot_size is not None else c
+
+        if self.key_embedding and self.value_embedding:
+            self.to_kv = nn.Linear(self.slot_size, c_out * 2, bias=False)
+        elif self.key_embedding:
+            self.to_key = nn.Linear(self.slot_size, c_out, bias=False)
+
+        # super init to get the _module attribute
+        for k in n_neurons_dict:
+            in_shape = get_module_output(core, in_shape_dict[k])[1:]
+            n_neurons = n_neurons_dict[k]
+            self.add_module(
+                k,
+                SharedMultiHeadAttention2d(
+                    in_shape=in_shape,
+                    outdims=n_neurons,
+                    bias=bias,
+                    use_pos_enc=False,
+                    key_embedding=key_embedding,
+                    value_embedding=value_embedding,
+                    heads=heads,
+                    scale=scale,
+                    temperature=temperature,  # (learnable-per-neuron, value)
+                    layer_norm=layer_norm,
+                    stack_pos_encoding=stack_pos_encoding,
+                    n_pos_channels=n_pos_channels,
+                    embed_out_dim=embed_out_dim,
+                ),
+            )
+        self.gamma_features = gamma_features
+        self.gamma_query = gamma_query
+        self.gamma_embedding = gamma_embedding
+
+        self.slot_attention = SlotAttention(
+            num_iterations=slot_num_iterations,
+            num_slots=num_slots,
+            slot_size=self.slot_size,
+            input_size=c
+            if slot_input_size is None
+            else slot_input_size,  # number of core output channels
+            mlp_hidden_size=slot_mlp_hidden_size_factor * c,
+            epsilon=slot_epsilon,
+            draw_slots=draw_slots,
+            use_slot_gru=use_slot_gru,
+            use_weighted_mean=use_weighted_mean,
+            full_skip=full_skip,
+        )
+
+    def forward(self, x, data_key=None, **kwargs):
+        i, c, w, h = x.size()
+        x = x.flatten(2, 3)  # [Images, Channels, w*h]
+        if self.use_pos_enc:
+            x_embed = self.position_embedding(x)  # -> [Images, Channels, w*h]
+        else:
+            x_embed = x
+
+        x_embed = x_embed.permute(0, 2, 1)  # batch_sizes, w*h, c
+        slots = self.slot_attention(x_embed)  # batch_sizes, slots, channels
+        slots = slots.permute(0, 2, 1)  # batch_size, channels, w*h
+
+        if self.key_embedding and self.value_embedding:
+            key, value = self.to_kv(rearrange(slots, "i c s -> (i s) c")).chunk(
+                2, dim=-1
+            )
+            key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+            value = rearrange(value, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+        elif self.key_embedding:
+            key = self.to_key(rearrange(slots, "i c s -> (i s) c"))
+            key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+            value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+        else:
+            key = rearrange(slots, "i (h d) s -> i h d s", h=self.heads)
+            value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+
+        if data_key is None and len(self) == 1:
+            data_key = list(self.keys())[0]
+        return self[data_key](key, value, **kwargs)
+
+    def embedding_l1(
+        self,
+    ):
+        if self.key_embedding and self.value_embedding:
+            return self.to_kv.weight.abs().mean()
+        elif self.key_embedding:
+            return self.to_key.weight.abs().mean()
+        else:
+            return 0
+
+    def regularizer(self, data_key):
+        return (
+            self[data_key].feature_l1(average=False) * self.gamma_features
+            + self[data_key].query_l1(average=False) * self.gamma_query
+            + self.embedding_l1() * self.gamma_embedding
         )
 
 
