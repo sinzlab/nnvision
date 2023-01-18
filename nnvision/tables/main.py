@@ -259,7 +259,7 @@ class RecordingInterface(dj.Computed):
         definition = """
         # All Units
 
-        -> RecordingInterface.Sessions
+        -> master.Sessions
         unit_id_original:       int     
         unit_id:                int
         unit_type:              int
