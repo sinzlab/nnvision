@@ -12,6 +12,7 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     python3.8 -m pip install git+https://github.com/dicarlolab/CORnet
     python3.8 -m pip install --no-use-pep517 -e ./nnvision
     python3.8 -m pip install --no-use-pep517 -e ./mei
+    python3.8 -m pip install -U torch torchvision
 %environment
     
 %startscript

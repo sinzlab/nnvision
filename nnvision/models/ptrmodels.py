@@ -25,7 +25,10 @@ from .utility import unpack_data_info
 from .encoders import EncoderShifter, Encoder
 from .shifters import MLPShifter, StaticAffine2dShifter
 
-from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
+try:
+    from ptrnets.cores.cores import TaskDrivenCore, TaskDrivenCore2
+except:
+    pass
 from .cores import TaskDrivenCore3
 
 
