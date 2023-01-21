@@ -9,7 +9,6 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     git clone -b elena_combined https://github.com/konstantinwilleke/nnvision
     python3.8 -m pip install --upgrade pip
     python3.8 -m pip install git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7
-    python3.8 -m pip install git+https://github.com/dicarlolab/CORnet
     python3.8 -m pip install --no-use-pep517 -e ./nnvision
     python3.8 -m pip install --no-use-pep517 -e ./mei
     python3.8 -m pip install -U torch torchvision
