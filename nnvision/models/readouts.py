@@ -335,6 +335,7 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
         )
 
     def forward(self, x, data_key=None, **kwargs):
+        output_slot_attention = kwargs.get("output_attn_weights", None)
         i, c, w, h = x.size()
         x = x.flatten(2, 3)  # [Images, Channels, w*h]
         if self.use_pos_enc:
@@ -342,9 +343,16 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
         else:
             x_embed = x
 
+        #TODO insert MLP
+
+
+        print("core output: ", x_embed.shape)
         x_embed = x_embed.permute(0, 2, 1)  # batch_sizes, w*h, c
-        slots = self.slot_attention(x_embed)  # batch_sizes, slots, channels
+
+        slots, slot_attention_maps = self.slot_attention(x_embed, )
         slots = slots.permute(0, 2, 1)  # batch_size, channels, w*h
+
+        print("slot", slots.shape)
 
         if self.key_embedding and self.value_embedding:
             key, value = self.to_kv(rearrange(slots, "i c s -> (i s) c")).chunk(
@@ -362,7 +370,9 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
 
         if data_key is None and len(self) == 1:
             data_key = list(self.keys())[0]
-        return self[data_key](key, value, **kwargs)
+        print("slots -> keys ", key.shape)
+        print("slots -> values ", value.shape)
+        return self[data_key](key, value, slot_attention_maps=slot_attention_maps, **kwargs,)
 
     def embedding_l1(
         self,
@@ -379,6 +389,291 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
             self[data_key].feature_l1(average=False) * self.gamma_features
             + self[data_key].query_l1(average=False) * self.gamma_query
             + self.embedding_l1() * self.gamma_embedding
+        )
+
+
+class FullSlotAttention2d(torch.nn.ModuleDict):
+    def __init__(
+            self,
+            core,
+            in_shape_dict,
+            n_neurons_dict,
+            bias,
+            gamma_features=0,
+            gamma_query=0,
+            gamma_embedding=0,
+            use_pos_enc=True,
+            learned_pos=False,
+            heads=1,
+            scale=False,
+            key_embedding=False,
+            value_embedding=False,
+            temperature=(False, 1.0),  # (learnable-per-neuron, value)
+            dropout_pos=0.1,
+            layer_norm=False,
+            stack_pos_encoding=False,
+            n_pos_channels=None,
+            embed_out_dim=None,
+            slot_num_iterations=3,  # begin slot_attention arguments
+            num_slots=10,
+            slot_size=None,
+            slot_input_size=None,
+            slot_mlp_hidden_size_factor=1,
+            slot_epsilon=1e-8,
+            draw_slots=True,
+            use_slot_gru=True,
+            use_weighted_mean=True,
+            full_skip=False,
+            slot_temperature=(False, 1.0),
+            use_post_embed_mlp=True,
+            learn_slot_weights=False,
+            post_slot_heads=1,
+            position_invariant=True, # adds a new transformer
+    ):
+
+        if bool(n_pos_channels) ^ bool(stack_pos_encoding):
+            raise ValueError(
+                "when stacking the position embedding, the number of channels must be specified."
+                "Similarly, when not stacking the position embedding, n_pos_channels must be None"
+            )
+
+        super().__init__()
+
+        # get output of first dim
+        k = list(in_shape_dict.keys())[0]
+        in_shape = get_module_output(core, in_shape_dict[k])[1:]
+        n_neurons = n_neurons_dict[k]
+
+        self.in_shape = in_shape
+        self.n_neurons = n_neurons
+        self.outdims = n_neurons
+        self.n_data_keys = len(n_neurons_dict.keys())
+        if self.n_data_keys > 1:
+            raise NotImplementedError("Multiple data keys not yet supported")
+
+        self.heads = heads
+        self.key_embedding = key_embedding
+        self.value_embedding = value_embedding
+        self.use_pos_enc = use_pos_enc
+        self.gamma_features = gamma_features
+        self.gamma_query = gamma_query
+        self.gamma_embedding = gamma_embedding
+
+
+        # classical readout args
+        c, w, h = in_shape
+        if n_pos_channels and stack_pos_encoding:
+            c = c + n_pos_channels
+        c_out = c if not embed_out_dim else embed_out_dim
+
+        d_model = n_pos_channels if n_pos_channels else c
+        if self.use_pos_enc:
+            self.position_embedding = PositionalEncoding2D(
+                d_model=d_model,
+                width=w,
+                height=h,
+                learned=learned_pos,
+                dropout=dropout_pos,
+                stack_channels=stack_pos_encoding,
+            )
+        self._features = Parameter(torch.Tensor(1, c, self.n_neurons))
+        self._features.data.fill_(1 / self.in_shape[0])
+
+        self.neuron_query = Parameter(torch.Tensor(1, c_out, self.outdims))
+        self.neuron_query.data.fill_(1 / self.in_shape[0])
+        if bias:
+            self.bias = Parameter(torch.Tensor(self.n_neurons))
+            self.bias.data.fill_(0)
+            self.register_parameter("bias", self.bias)
+        else:
+            self.register_parameter("bias", None)
+
+        if value_embedding and embed_out_dim and not learn_slot_weights:
+            self._features = Parameter(torch.Tensor(1, embed_out_dim, self.outdims))
+            self._features.data.fill_(1 / self.in_shape[0])
+        if key_embedding and embed_out_dim:
+            self.neuron_query = Parameter(torch.Tensor(1, embed_out_dim, self.outdims))
+            self.neuron_query.data.fill_(1 / self.in_shape[0])
+
+
+        if scale:
+            dim_head = c // self.heads
+            self.scale = dim_head ** -0.5  # prevent softmax gradients from vanishing (for large dim_head)
+        else:
+            self.scale = 1.0
+        if temperature[0]:
+            self.T = temperature[1]
+        else:
+            self.T = Parameter(torch.ones(self.n_neurons) * temperature[1])
+        if layer_norm:
+            self.norm = nn.LayerNorm((c, w * h))
+        else:
+            self.norm = None
+
+        self.slot_size = slot_size if slot_size is not None else c
+        self.num_slots = num_slots
+        if learn_slot_weights:
+            self._features = Parameter(torch.Tensor(1, self.slot_size, self.outdims))
+            self._features.data.fill_(1 / self.in_shape[0])
+
+        if self.key_embedding and self.value_embedding:
+            self.to_kv = nn.Linear(self.slot_size, c_out * 2, bias=False)
+        elif self.key_embedding:
+            self.to_key = nn.Linear(self.slot_size, c_out, bias=False)
+
+        self.use_post_embed_mlp = use_post_embed_mlp
+        self.slot_attention = SlotAttention(
+            num_iterations=slot_num_iterations,
+            num_slots=num_slots,
+            slot_size=self.slot_size,
+            input_size=c
+            if slot_input_size is None
+            else slot_input_size,  # number of core output channels
+            mlp_hidden_size=slot_mlp_hidden_size_factor * c,
+            epsilon=slot_epsilon,
+            draw_slots=draw_slots,
+            use_slot_gru=use_slot_gru,
+            use_weighted_mean=use_weighted_mean,
+            full_skip=full_skip,
+            slot_temperature=slot_temperature,
+        )
+
+        if self.use_post_embed_mlp:
+            self.post_embedding_mlp = nn.Sequential(
+                nn.Linear(c, c),
+                nn.ReLU(True),
+                nn.Linear(c, c if slot_input_size is None else slot_input_size)
+            )
+
+        self.learn_slot_weights = learn_slot_weights
+        self.neuron_slot_weight = torch.nn.Parameter(torch.randn(1, 1, self.num_slots, self.n_neurons))
+
+        self.position_invariant = position_invariant
+        self.post_slot_heads = post_slot_heads
+        self.post_slot_kv = nn.Linear(c, c_out * 2, bias=False)
+        self.post_slot_neuron_query = Parameter(torch.Tensor(1, embed_out_dim, self.n_neurons))
+        self.post_slot_neuron_query.data.fill_(1 / embed_out_dim)
+
+    def forward(self, x, **kwargs):
+        output_attn_weights = kwargs.get("output_attn_weights", None)
+        i, c, w, h = x.size()
+        x = x.flatten(2, 3)  # [Images, Channels, w*h]
+        if self.use_pos_enc:
+            x_embed = self.position_embedding(x)  # -> [Images, Channels, w*h]
+        else:
+            x_embed = x
+
+        # Start Slot Attention
+        x_embed = x_embed.permute(0, 2, 1)  # batch_sizes, w*h, c
+        if self.use_post_embed_mlp:
+            x_embed = self.post_embedding_mlp(x_embed)
+
+        slots, slot_attention_maps = self.slot_attention(x_embed, )  # batch_sizes, slots, channels
+        slots = slots.permute(0, 2, 1)  # batch_size, slot_size, n_slots
+
+        if not self.learn_slot_weights:
+            # Self Attention based on slots
+            if self.key_embedding and self.value_embedding:
+                key, value = self.to_kv(rearrange(slots, "i c s -> (i s) c")).chunk(
+                    2, dim=-1
+                )
+                key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+                value = rearrange(value, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+            elif self.key_embedding:
+                key = self.to_key(rearrange(slots, "i c s -> (i s) c"))
+                key = rearrange(key, "(i s) (h d) -> i h d s", h=self.heads, i=i)
+                value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+            else:
+                key = rearrange(slots, "i (h d) s -> i h d s", h=self.heads)
+                value = rearrange(x, "i (h d) s -> i h d s", h=self.heads)
+            query = rearrange(self.neuron_query, "o (h d) n -> o h d n", h=self.heads)
+
+            # compare neuron query with each spatial position (dot-product)
+            dot = torch.einsum("ihds,ohdn->ihsn", key, query)  # -> [Images, Heads, w*h, Neurons]
+            weights = dot * self.scale / self.T
+            attention_weights = torch.nn.functional.softmax(weights, dim=2)  # -> [Images, Heads, n_slots, Neurons]
+        else:
+            slot_weights = torch.nn.functional.softmax( self.neuron_slot_weight, dim=2)
+
+        if self.position_invariant:
+            if not self.learn_slot_weights:
+                y = torch.einsum("ihds,ihsn->ihdn", value, attention_weights)  # -> [Images, Heads, Head_Dim, Neurons]
+                print(value.shape)
+                y = rearrange(y, "i h d n -> i (h d) n")  # -> [Images, Channels, Neurons]
+            else:
+                y = (slots.unsqueeze(3) * slot_weights).sum(2)  # [Images, Channels, Neurons]
+
+        else:
+            if not self.learn_slot_weights:
+                slot_weights = attention_weights.mean(1) # not the best solution to get rid of the heads
+            # neuron_spatial_attention = slot_attention_maps.unsqueeze(3) * slot_weights  # [Images, w*h, n_slots] * [1, 1, n_slots, Neurons]
+            neuron_spatial_attention = torch.einsum("icsk,opsn->icsn", slot_attention_maps.unsqueeze(3), slot_weights)
+            neuron_spatial_attention = neuron_spatial_attention.sum(2) # [Images, w*h, Neurons]
+            weighted_images = neuron_spatial_attention.unsqueeze(2) * x_embed.unsqueeze(3) # [Images, w*h, 1, Neurons] * [Images, w*h, c, 1]
+
+            key, value = self.post_slot_kv(rearrange(weighted_images, "i s c n -> (i s n) c")).chunk(
+                2, dim=-1
+            )
+            key = rearrange(key, "(i s n) (h c) -> i h c s n", h=self.post_slot_heads, i=i, n=self.n_neurons) # [Images, heads, Channels, w*h, Neurons]
+            value = rearrange(value, "(i s n ) (h c) -> i h c s n", h=self.post_slot_heads, i=i, n=self.n_neurons)
+            query = rearrange(self.post_slot_neuron_query, "o (h d) n -> o h c n", h=self.post_slot_heads) # [1, heads, channels, neurons]
+
+            dot = torch.einsum("ihcsn,ohcn->ihsn", key, query)  # -> [Images, Heads, w*h, Neurons]
+
+            print("yo1", dot.shape)
+            weights = dot * self.scale / self.T
+            attention_weights = torch.nn.functional.softmax(weights, dim=2)
+            y = torch.einsum("ihcsn,ihsn->ihcn", value, attention_weights)
+            y = rearrange(y, "i h d n -> i (h d) n")  # -> [Images, Channels, Neurons]
+
+        feat = self._features.view(1, -1, self.outdims)
+        y = torch.einsum("icn,ocn->in", y, feat)  # -> [Images, Neurons]
+
+        if self.bias is not None:
+            y = y + self.bias
+
+        # return neuronal responses, and attention maps if requested
+        if output_attn_weights:
+            return y, (slot_attention_maps, attention_weights)
+        return y
+
+    def feature_l1(self, average=True):
+        """
+        Returns the l1 regularization term either the mean or the sum of all weights
+        Args:
+            average(bool): if True, use mean of weights for regularization
+        """
+        if average:
+            return self._features.abs().mean()
+        else:
+            return self._features.abs().sum()
+
+    def query_l1(self, average=True):
+        """
+        Returns the l1 regularization term either the mean or the sum of all weights
+        Args:
+            average(bool): if True, use mean of weights for regularization
+        """
+        if average:
+            return self.neuron_query.abs().mean()
+        else:
+            return self.neuron_query.abs().sum()
+
+    def embedding_l1(
+            self,
+    ):
+        if self.key_embedding and self.value_embedding:
+            return self.to_kv.weight.abs().mean()
+        elif self.key_embedding:
+            return self.to_key.weight.abs().mean()
+        else:
+            return 0
+
+    def regularizer(self, data_key=None):
+        return (
+                self.feature_l1(average=False) * self.gamma_features
+                + self.query_l1(average=False) * self.gamma_query
+                + self.embedding_l1() * self.gamma_embedding
         )
 
 
