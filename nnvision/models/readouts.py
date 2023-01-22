@@ -346,13 +346,11 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
         #TODO insert MLP
 
 
-        print("core output: ", x_embed.shape)
         x_embed = x_embed.permute(0, 2, 1)  # batch_sizes, w*h, c
 
         slots, slot_attention_maps = self.slot_attention(x_embed, )
         slots = slots.permute(0, 2, 1)  # batch_size, channels, w*h
 
-        print("slot", slots.shape)
 
         if self.key_embedding and self.value_embedding:
             key, value = self.to_kv(rearrange(slots, "i c s -> (i s) c")).chunk(
@@ -370,8 +368,6 @@ class SharedSlotAttention2d(torch.nn.ModuleDict):
 
         if data_key is None and len(self) == 1:
             data_key = list(self.keys())[0]
-        print("slots -> keys ", key.shape)
-        print("slots -> values ", value.shape)
         return self[data_key](key, value, slot_attention_maps=slot_attention_maps, **kwargs,)
 
     def embedding_l1(
@@ -598,7 +594,6 @@ class FullSlotAttention2d(torch.nn.ModuleDict):
         if self.position_invariant:
             if not self.learn_slot_weights:
                 y = torch.einsum("ihds,ihsn->ihdn", value, attention_weights)  # -> [Images, Heads, Head_Dim, Neurons]
-                print(value.shape)
                 y = rearrange(y, "i h d n -> i (h d) n")  # -> [Images, Channels, Neurons]
             else:
                 y = (slots.unsqueeze(3) * slot_weights).sum(2)  # [Images, Channels, Neurons]
@@ -620,7 +615,6 @@ class FullSlotAttention2d(torch.nn.ModuleDict):
 
             dot = torch.einsum("ihcsn,ohcn->ihsn", key, query)  # -> [Images, Heads, w*h, Neurons]
 
-            print("yo1", dot.shape)
             weights = dot * self.scale / self.T
             attention_weights = torch.nn.functional.softmax(weights, dim=2)
             y = torch.einsum("ihcsn,ihsn->ihcn", value, attention_weights)
