@@ -86,4 +86,4 @@ for f in ensemble_names:
     )
     ensemble_models.append(ensemble_model)
 
-v4_multihead_attention_ensemble_model = EnsembleModel(ensemble_models)
+v4_multihead_attention_ensemble_model = EnsembleModel(*ensemble_models)
