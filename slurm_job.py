@@ -70,9 +70,9 @@ singularity run \
 --nv \
 --env-file .env \
 --no-home  \
---bind /home/sinz/_shared/:/data,$HOME/projects/:$HOME/projects/  \
+--bind /mnt/qb/work/sinz/_shared:/data,/mnt/qb/work/sinz/kwilleke50:$HOME  \
 singularity_img.sif  \
-./run.py
+$HOME/projects/nnfabrik/nnvision/nnvision/run.py
         """
         return cmd_string
 
@@ -80,6 +80,8 @@ singularity_img.sif  \
     def slurm_command(self):
         cmd_string = """
 scontrol show job $SLURM_JOB_ID  # print some info
+nvidia-smi
+echo $CUDA_VISIBLE_DEVICES
         """
         return cmd_string
 
@@ -91,7 +93,7 @@ scontrol show job $SLURM_JOB_ID  # print some info
                                           + self.resource_config_string \
                                           + "\n" + self.slurm_command \
                                           + "\n" + self.singularity_run_command
-
+            print(slurm_job_bash_file_content)
             with open(slurm_job_bash_file, "w") as f:
                 f.write(slurm_job_bash_file_content)
 
