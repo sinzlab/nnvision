@@ -56,11 +56,34 @@ data_info = {
     },
 }
 
-dirname = os.path.dirname(__file__)
-
-filename = os.path.join(dirname, '../../data/model_weights/v4_multihead_attention_SOTA.pth.tar')
+current_dir = os.path.dirname(__file__)
+filename = os.path.join(current_dir, '../../data/model_weights/data_driven/v4_multihead_attention_SOTA.pth.tar')
 state_dict = torch.load(filename)
 
+# load single model
 v4_multihead_attention_model = get_model(
     model_fn, model_config, seed=10, data_info=data_info, state_dict=state_dict
 )
+
+
+# load ensemble model
+from mei.modules import EnsembleModel
+
+ensemble_names = ['sota_cnn_ensemble_model_2.pth.tar',
+ 'sota_cnn_ensemble_model_3.pth.tar',
+ 'sota_cnn_ensemble_model_4.pth.tar',
+ 'sota_cnn_ensemble_model_5.pth.tar',]
+
+base_dir = os.path.dirname(filename)
+ensemble_models = []
+ensemble_models.append(v4_multihead_attention_model)
+
+for f in ensemble_names:
+    ensemble_filename = os.path.join(base_dir, f)
+    ensemble_state_dict = torch.load(ensemble_filename)
+    ensemble_model = get_model(
+        model_fn, model_config, seed=10, data_info=data_info, state_dict=ensemble_state_dict
+    )
+    ensemble_models.append(ensemble_model)
+
+v4_multihead_attention_ensemble_model = EnsembleModel(ensemble_models)
