@@ -23,6 +23,7 @@ from .readouts import (
     MultipleSharedMultiHeadAttention2d,
     SharedSlotAttention2d,
     FullSlotAttention2d,
+    GroupSlotAttention2d,
 )
 from .utility import unpack_data_info, purge_state_dict, get_readout_key_names
 
@@ -2890,7 +2891,9 @@ def se_core_full_slot_attention(
     use_post_embed_mlp=True,
     learn_slot_weights=True,
     post_slot_heads=1,
-    position_invariant=False, # adds a new transformer
+    position_invariant=False,
+    slot_pool_size=None,
+    chunk_size=None,
 ):
     """
     Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
@@ -2988,6 +2991,168 @@ def se_core_full_slot_attention(
         learn_slot_weights=learn_slot_weights,
         post_slot_heads=post_slot_heads,
         position_invariant=position_invariant,
+        slot_pool_size=slot_pool_size,
+        chunk_size=chunk_size,
+    )
+
+    # initializing readout bias to mean response
+    if readout_bias and data_info is None:
+        for key, value in dataloaders.items():
+            _, targets = next(iter(value))[:2]
+            readout.bias.data = targets.mean(0)
+
+    model = Encoder(core, readout, elu_offset)
+
+    return model
+
+
+def se_core_groupslot_attention(
+    dataloaders,
+    seed,
+    hidden_channels=32,
+    input_kern=13,  # core args
+    hidden_kern=3,
+    layers=3,
+    gamma_input=15.5,
+    skip=0,
+    final_nonlinearity=True,
+    momentum=0.9,
+    pad_input=False,
+    batch_norm=True,
+    hidden_dilation=1,
+    laplace_padding=None,
+    input_regularizer="LaplaceL2norm",
+    readout_bias=True,
+    elu_offset=0,
+    stack=None,
+    se_reduction=32,
+    n_se_blocks=0,
+    depth_separable=False,
+    linear=False,
+    data_info=None,
+    final_batch_norm=True,
+    gamma_features=3,  # start of readout kwargs
+    gamma_query=1,
+    use_pos_enc=True,
+    learned_pos=False,
+    temperature=(False, 1.0),  # (learnable-per-neuron, value)
+    dropout_pos=0.1,
+    gamma_hidden=0.0,
+    first_layer_stride=1,
+    stack_pos_encoding=None,
+    n_pos_channels=None,
+    slot_num_iterations=1,  # begin slot_attention arguments
+    num_slots=10,
+    slot_size=None,
+    slot_input_size=None,
+    slot_mlp_hidden_size_factor=2,
+    slot_epsilon=1e-8,
+    draw_slots=True,
+    use_slot_gru=False,
+    use_weighted_mean=True,
+    full_skip=False,
+    slot_temperature=(False, 1.0),
+    use_post_embed_mlp=True,
+    broadcast_size=None,
+    use_post_pos_enc=True,
+    learned_post_pos=False,
+    dropout_post_pos=0.1,
+    stack_post_pos_encoding=None,
+    n_post_pos_channels=None,
+):
+    """
+    Model class of a stacked2dCore (from neuralpredictors) and a pointpooled (spatial transformer) readout
+
+    Args:
+        dataloaders: a dictionary of dataloaders, one loader per session
+            in the format {'data_key': dataloader object, .. }
+        seed: random seed
+        elu_offset: Offset for the output non-linearity [F.elu(x + self.offset)]
+
+        all other args: See Documentation of Stacked2dCore in neuralpredictors.layers.cores and
+            PointPooled2D in neuralpredictors.layers.readouts
+
+    Returns: An initialized model which consists of model.core and model.readout
+    """
+
+    if data_info is not None:
+        n_neurons_dict, in_shapes_dict, input_channels = unpack_data_info(data_info)
+    else:
+        if "train" in dataloaders.keys():
+            dataloaders = dataloaders["train"]
+
+        # Obtain the named tuple fields from the first entry of the first dataloader in the dictionary
+        in_name, out_name = next(iter(list(dataloaders.values())[0]))._fields[:2]
+
+        session_shape_dict = get_dims_for_loader_dict(dataloaders)
+        n_neurons_dict = {k: v[out_name][1] for k, v in session_shape_dict.items()}
+        in_shapes_dict = {k: v[in_name] for k, v in session_shape_dict.items()}
+        input_channels = [v[in_name][1] for v in session_shape_dict.values()]
+
+    core_input_channels = (
+        list(input_channels.values())[0]
+        if isinstance(input_channels, dict)
+        else input_channels[0]
+    )
+    set_random_seed(seed)
+    core = SE2dCore(
+        input_channels=core_input_channels,
+        hidden_channels=hidden_channels,
+        input_kern=input_kern,
+        hidden_kern=hidden_kern,
+        layers=layers,
+        gamma_input=gamma_input,
+        skip=skip,
+        final_nonlinearity=final_nonlinearity,
+        bias=False,
+        momentum=momentum,
+        pad_input=pad_input,
+        batch_norm=batch_norm,
+        hidden_dilation=hidden_dilation,
+        laplace_padding=laplace_padding,
+        input_regularizer=input_regularizer,
+        stack=stack,
+        se_reduction=se_reduction,
+        n_se_blocks=n_se_blocks,
+        depth_separable=depth_separable,
+        linear=linear,
+        final_batch_norm=final_batch_norm,
+        gamma_hidden=gamma_hidden,
+        first_layer_stride=first_layer_stride,
+    )
+
+    readout = GroupSlotAttention2d(
+        core,
+        in_shape_dict=in_shapes_dict,
+        n_neurons_dict=n_neurons_dict,
+        bias=readout_bias,
+        gamma_features=gamma_features,
+        gamma_query=gamma_query,
+        use_pos_enc=use_pos_enc,
+        learned_pos=learned_pos,
+        temperature=temperature,  # (learnable-per-neuron, value)
+        dropout_pos=dropout_pos,
+        stack_pos_encoding=stack_pos_encoding,
+        n_pos_channels=n_pos_channels,
+        slot_num_iterations=slot_num_iterations,  # begin slot_attention arguments
+        num_slots=num_slots,
+        slot_size=slot_size,
+        slot_input_size=slot_input_size,
+        slot_mlp_hidden_size_factor=slot_mlp_hidden_size_factor,
+        slot_epsilon=slot_epsilon,
+        draw_slots=draw_slots,
+        use_slot_gru=use_slot_gru,
+        use_weighted_mean=use_weighted_mean,
+        full_skip=full_skip,
+        slot_temperature=slot_temperature,
+        use_post_embed_mlp=use_post_embed_mlp,
+        broadcast_size=broadcast_size,
+        use_post_pos_enc=use_post_pos_enc,
+        learned_post_pos=learned_post_pos,
+        dropout_post_pos=dropout_post_pos,
+        stack_post_pos_encoding=stack_post_pos_encoding,
+        n_post_pos_channels=n_post_pos_channels,
+
     )
 
     # initializing readout bias to mean response

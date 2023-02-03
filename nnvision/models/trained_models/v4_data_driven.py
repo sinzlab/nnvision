@@ -87,3 +87,24 @@ for f in ensemble_names:
     ensemble_models.append(ensemble_model)
 
 v4_multihead_attention_ensemble_model = EnsembleModel(*ensemble_models)
+
+
+# load second ensemble model with different seeds (models 6-10)
+ensemble_names = ['sota_cnn_ensemble_model_6.pth.tar',
+    'sota_cnn_ensemble_model_7.pth.tar',
+    'sota_cnn_ensemble_model_8.pth.tar',
+    'sota_cnn_ensemble_model_9.pth.tar',
+    'sota_cnn_ensemble_model_10.pth.tar',]
+
+
+ensemble_models = []
+
+for f in ensemble_names:
+    ensemble_filename = os.path.join(base_dir, f)
+    ensemble_state_dict = torch.load(ensemble_filename)
+    ensemble_model = get_model(
+        model_fn, model_config, seed=10, data_info=data_info, state_dict=ensemble_state_dict
+    )
+    ensemble_models.append(ensemble_model)
+
+v4_multihead_attention_ensemble_model_2 = EnsembleModel(*ensemble_models)
