@@ -11,6 +11,7 @@ from neuralpredictors import regularizers
 from .architectures import SQ_EX_Block
 
 from torch.nn import functional as F
+import torchvision
 from torchvision.models import vgg16, alexnet, vgg19, vgg19_bn
 from einops import rearrange
 
@@ -359,10 +360,6 @@ class TaskDrivenCore3(Core2d, nn.Module):
             )
         super().__init__()
 
-        if not "resnet" in model_name and (replace_conv_stride or replace_pooling):
-            raise ValueError(
-                "replacing conv or pooling layers is only implemented for the ResNet"
-            )
 
         self.input_channels = input_channels
         self.momentum = momentum
@@ -371,56 +368,10 @@ class TaskDrivenCore3(Core2d, nn.Module):
         self.pretrained = pretrained
 
         # Download model and cut after specified layer
-        self.model = getattr(ptrnets, model_name)(pretrained=pretrained)
-        if replace_downsampling:
-            torch.save(self.model.state_dict(), "model_weights")
-
-            self.model.conv1 = nn.Conv2d(
-                3, 64, 7, padding=(3, 3), bias=False, dilation=2
-            )
-            self.model.layer2[0].conv2 = nn.Conv2d(
-                128,
-                128,
-                kernel_size=(3, 3),
-                stride=(1, 1),
-                dilation=2,
-                padding=(2, 2),
-                bias=False,
-            )
-            self.model.layer3[0].conv2 = nn.Conv2d(
-                256,
-                256,
-                kernel_size=(3, 3),
-                stride=(1, 1),
-                dilation=2,
-                padding=(2, 2),
-                bias=False,
-            )
-            self.model.layer4[0].conv2 = nn.Conv2d(
-                512,
-                512,
-                kernel_size=(3, 3),
-                stride=(1, 1),
-                dilation=2,
-                padding=(2, 2),
-                bias=False,
-            )
-
-            self.model.layer2[0].downsample[0] = nn.Conv2d(
-                256, 512, kernel_size=(1, 1), stride=(1, 1), bias=False
-            )
-            self.model.layer3[0].downsample[0] = nn.Conv2d(
-                512, 1024, kernel_size=(1, 1), stride=(1, 1), bias=False
-            )
-            self.model.layer4[0].downsample[0] = nn.Conv2d(
-                1024, 2048, kernel_size=(1, 1), stride=(1, 1), bias=False
-            )
-            self.model.maxpool = nn.MaxPool2d(
-                kernel_size=3, stride=1, padding=1, dilation=1, ceil_mode=False
-            )
-
-            self.model.load_state_dict(torch.load("model_weights"), strict=True)
-            os.remove("model_weights")
+        try:
+            self.model = getattr(ptrnets, model_name)(pretrained=pretrained)
+        except AttributeError:
+            self.model = getattr(torchvision.models, model_name)(weights='IMAGENET1K_V1')
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
@@ -433,7 +384,6 @@ class TaskDrivenCore3(Core2d, nn.Module):
         try:
             self.model.eval()
             model_clipped = clip_model(self.model, self.layer_name)
-            clip_out = model_clipped(x)
         except:
             warnings.warn(
                 "Unable to clip model {} at layer {}. Using a probe instead".format(
