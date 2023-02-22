@@ -20,18 +20,13 @@ class Encoder(nn.Module):
         x = self.readout(x, data_key=data_key, **kwargs)
 
         output_attn_weights = kwargs.get("output_attn_weights", False)
-        output_slot_attention = kwargs.get("output_slot_attention", False)
         if output_attn_weights:
-            if output_slot_attention:
-                x, slot_attention_maps = x
-                return F.elu(x + self.offset) + 1, slot_attention_maps
+            if len(x) == 2:
+                x, attention_weights = x
             else:
-                if len(x) == 2:
-                    x, attention_weights = x
-                else:
-                    x, weights_1, weights_2 = x
-                    attention_weights = (weights_1, weights_2)
-                return F.elu(x + self.offset) + 1, attention_weights
+                x, weights_1, weights_2 = x
+                attention_weights = (weights_1, weights_2)
+            return F.elu(x + self.offset) + 1, attention_weights
         return F.elu(x + self.offset) + 1
 
     def regularizer(self, data_key):
