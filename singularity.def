@@ -12,7 +12,6 @@ MAINTAINER Arne Nix <arnenix@gmail.com>
     python3.8 -m pip install git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7 --no-cache-dir
     python3.8 -m pip install --no-use-pep517 -e ./nnvision --no-cache-dir
     python3.8 -m pip install --no-use-pep517 -e ./mei --no-cache-dir
-    python3.8 -m pip install -U torch torchvision --no-cache-dir
     python3.8 -m pip install --no-use-pep517 -e ./t-simcne --no-cache-dir
 %environment
     export PIP_CACHE_DIR=/mnt/qb/work/sinz/kwilleke50/.cache/pip
