@@ -27,7 +27,7 @@ setup(
         "nnfabrik",
         "neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout",
         "mei @ git+https://github.com/sinzlab/mei.git@inception_loop",
-        "CORnet @ git+https://github.com/dicarlolab/CORnet",
+        "CORnet @ git+https://github.com/KonstantinWilleke/CORnet.git",
         "ptrnets @ git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7",
     ],
     package_data={
