@@ -22,6 +22,9 @@ from typing import Dict, Any
 Key = Dict[str, Any]
 Dataloaders = Dict[str, DataLoader]
 
+# Add schema name here
+dj.config['nnfabrik.schema_name'] = "nnfabrik_toy_V4"
+
 schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 resolve_target_fn = partial(resolve_fn, default_base="targets")
 
