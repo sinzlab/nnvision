@@ -730,6 +730,9 @@ class GroupSlotAttention2d(torch.nn.ModuleDict):
             dropout_post_pos=0.1,
             stack_post_pos_encoding=None,
             n_post_pos_channels=None,
+            self_attention=False,
+            embed_out=None,
+            neuron_slot_weight_temp=1.0,
     ):
 
         if bool(n_pos_channels) ^ bool(stack_pos_encoding):
@@ -756,6 +759,8 @@ class GroupSlotAttention2d(torch.nn.ModuleDict):
 
         self.gamma_features = gamma_features
         self.gamma_query = gamma_query
+
+        self.self_attention = self_attention
 
         if bias:
             self.bias = Parameter(torch.Tensor(self.n_neurons))
@@ -789,7 +794,14 @@ class GroupSlotAttention2d(torch.nn.ModuleDict):
                 stack_channels=stack_post_pos_encoding,
             )
 
-        out_channels = self.slot_size if stack_post_pos_encoding is None else self.slot_size + n_post_pos_channels
+        out_channels = self.slot_size if stack_post_pos_encoding is not True else self.slot_size + n_post_pos_channels
+
+        if self.self_attention:
+            self.k_proj = nn.Linear(out_channels, out_channels if embed_out is None else embed_out, bias=False)
+            self.v_proj = nn.Linear(out_channels, out_channels if embed_out is None else embed_out, bias=False)
+            if embed_out is not None:
+                out_channels = embed_out
+
         self._features = Parameter(torch.Tensor(1, out_channels, self.n_neurons))
         self._features.data.fill_(1 / self.in_shape[0])
 
@@ -830,6 +842,7 @@ class GroupSlotAttention2d(torch.nn.ModuleDict):
             )
 
         self.neuron_slot_weight = torch.nn.Parameter(torch.randn(1, 1, self.num_slots, self.n_neurons))
+        self.neuron_slot_weight_temp = neuron_slot_weight_temp
         self.broadcast_size = broadcast_size
 
     def broadcast(self, z):
@@ -859,19 +872,29 @@ class GroupSlotAttention2d(torch.nn.ModuleDict):
         slots, slot_attention_maps = self.slot_attention(x_embed, width=w, height=h)  # batch_sizes, slots, channels
         slots = slots.permute(0, 2, 1)  # batch_size, slot_size, n_slots
 
-        slot_weights = torch.nn.functional.softmax(self.neuron_slot_weight, dim=2)
+        slot_weights = torch.nn.functional.softmax(self.neuron_slot_weight / self.neuron_slot_weight_temp, dim=2)
         weighted_slots = slots.unsqueeze(-1) * slot_weights # [batch_size, slot_size, num_slots, 1] * [1, 1, num_slots, n_neurons] -> [bs, slot_size, num_slots, n_neurons]
         weighted_slots = weighted_slots.sum(2) # [bs, slot_size, n_neurons]
 
         broadcasted_slots = self.broadcast(weighted_slots)  # [Images, Channels, Width, Height, Neurons]
         broadcasted_slots = rearrange(broadcasted_slots, "b c w h n -> b c (w h) n")  # [Images, Channels, Width*Height, Neurons]
-        broadcasted_slots = self.post_position_embedding(broadcasted_slots)  # [Images, Channels, Width*Height, Neurons]
+        if self.use_post_pos_enc:
+            broadcasted_slots = self.post_position_embedding(broadcasted_slots)  # [Images, Channels, Width*Height, Neurons]
 
-        weights = torch.einsum("bdsn,adn->bsn", broadcasted_slots, self.neuron_query)  # [Images, Channels, Width, Height]
+        keys, values = self.k_proj(broadcasted_slots.permute(0, 2, 3, 1)), self.v_proj(broadcasted_slots.permute(0, 2, 3, 1))  # Shape: (batch_size x w*h x slot_size)
+        keys = keys.permute(0, 3, 1, 2)  # Shape: (batch_size x slot_size x w*h x neurons
+        values = values.permute(0, 3, 1, 2)  # Shape: (batch_size x slot_size x w*h x neurons
+        if self.self_attention:
+            weights = torch.einsum("bdsn,adn->bsn", keys, self.neuron_query)  # [Images, Channels, Width, Height]
+        else:
+            weights = torch.einsum("bdsn,adn->bsn", broadcasted_slots, self.neuron_query)
         weights = weights / self.T
         weights = torch.nn.functional.softmax(weights, dim=2)
 
-        y = torch.einsum("bcsn,bsn->bcsn", broadcasted_slots, weights)
+        if self.self_attention:
+            y = torch.einsum("bcsn,bsn->bcsn", values, weights)
+        else:
+            y = torch.einsum("bcsn,bsn->bcsn", broadcasted_slots, weights)
         y = torch.einsum("bcsn,acn->bn", y, self._features)
 
         if self.bias is not None:
