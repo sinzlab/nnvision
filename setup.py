@@ -9,7 +9,7 @@ setup(
     description="Envisioning the biological visual system with DNN",
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
-    packages=["nnvision", "tables", "analyses"],
+    packages=["nnvision",],
     install_requires=[
         "setuptools>=50.3.2",
         "einops",
