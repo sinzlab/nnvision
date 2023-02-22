@@ -3,14 +3,13 @@ from setuptools import setup, find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
-
 setup(
     name="nnvision",
     version="0.1",
     description="Envisioning the biological visual system with DNN",
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
-    packages=find_packages(exclude=[]),
+    packages=["nnvision", "tables", "analyses"],
     package_dir={'nnvision': 'nnvision'},
     install_requires=[
         "setuptools>=50.3.2",
