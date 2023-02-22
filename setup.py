@@ -10,7 +10,6 @@ setup(
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
     packages=["nnvision", "tables", "analyses"],
-    package_dir={'nnvision': 'nnvision'},
     install_requires=[
         "setuptools>=50.3.2",
         "einops",
