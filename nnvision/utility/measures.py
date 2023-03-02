@@ -29,7 +29,9 @@ def model_predictions_repeats(
     target, output = [], []
     unique_images = torch.empty(0).to(device)
     batch = next(iter(dataloader))
-    mask_flag = hasattr(batch._fields, "bools") #if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
+    mask_flag = hasattr(
+        batch._fields, "bools"
+    )  # if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
 
     for batch in dataloader:
         images, responses = batch[:2]
@@ -191,11 +193,20 @@ def model_predictions_shuffled(
     Returns:
         target: ground truth, i.e. neuronal firing rates of the neurons
         output: responses as predicted by the network
+        zeroed_out: Boolean, whether to input zeros rather than targets for context modulator
     """
-
+    batch = next(iter(dataloader))
+    if (
+        "bools" in batch._fields
+    ):  # if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
+        mask_flag = True
+        masks = torch.empty(0, dtype=np.bool)
+    else:
+        mask_flag = False
     target, output = torch.empty(0), torch.empty(0)
     for batch in dataloader:
-
+        if mask_flag:
+            mask = batch.bools  # get mask from batch
         images, responses = batch[:2]
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
@@ -214,9 +225,34 @@ def model_predictions_shuffled(
                 model
             ) else contextlib.nullcontext():
                 with torch.no_grad():
-                    targets_shifted = batch_dict["targets"]
-                    targets_shifted = np.roll(targets_shifted, 1, axis=0)
-                    batch_dict["targets"] = torch.from_numpy(targets_shifted)
+                    targets_shifted = batch_dict["targets"].clone()
+                    if (
+                        "bools" in batch_dict
+                    ):  # need to be careful only to shuffle neurons that were recorded
+                        bools = batch_dict["bools"]
+                        n_neurons = np.where(
+                            np.sum(np.diff(bools.long().numpy(), axis=1), axis=0)
+                        )  # find how many neurons were in each session
+                        n_neurons = [n + 1 for n in n_neurons][0]
+                        n_neurons = np.concatenate(
+                            (n_neurons, [len(targets_shifted[0])])
+                        )
+                        idx1 = 0
+                        for idx2 in n_neurons:
+                            ids1, ids2 = np.where(
+                                bools[:, idx1:idx2]
+                            )  # shuffle neurons of each session with other showings of those neurons
+                            ids2 += np.ones(len(ids2), dtype=int) * idx1
+                            targets_shifted[ids1, ids2] = torch.from_numpy(
+                                np.roll(
+                                    targets_shifted[ids1, ids2], idx2 - idx1, axis=0
+                                )
+                            )
+                            idx1 = idx2
+                        batch_dict["targets"] = targets_shifted
+                    else:
+                        targets_shifted = np.roll(targets_shifted, 1, axis=0)
+                        batch_dict["targets"] = torch.from_numpy(targets_shifted)
                     if zeroed_out:
                         batch_dict["targets"] = torch.from_numpy(
                             np.zeros_like(targets_shifted)
@@ -235,8 +271,99 @@ def model_predictions_shuffled(
                         dim=0,
                     )
             target = torch.cat((target, responses.detach().cpu()), dim=0)
+            if mask_flag:
+                masks = torch.cat((masks, mask))
+    if mask_flag:  # mask target and output to ignore neurons that were not shown
+        target = np.ma.masked_array(target, mask=~masks)
+        output = np.ma.masked_array(output, mask=~masks)
+    else:
+        target = target.numpy()
+        output = output.numpy()
+    return target, output
 
-    return target.numpy(), output.numpy()
+
+def model_predictions_mean_input(
+    model,
+    dataloader,
+    data_key,
+    device="cuda",
+    broadcast_to_target=False,
+):
+    """
+    computes model predictions for a given dataloader and a model, with the responses as the mean of all showings of that image
+    Returns:
+        target: ground truth, i.e. neuronal firing rates of the neurons
+        output: responses as predicted by the network
+    """
+    batch = next(iter(dataloader))
+    if (
+        "bools" in batch._fields
+    ):  # if there are bools in the dataloaders, the neurons marked with "False" were not shown in this session and should not be returned as the output
+        mask_flag = True
+        masks = torch.empty(0, dtype=np.bool)
+    else:
+        mask_flag = False
+    target, output = torch.empty(0), torch.empty(0)
+    for batch in dataloader:
+        images, responses = batch[:2]
+        if mask_flag:
+            mask = batch.bools  # get mask from batch
+        if len(images.shape) == 5:
+            images = images.squeeze(dim=0)
+            responses = responses.squeeze(dim=0)
+        # check that all images in batch are equal
+        assert torch.all(
+            torch.eq(
+                images[-1, :1, ...],
+                images[0, :1, ...],
+            )
+        ), "All images in the batch should be equal"
+        # shuffle responses as input for context responses
+        batch_dict = batch._asdict()
+        for i in np.arange(batch_dict["targets"].shape[0] - 1):
+            with device_state(model, device) if not is_ensemble_function(
+                model
+            ) else contextlib.nullcontext():
+                with torch.no_grad():
+                    targets_mean = batch_dict["targets"].clone().numpy()
+                    if "bools" in batch_dict:
+                        bools = batch_dict["bools"]
+                        for col in np.arange(
+                            bools.shape[1]
+                        ):  # average over each column where the Booleans are True
+                            targets_mean[np.where(bools[:, col]), col] = np.mean(
+                                targets_mean[np.where(bools[:, col]), col]
+                            )
+                    else:
+                        row = np.mean(targets_mean, axis=0)
+                        targets_mean = np.tile(row, targets_mean.shape[0]).reshape(
+                            targets_mean.shape
+                        )
+                    batch_dict["targets"] = torch.from_numpy(targets_mean)
+
+                    output = torch.cat(
+                        (
+                            output,
+                            (
+                                model(
+                                    images.to(device), data_key=data_key, **batch_dict
+                                )
+                                .detach()
+                                .cpu()
+                            ),
+                        ),
+                        dim=0,
+                    )
+            target = torch.cat((target, responses.detach().cpu()), dim=0)
+            if mask_flag:
+                masks = torch.cat((masks, mask))
+    if mask_flag:  # mask target and output to ignore neurons that were not shown
+        target = np.ma.masked_array(target, mask=~masks)
+        output = np.ma.masked_array(output, mask=~masks)
+    else:
+        target = target.numpy()
+        output = output.numpy()
+    return target, output
 
 
 def model_predictions(model, dataloader, data_key, device="cpu"):
@@ -297,7 +424,6 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
     else:
         target = target.numpy()
         output = output.numpy()
-
     return target, output
 
 
@@ -399,6 +525,42 @@ def get_correlations_shuffled(
                 data_key=k,
                 device=device,
                 zeroed_out=zeroed_out,
+            )
+            correlations[k] = corr(target, output, axis=0)
+            print(k)
+            if np.any(np.isnan(correlations[k])):
+                warnings.warn(
+                    "{}% NaNs , NaNs will be set to Zero.".format(
+                        np.isnan(correlations[k]).mean() * 100
+                    )
+                )
+            correlations[k][np.isnan(correlations[k])] = 0
+
+    if not as_dict:
+        correlations = (
+            np.hstack([v for v in correlations.values()])
+            if per_neuron
+            else np.mean(np.hstack([v for v in correlations.values()]))
+        )
+    return correlations
+
+
+def get_correlations_mean_input(
+    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
+):
+    if "test" in dataloaders:
+        dataloaders = dataloaders["test"]
+    correlations = {}
+    with eval_state(model) if not is_ensemble_function(
+        model
+    ) else contextlib.nullcontext():
+        for k, v in dataloaders.items():
+            print(k)
+            target, output = model_predictions_mean_input(
+                dataloader=v,
+                model=model,
+                data_key=k,
+                device=device,
             )
             correlations[k] = corr(target, output, axis=0)
             print(k)

@@ -488,7 +488,7 @@ def se_core_full_gauss_readout_modulators(
         linear=linear,
         attention_conv=attention_conv,
     )
-
+    print("Doing readout now, guys")
     readout = MultipleFullGaussian2dModulators(
         core,
         in_shape_dict=in_shapes_dict,
