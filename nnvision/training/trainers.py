@@ -17,6 +17,7 @@ from neuralpredictors.training import (
     LongCycler,
 )
 from nnfabrik.utility.nn_helpers import set_random_seed
+from cnexp.lrschedule import CosineAnnealingSchedule, LinearAnnealingSchedule
 
 from ..utility import measures
 from ..utility.measures import get_correlations, get_poisson_loss
@@ -388,6 +389,181 @@ def finetune_trainer(
                 if (batch_no + 1) % optim_step_count == 0:
                     optimizer.step()
                     optimizer.zero_grad()
+
+    ##### Model evaluation ####################################################################################################
+    model.eval()
+    tracker.finalize() if track_training else None
+
+    # Compute avg validation and test correlation
+    validation_correlation = get_correlations(
+        model, dataloaders["validation"], device=device, as_dict=False, per_neuron=False
+    )
+    test_correlation = get_correlations(
+        model, dataloaders["test"], device=device, as_dict=False, per_neuron=False
+    )
+
+    # return the whole tracker output as a dict
+    output = {k: v for k, v in tracker.log.items()} if track_training else {}
+    output["validation_corr"] = validation_correlation
+
+    score = (
+        np.mean(test_correlation)
+        if return_test_score
+        else np.mean(validation_correlation)
+    )
+    return score, output, model.state_dict()
+
+
+def multistep_trainer(
+    model,
+    dataloaders,
+    seed,
+    avg_loss=False,
+    scale_loss=True,  # trainer args
+    loss_function="PoissonLoss",
+    stop_function="get_correlations",
+    loss_accum_batch_n=None,
+    device="cuda",
+    interval=1,
+    patience=5,
+    maximize=True,
+    tolerance=1e-4,
+    restore_best=True,
+    lr_decay_steps=4,
+    cb=None,
+    track_training=False,
+    return_test_score=False,
+    lr1=5e-4,
+    lr2=1e-5,
+    n1=200,
+    n2=200,
+    disable_tqdm=True,
+    **kwargs,
+):
+    def full_objective(model, dataloader, data_key, *args, **kwargs):
+        """
+
+        Args:
+            model:
+            dataloader:
+            data_key:
+            *args:
+
+        Returns:
+
+        """
+        loss_scale = (
+            np.sqrt(len(dataloader[data_key].dataset) / args[0].shape[0])
+            if scale_loss
+            else 1.0
+        )
+        preds = model(args[0].to(device), data_key=data_key, **kwargs)
+        if "bools" in kwargs:
+            preds = preds * kwargs["bools"].to(device)
+        resps = args[1].to(device)
+        return loss_scale * criterion(preds, resps) + model.regularizer(data_key)
+
+    model.to(device)
+    set_random_seed(seed)
+    model.train()
+
+    criterion = getattr(mlmeasures, loss_function)(avg=avg_loss)
+    stop_closure = partial(
+        getattr(measures, stop_function),
+        dataloaders=dataloaders["validation"],
+        device=device,
+        per_neuron=False,
+        avg=True,
+    )
+
+    n_iterations = len(LongCycler(dataloaders["train"]))
+
+    # set the number of iterations over which you would like to accummulate gradients
+    optim_step_count = (
+        len(dataloaders["train"].keys())
+        if loss_accum_batch_n is None
+        else loss_accum_batch_n
+    )
+
+    # Step 1: train readout
+    tracker = None
+    model.core.requires_grad_(False)
+    model.readout.requires_grad_(True)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr1)
+    scheduler = CosineAnnealingSchedule(opt=optimizer, n_epochs=n1)
+
+    # train over epochs
+    for epoch, val_obj in early_stopping(
+        model,
+        stop_closure,
+        interval=interval,
+        patience=patience,
+        start=0,
+        max_iter=n1,
+        maximize=maximize,
+        tolerance=tolerance,
+        restore_best=restore_best,
+        tracker=tracker,
+        scheduler=scheduler,
+        lr_decay_steps=lr_decay_steps,
+    ):
+        # executes callback function if passed in keyword args
+        if cb is not None:
+            cb()
+        # train over batches
+        optimizer.zero_grad()
+        for batch_no, (data_key, data) in tqdm(
+            enumerate(LongCycler(dataloaders["train"])),
+            total=n_iterations,
+            desc="Epoch {}".format(epoch),
+            disable=disable_tqdm,
+        ):
+
+            loss = full_objective(
+                model, dataloaders["train"], data_key, *data[:2], **data._asdict()
+            )
+            loss.backward()
+            if (batch_no + 1) % optim_step_count == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
+    # Step 2: finetune entire model
+    model.core.requires_grad_(True)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr2)
+    scheduler = CosineAnnealingSchedule(opt=optimizer, n_epochs=n2)
+
+    # train over epochs
+    for epoch, val_obj in early_stopping(
+            model,
+            stop_closure,
+            interval=interval,
+            patience=patience,
+            start=0,
+            max_iter=n2,
+            maximize=maximize,
+            tolerance=tolerance,
+            restore_best=restore_best,
+            tracker=tracker,
+            scheduler=scheduler,
+            lr_decay_steps=lr_decay_steps,
+    ):
+        # executes callback function if passed in keyword args
+        if cb is not None:
+            cb()
+        # train over batches
+        optimizer.zero_grad()
+        for batch_no, (data_key, data) in tqdm(
+                enumerate(LongCycler(dataloaders["train"])),
+                total=n_iterations,
+                desc="Epoch {}".format(epoch),
+                disable=disable_tqdm,
+        ):
+
+            loss = full_objective(model, dataloaders["train"], data_key, *data)
+            loss.backward()
+            if (batch_no + 1) % optim_step_count == 0:
+                optimizer.step()
+                optimizer.zero_grad()
 
     ##### Model evaluation ####################################################################################################
     model.eval()

@@ -3,15 +3,13 @@ from setuptools import setup, find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
-
 setup(
     name="nnvision",
     version="0.1",
     description="Envisioning the biological visual system with DNN",
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
-    packages=find_packages(exclude=[]),
-    package_dir={'nnvision': 'nnvision'},
+    packages=["nnvision",],
     install_requires=[
         "setuptools>=50.3.2",
         "einops",
@@ -27,7 +25,7 @@ setup(
         "nnfabrik",
         "neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout",
         "mei @ git+https://github.com/sinzlab/mei.git@inception_loop",
-        "CORnet @ git+https://github.com/dicarlolab/CORnet",
+        "CORnet @ git+https://github.com/KonstantinWilleke/CORnet.git",
         "ptrnets @ git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7",
     ],
     package_data={
