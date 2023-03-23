@@ -334,6 +334,27 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
             )
         return responses
 
+    def get_neuronal_responses(self, key):
+        """
+        gets the real neuronal responses for the given image.
+        Requirements:
+            - dataloader has to have the "all_sessions" data_key
+            - the dataloader must have the data_key "bools" which is a boolean array of shape (n_images, n_neurons)
+            - the test image has to be present in the ReconImage comment
+            - the index from the comment will be looked up in the "test" dataloadeer
+
+        returns:
+            torch.Tensor of shape (1, n_neurons)
+        """
+        c = (ReconImage & key).fetch1("comment")
+        dl = (Dataset & key).get_dataloader()
+        img_index = int(c[11:])
+        for k, batch in enumerate(dl["test"]["all_sessions"]):
+            if k == img_index:
+                neuronal_responses = torch.stack([batch.targets[bools, i].mean() for i, bools in enumerate(batch.bools.T)]).unsqueeze(0).cuda()
+                break
+        return neuronal_responses
+
     def get_original_image(
         self,
         key,
@@ -367,9 +388,7 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
         )
         response_model.eval().cuda()
         if recon_type == "neurons":
-            raise NotImplementedError(
-                "Reconstructions from real neuronal responses is not yet possible"
-            )
+            responses = self.get_neuronal_responses(key)
         else:
             responses = self.get_model_responses(
                 model=response_model,
