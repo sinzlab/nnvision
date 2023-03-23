@@ -20,43 +20,44 @@ from ..datasets.conventions import unit_type_conventions
 
 schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
+
 @schema
-class Recording(dj.Computed):
-    definition = """
-    # Overview table that summarizes the experiment, session, and unit data of table entry in nnfabrik's Dataset.
-    
-    -> Dataset
-    ---
-    brain_area:            varchar(64)   # some string
-    experiment_name:       varchar(64)   # another string
+class RecordingInterface(dj.Computed):
+    definition = """	
+    # Overview table that summarizes the experiment, session, and unit data of table entry in nnfabrik's Dataset.	
+    -> Dataset	
+    ---	
+    brain_area:            varchar(64)   # some string	
+    experiment_name:       varchar(64)   # another string	
     n_sessions:            int
-    total_n_neurons:       int
+    total_n_neurons:       int	
     """
 
     class Sessions(dj.Part):
-        definition = """
-        # This table stores something.
-
-        -> master
-        data_key:              varchar(64)
-        ---
-        animal_id:             varchar(64)
-        n_neurons:             int
-        x_grid:                float
-        y_grid:                float
+        definition = """	
+        # This table stores something.	
+        -> master	
+        data_key_original:     varchar(64)	
+        data_key:              varchar(64)	
+        ---	
+        animal_id:             varchar(64)	
+        n_neurons:             int	
+        x_grid:                float	
+        y_grid:                float	
         """
 
     class Units(dj.Part):
-        definition = """
-        # All Units
-
-        -> master
-        unit_id:            int     
-        unit_type:          int
-        ---
-        unit_index:         int
-        electrode:          int
-        relative_depth:     float
+        definition = """	
+        # All Units	
+        -> master.Sessions	
+        unit_id_original:       int     	
+        unit_id:                int	
+        unit_type:              int	
+        ---	
+        unit_index_original:             int	
+        unit_index:    int	
+        electrode:              int	
+        relative_depth:         float	
         """
         constrained_output_model = ConstrainedOutputModel
 
@@ -163,6 +164,7 @@ class Recording(dj.Computed):
                 electrode = [electrode]
                 relative_depth = [relative_depth]
 
+
             unit_ids = np.concatenate([unit_ids, unit_ids_mua])
             unit_type = np.concatenate([unit_type, unit_types_mua])
             unit_type_int = []
@@ -199,6 +201,7 @@ class Recording(dj.Computed):
         combined_neuron_counter = None if combined_data_key is None else 0
         for k, v in session_dict.items():
             key["data_key"] = k if combined_data_key is None else combined_data_key
+            key["data_key_original"] = k
             key["animal_id"] = str(v["animal_id"])
             key["n_neurons"] = v["n_neurons"]
             key["x_grid"] = v["x_grid"]
@@ -207,21 +210,16 @@ class Recording(dj.Computed):
             self.Sessions().insert1(key, ignore_extra_fields=True, skip_duplicates=True)
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
-                key["unit_id"] = (
-                    int(neuron_id)
-                    if combined_neuron_counter is None
-                    else combined_neuron_counter
-                )
-                key["unit_index"] = (
-                    i if combined_neuron_counter is None else combined_neuron_counter
-                )
+                key["unit_id_original"] = int(neuron_id)
+                key["unit_id"] = combined_neuron_counter
+                key["unit_index_original"] = i
+                key["unit_index"] = combined_neuron_counter
                 key["unit_type"] = int(
                     (session_dict[k]["unit_type"][i]).astype(np.float)
                 )
                 key["electrode"] = session_dict[k]["electrode"][i]
                 key["relative_depth"] = session_dict[k]["relative_depth"][i]
                 self.Units().insert1(key, ignore_extra_fields=True)
-                combined_neuron_counter += (
-                    1 if combined_neuron_counter is not None else 0
-                )
 
+                if combined_neuron_counter is not None:
+                    combined_neuron_counter += 1
