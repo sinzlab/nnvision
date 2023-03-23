@@ -151,7 +151,7 @@ def se_core_gauss_readout(
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -732,7 +732,7 @@ def se_core_point_readout(
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -852,7 +852,7 @@ def stacked2d_core_gaussian_readout(
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -958,7 +958,7 @@ def vgg_core_gauss_readout(
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -1064,7 +1064,7 @@ def vgg_core_full_gauss_readout(
 
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
@@ -1185,7 +1185,7 @@ def se_core_spatialXfeature_readout(
     # initializing readout bias to mean response
     if readout_bias and data_info is None:
         for key, value in dataloaders.items():
-            _, targets = next(iter(value))
+            _, targets = next(iter(value))[:2]
             readout[key].bias.data = targets.mean(0)
 
     model = Encoder(core, readout, elu_offset)
