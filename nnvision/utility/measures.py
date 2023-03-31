@@ -29,7 +29,11 @@ def model_predictions_repeats(
     target, output = [], []
     unique_images = torch.empty(0).to(device)
     for batch in dataloader:
-        images, responses = batch[:2]
+        images, responses = list(batch)[:2]
+        if "deeplake" in str(type(batch)):
+            data_kwargs = batch
+        else:
+            data_kwargs = batch._asdict()
 
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
@@ -65,7 +69,7 @@ def model_predictions_repeats(
                             model(
                                 images.to(device),
                                 data_key=data_key,
-                                **batch._asdict(),
+                                **data_kwargs,
                                 repeat_channel_dim=repeat_channel_dim
                             )
                             .detach()
@@ -113,7 +117,12 @@ def model_predictions_repeats_legacy(
     target = []
     unique_images = torch.empty(0)
     for batch in dataloader:
-        images, responses = batch[:2]
+        images, responses = list(batch)[:2]
+        if "deeplake" in str(type(batch)):
+            data_kwargs = batch
+        else:
+            data_kwargs = batch._asdict()
+
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
@@ -149,7 +158,7 @@ def model_predictions_repeats_legacy(
             with torch.no_grad():
                 output = (
                     model(
-                        unique_images.to(device), data_key=data_key, **batch._asdict()
+                        unique_images.to(device), data_key=data_key, **data_kwargs
                     )
                     .detach()
                     .cpu()
@@ -181,7 +190,7 @@ def model_predictions_shuffled(
     target, output = torch.empty(0), torch.empty(0)
     for batch in dataloader:
 
-        images, responses = batch[:2]
+        images, responses = list(batch)[:2]
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
@@ -193,17 +202,23 @@ def model_predictions_shuffled(
             )
         ), "All images in the batch should be equal"
         # shuffle responses as input for context responses
-        batch_dict = batch._asdict()
-        for i in np.arange(batch_dict["targets"].shape[0] - 1):
+        
+        
+        if "deeplake" in str(type(batch)):
+            data_kwargs = batch
+        else:
+            data_kwargs = batch._asdict()
+        
+        for i in np.arange(data_kwargs["targets"].shape[0] - 1):
             with device_state(model, device) if not is_ensemble_function(
                 model
             ) else contextlib.nullcontext():
                 with torch.no_grad():
-                    targets_shifted = batch_dict["targets"]
+                    targets_shifted = data_kwargs["targets"]
                     targets_shifted = np.roll(targets_shifted, 1, axis=0)
-                    batch_dict["targets"] = torch.from_numpy(targets_shifted)
+                    data_kwargs["targets"] = torch.from_numpy(targets_shifted)
                     if zeroed_out:
-                        batch_dict["targets"] = torch.from_numpy(
+                        data_kwargs["targets"] = torch.from_numpy(
                             np.zeros_like(targets_shifted)
                         )
                     output = torch.cat(
@@ -211,7 +226,7 @@ def model_predictions_shuffled(
                             output,
                             (
                                 model(
-                                    images.to(device), data_key=data_key, **batch_dict
+                                    images.to(device), data_key=data_key, **data_kwargs
 
                                 )
                                 .detach()
@@ -235,13 +250,18 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
 
     target, output = torch.empty(0), torch.empty(0)
     batch = next(iter(dataloader))
-    if "bools" in batch._fields:
+    batch_keys = batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
+    if "bools" in batch_keys:
         mask_flag = True
         masks = torch.empty(0, dtype=np.bool)
     else:
         mask_flag = False
     for batch in dataloader:
-        images, responses = batch[:2]
+        images, responses = list(batch)[:2]
+        if "deeplake" in str(type(batch)):
+            data_kwargs = batch
+        else:
+            data_kwargs = batch._asdict()
         if mask_flag:
             mask = batch.bools
         if len(images.shape) == 5:
@@ -261,7 +281,7 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
                                 model(
                                     images.to(device),
                                     data_key=data_key,
-                                    **batch._asdict()
+                                    **data_kwargs
                                 )
                                 .detach()
                                 .cpu()
@@ -799,7 +819,7 @@ def get_avg_firing(dataloaders, as_dict=False, per_neuron=True):
     for k, dataloader in dataloaders.items():
         target = torch.empty(0)
         for batch in dataloader:
-            images, responses = batch[:2]
+            images, responses = list(batch)[:2]
             if len(images.shape) == 5:
                 responses = responses.squeeze(dim=0)
             target = torch.cat((target, responses.detach().cpu()), dim=0)
