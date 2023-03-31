@@ -201,9 +201,7 @@ class ImageCache:
                 ...,
             ]
             image = image if self.scale == 1 else rescale_fn(image, self.scale)
-            image = image[
-                None,
-            ].permute(0, 3, 1, 2)
+            image = image.transpose((2, 0, 1))
         else:
             raise ValueError(
                 f"Image shape has to be two dimensional (grayscale) or three dimensional "
