@@ -57,7 +57,7 @@ data_info = {
 }
 
 current_dir = os.path.dirname(__file__)
-filename = os.path.join(current_dir, '../../data/model_weights/data_driven/v4_multihead_attention_SOTA.pth.tar')
+filename = os.path.join(current_dir, '../../data/model_weights/v4_data_driven/v4_multihead_attention_SOTA.pth.tar')
 state_dict = torch.load(filename)
 
 # load single model
