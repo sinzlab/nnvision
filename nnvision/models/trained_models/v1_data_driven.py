@@ -6,62 +6,42 @@ import nnfabrik
 from nnfabrik.builder import get_model
 
 # full model key
-key = {
-    "model_fn": "nnvision.models.models.se_core_shared_multihead_attention",
-    "model_hash": "bcf9ce3e3869d5ac0cf83e7fcef54e58",
-    "dataset_fn": "nnvision.datasets.monkey_loaders.monkey_static_loader_combined",
-    "dataset_hash": "9ef1991a6c99e7d5af6e2a51c3a537a6",
-    "trainer_fn": "nnvision.training.trainers.nnvision_trainer",
-    "trainer_hash": "e67767f0f592b14b0bebe7d4a96c442d",
-    "seed": 9000,
-}
+key = {'model_fn': 'nnvision.models.se_core_point_readout',
+  'model_hash': 'f8bcd882c48a55dc6cd6d7afb656f1f9',
+  'dataset_fn': 'nnvision.datasets.monkey_loaders.monkey_static_loader_combined',
+  'dataset_hash': 'ad53bc33a1a89c8e7c9c38bb9ef82474',
+  'trainer_fn': 'nnvision.training.trainers.nnvision_trainer',
+  'trainer_hash': 'e67767f0f592b14b0bebe7d4a96c442d',
+  'seed': 2000}
 
-model_fn = "nnvision.models.models.se_core_shared_multihead_attention"
-model_config = {
-    "pad_input": False,
-    "gamma_input": 10,
-    "layers": 5,
-    "depth_separable": True,
-    "n_se_blocks": 0,
-    "stack": -1,
-    "input_kern": 9,
-    "hidden_kern": 5,
-    "hidden_channels": 96,
-    "hidden_dilation": 1,
-    "linear": False,
-    "use_pos_enc": True,
-    "dropout_pos": 0.1,
-    "final_batch_norm": True,
-    "final_nonlinearity": True,
-    "key_embedding": True,
-    "value_embedding": True,
-    "layer_norm": False,
-    "scale": True,
-    "learned_pos": False,
-    "embed_out_dim": 128,
-    "gamma_embedding": 0,
-    "gamma_query": 1,
-    "gamma_features": 1,
-    "heads": 1,
-    "temperature": [True, 1],
-}
+model_fn = 'nnvision.models.se_core_point_readout'
+model_config = {'pad_input': False,
+ 'stack': -1,
+ 'depth_separable': True,
+ 'input_kern': 24,
+ 'gamma_input': 10,
+ 'gamma_readout': 0.5,
+ 'hidden_dilation': 2,
+ 'hidden_kern': 9,
+ 'se_reduction': 16,
+ 'n_se_blocks': 2,
+ 'hidden_channels': 32}
 
 data_info = {
     "all_sessions": {
-        "input_dimensions": torch.Size([64, 1, 100, 100]),
+        "input_dimensions": torch.Size([128, 1, 93, 93]),
         "input_channels": 1,
-        "output_dimension": 1244,
+        "output_dimension": 458,
         "img_mean": 124.54466,
         "img_std": 70.28,
     },
 }
-
 current_dir = os.path.dirname(__file__)
-filename = os.path.join(current_dir, '../../data/model_weights/v4_data_driven/v4_multihead_attention_SOTA.pth.tar')
+filename = os.path.join(current_dir, '../../data/model_weights/v1_data_driven/v1_sota_cnn.pth.tar')
 state_dict = torch.load(filename)
 
 # load single model
-v4_multihead_attention_model = get_model(
+v1_data_driven_sota = get_model(
     model_fn, model_config, seed=10, data_info=data_info, state_dict=state_dict
 )
 
@@ -76,7 +56,7 @@ ensemble_names = ['sota_cnn_ensemble_model_2.pth.tar',
 
 base_dir = os.path.dirname(filename)
 ensemble_models = []
-ensemble_models.append(v4_multihead_attention_model)
+ensemble_models.append(v1_data_driven_sota)
 
 for f in ensemble_names:
     ensemble_filename = os.path.join(base_dir, f)
@@ -86,7 +66,8 @@ for f in ensemble_names:
     )
     ensemble_models.append(ensemble_model)
 
-v4_multihead_attention_ensemble_model = EnsembleModel(*ensemble_models)
+# Ensemble model
+v1_data_driven_sota_ensemble_model = EnsembleModel(*ensemble_models)
 
 
 # load second ensemble model with different seeds (models 6-10)
@@ -107,4 +88,5 @@ for f in ensemble_names:
     )
     ensemble_models.append(ensemble_model)
 
-v4_multihead_attention_ensemble_model_2 = EnsembleModel(*ensemble_models)
+# Second ensemble model
+v1_data_driven_sota_ensemble_model_2 = EnsembleModel(*ensemble_models)
