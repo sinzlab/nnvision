@@ -100,7 +100,7 @@ def nnvision_trainer(
             else 1.0
         )
         preds = model(args[0].to(device), data_key=data_key, **kwargs)
-        if "bools" in kwargs:
+        if "bools" in kwargs: #zero out predictions where bools are False, a.k.a where neurons weren't recorded
             preds = preds * kwargs["bools"].to(device)
         resps = args[1].to(device)
         return loss_scale * criterion(preds, resps) + model.regularizer(data_key)

@@ -622,7 +622,7 @@ class MultipleFullGaussian2dModulators(MultiReadout, torch.nn.ModuleDict):
                 return (
                     self[data_key].feature_l1(average=False) * self.gamma_readout
                     + self[data_key].mu_dispersion * self.gamma_grid_dispersion
-                    + self[data_key].context_modulator_l1()
+                    + self[data_key].context_modulator_l2()
                     * self.gamma_context_regularizer
                 )
             elif self.prev_regularizer:

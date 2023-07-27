@@ -358,10 +358,10 @@ def monkey_static_loader_combined(
     include_n_neurons=False,
     include_session_ids=False,
     include_prev_responses=False,
-    include_context_zeroed=False,
+    include_trial_positions=False,
 ):
     """
-    Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times.
+    Function that returns cached dataloaders for monkey ephys experiments, with the responses to each image from all sessions so that the images that were shown in several session are not passed through the core several times. This is achieved by concatenating responses from all sessions into one long target vector.
 
      creates a nested dictionary of dataloaders in the format
             {'train' : dict_of_loaders,
@@ -397,12 +397,11 @@ def monkey_static_loader_combined(
         time_bins_sum: sums the responses over x time bins.
         avg: Boolean - Sums oder Averages the responses across bins.
         include_prev_image: Boolean - whether to add the previous image to the core input as a second image channel
-        include_trial_id: Boolean -  whether to add the trial ID to the core input as a second image channel
         include_bools: Boolean - dataloader has a "booleans"-array that indicates which neurons were shown the image and which weren't (necessary for zeroing out the gradients from those neurons that weren't shown the image)
         include_n_neurons: Boolean - whether to include a variable n_neurons in the datasets that records how many neurons were from each session
         include_sessions_ids: Boolean - whether to include a variable session_ids in the datasets that has the IDs for each neuron
         include_prev_responses: Boolean - whether to include the responses to the previous images for the readout
-
+        include_trial_positions: Boolean- whether to include the positions at which each image was shown within a 15-image trial
 
     Returns: nested dictionary of dataloaders with one dataloader for all sessions
     """
@@ -505,7 +504,7 @@ def monkey_static_loader_combined(
         len(neuronal_data_files), dtype=np.uint8
     )  # save number of neurons for easier access
     max_repeats = 0  # save number of max repeats in test dataset
-    all_testing_ids = np.array([], dtype=np.uint16)  # unique testing
+    all_testing_ids = np.array([], dtype=np.uint16)  # unique testing ids
     if include_session_ids:
         session_ids = np.array([], dtype=np.int32)
 
@@ -562,6 +561,10 @@ def monkey_static_loader_combined(
         all_prev_responses_test = np.zeros(
             (len(all_testing_ids), np.sum(n_neurons))
         )  # shape: (number of testing IDs (with repetitions), number of neurons)
+    if include_trial_positions:  # make arrays for trial positions if necessary
+        all_trial_positions_train = np.zeros((len(all_train_ids), np.sum(n_neurons)))
+        all_trial_positions_val = np.zeros((len(all_validation_ids), np.sum(n_neurons)))
+        all_trial_positions_test = np.zeros((len(all_testing_ids), np.sum(n_neurons)))
 
     for i, datapath in tqdm(
         enumerate(neuronal_data_files),
@@ -571,22 +574,23 @@ def monkey_static_loader_combined(
         with open(datapath, "rb") as pkl:
             raw_data = pickle.load(pkl)
 
+        # get responses from raw data
         responses_train = raw_data["training_responses"].astype(np.float32)
         responses_test = raw_data["testing_responses"].astype(np.float32)
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
-
         responses_test = responses_test.transpose((2, 0, 1))
         responses_train = responses_train.transpose((2, 0, 1))
 
-        if time_bins_sum is not None:  # then average over given time bins
+        if time_bins_sum is not None:  # then average or sum over given time bins
             responses_train = (np.mean if avg else np.sum)(
                 responses_train[:, :, time_bins_sum], axis=-1
             )
             responses_test = (np.mean if avg else np.sum)(
                 responses_test[:, :, time_bins_sum], axis=-1
             )
-        if include_prev_responses:
+
+        if include_prev_responses:  # get previous resposnses
             prior_training_image_ids = (
                 raw_data["training_prior_image_ids"] - image_id_offset
             )
@@ -598,9 +602,19 @@ def monkey_static_loader_combined(
                 (zer, responses_train[:-1, :])
             )  # shift responses by one to get previous responses
             prev_responses_test = np.concatenate((zer, responses_test[:-1, :]))
-            # zero them out where prior_ids are zero
+            # zero the responses out where prior_ids are zero since those were recorded in the previous trial
             prev_responses_train[np.where(prior_training_image_ids == 0)] *= 0
             prev_responses_test[np.where(prior_testing_image_ids == 0)] *= 0
+
+        if (
+            include_trial_positions
+        ):  # note trial positions from 0 to 14 (every trial is 15 images long)
+            training_trial_positions = np.tile(
+                np.arange(15), int(len(training_image_ids) / 15) + 1
+            )[0 : len(training_image_ids)]
+            testing_trial_positions = np.tile(
+                np.arange(15), int(len(testing_image_ids) / 15) + 1
+            )[0 : len(testing_image_ids)]
 
         # neuron indices for this session
         n_start = np.sum(n_neurons[0:i])
@@ -614,6 +628,10 @@ def monkey_static_loader_combined(
                 all_train_bools[k][n_start:n_end] = True
                 if include_prev_responses:
                     all_prev_responses_train[k][n_start:n_end] = prev_responses_train[j]
+                if include_trial_positions:
+                    all_trial_positions_train[k][
+                        n_start:n_end
+                    ] = training_trial_positions[j]
 
         # go through all validation ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
         for k, val_id in enumerate(all_validation_ids):
@@ -623,6 +641,10 @@ def monkey_static_loader_combined(
                 all_val_bools[k][n_start:n_end] = True
                 if include_prev_responses:
                     all_prev_responses_val[k][n_start:n_end] = prev_responses_train[j]
+                if include_trial_positions:
+                    all_trial_positions_val[k][
+                        n_start:n_end
+                    ] = training_trial_positions[j]
 
         # go through all test ids, add the responses for all repeats in the appropriate space
         for k, test_id in enumerate(all_testing_ids_unique):
@@ -635,13 +657,20 @@ def monkey_static_loader_combined(
                 if include_prev_responses:
                     all_prev_responses_test[k * max_repeats + j][
                         n_start:n_end
-                    ] = prev_responses_test[j]
-
+                    ] = prev_responses_test[idx]
+                if include_trial_positions:
+                    all_trial_positions_test[k * max_repeats + j][
+                        n_start:n_end
+                    ] = training_trial_positions[idx]
     # delete rows with nothing in them to prevent miscalculation later
     all_responses_train = all_responses_train[~(~all_train_bools).all(axis=1)]
     all_train_ids = all_train_ids[~(~all_train_bools).all(axis=1)]
     if include_prev_responses:
         all_prev_responses_train = all_prev_responses_train[
+            ~(~all_train_bools).all(axis=1)
+        ]
+    if include_trial_positions:
+        all_trial_positions_train = all_trial_positions_train[
             ~(~all_train_bools).all(axis=1)
         ]
     all_train_bools = all_train_bools[~(~all_train_bools).all(axis=1)]
@@ -650,12 +679,18 @@ def monkey_static_loader_combined(
     all_validation_ids = all_validation_ids[~(~all_val_bools).all(axis=1)]
     if include_prev_responses:
         all_prev_responses_val = all_prev_responses_val[~(~all_val_bools).all(axis=1)]
+    if include_trial_positions:
+        all_trial_positions_val = all_trial_positions_val[~(~all_val_bools).all(axis=1)]
     all_val_bools = all_val_bools[~(~all_val_bools).all(axis=1)]
 
     all_responses_test = all_responses_test[~(~all_test_bools).all(axis=1)]
     all_testing_ids = all_testing_ids[~(~all_test_bools).all(axis=1)]
     if include_prev_responses:
         all_prev_responses_test = all_prev_responses_test[
+            ~(~all_test_bools).all(axis=1)
+        ]
+    if include_trial_positions:
+        all_trial_positions_test = all_trial_positions_test[
             ~(~all_test_bools).all(axis=1)
         ]
     all_test_bools = all_test_bools[~(~all_test_bools).all(axis=1)]
@@ -665,7 +700,7 @@ def monkey_static_loader_combined(
     args_val = [all_validation_ids, all_responses_val]
     args_test = [all_testing_ids, all_responses_test]
 
-    # include bools, n_neurons and/or session_ids to args for dataloaders
+    # include bools, n_neurons, session_ids and/or trial positions to args for dataloaders
     idx = 1
 
     if include_prev_responses:
@@ -695,43 +730,35 @@ def monkey_static_loader_combined(
         args_test.insert(idx, session_ids)
         idx += 1
 
-    if (
-        include_context_zeroed
-    ):  # include responses with every 15th response zeroed out to compare to previous responses
-        resps_train_zeroed = np.copy(all_responses_train)
-        resps_train_zeroed[::15] = 0
-        args_train.insert(idx, resps_train_zeroed)
-        resps_val_zeroed = np.copy(all_responses_val)
-        resps_val_zeroed[::15] = 0
-        args_val.insert(idx, resps_val_zeroed)
-        resps_test_zeroed = np.copy(all_responses_test)
-        resps_test_zeroed[::15] = 0
-        args_test.insert(idx, resps_test_zeroed)
+    if include_trial_positions:
+        args_train.insert(idx, all_trial_positions_train)
+        args_val.insert(idx, all_trial_positions_val)
+        args_test.insert(idx, all_trial_positions_test)
+        idx += 1
 
+    # get dataloaders for train, validation and test images
     train_loader = get_cached_loader_extended(
         *args_train,
         batch_size=batch_size,
         image_cache=cache,
-        include_trial_id=include_trial_id,
         include_bools=include_bools,
         include_n_neurons=include_n_neurons,
         include_prev_image=include_prev_image,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
-        include_context_zeroed=include_context_zeroed,
+        include_trial_positions=include_trial_positions,
     )
 
     val_loader = get_cached_loader_extended(
         *args_val,
         batch_size=batch_size,
         image_cache=cache,
-        include_trial_id=include_trial_id,
         include_bools=include_bools,
         include_n_neurons=include_n_neurons,
         include_prev_image=include_prev_image,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
-        include_context_zeroed=include_context_zeroed,
+        include_trial_positions=include_trial_positions,
     )
 
     test_loader = get_cached_loader_extended(
@@ -743,12 +770,11 @@ def monkey_static_loader_combined(
         include_bools=include_bools,
         include_n_neurons=include_n_neurons,
         include_prev_image=include_prev_image,
-        include_trial_id=include_trial_id,
         include_session_ids=include_session_ids,
         include_prev_responses=include_prev_responses,
-        include_context_zeroed=include_context_zeroed,
+        include_trial_positions=include_trial_positions,
     )
-
+    # as opposed to the original static loader, there is only one key since all sessions are combined
     data_key = "all_sessions"
     dataloaders["train"][data_key] = train_loader
     dataloaders["validation"][data_key] = val_loader
@@ -1025,8 +1051,8 @@ def monkey_static_loader_extended(
                 )  # find next showing of the same image to switch responses
                 other_resps_test[idx] = responses_test[idx2]
 
-        train_idx = np.isin(training_image_ids, all_train_ids)  # delete?
-        val_idx = np.isin(training_image_ids, all_validation_ids)  # delete?
+        train_idx = np.isin(training_image_ids, all_train_ids)
+        val_idx = np.isin(training_image_ids, all_validation_ids)
 
         responses_val = responses_train[val_idx]
         responses_train = responses_train[train_idx]

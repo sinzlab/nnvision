@@ -377,6 +377,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
         n_neurons=None,
         session_ids=None,
         context_zeroed=None,
+        trial_positions=None,
     ):
         if not all(tensors[0].size(0) == tensor.size(0) for tensor in tensors):
             raise ValueError(
@@ -385,18 +386,21 @@ class CachedTensorDatasetExtended(utils.Dataset):
 
         self.tensors = tensors
         self.input_position = names.index("inputs")
+
+        # expand names with the appropriate argument names
         if prev_responses:
             names = names + ("prev_resps",)
 
         if other_resps:
             names = names + ("other_resps",)
 
-        if context_zeroed:
-            names = names + ("context_zeroed",)
+        if trial_positions:
+            names = names + ("trial_positions",)
 
         if bools:
             names = names + ("bools",)
 
+        # create named tuple-object with all of these arguments
         self.DataPoint = namedtuple("DataPoint", names)
 
         self.image_cache = image_cache
@@ -404,7 +408,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
         self.num_prev_images = num_prev_images
         self.trial_id = trial_id
         self.prev_responses = prev_responses
-        self.context_zeroed = context_zeroed
+        self.trial_positions = trial_positions
         self.next_img = next_img
         self.other_resps = other_resps
         self.bools = bools
@@ -433,7 +437,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 for pos, tensor in enumerate(self.tensors)
             ]
         else:
-            if type(index) == int:
+            if type(index) == int or type(index) == np.int64:
                 key_img = self.tensors[0][index].item()
                 if self.prev_img:
                     key_prev_img = np.zeros(self.num_prev_images, dtype=np.int64)
@@ -453,6 +457,7 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 1 + self.num_prev_images
             )  # index to keep track of which arguments is where in self.tensors
 
+            # retrieve the necessary arguments from the tensors
             if self.prev_responses:
                 prev_resps = self.tensors[idx][index]
                 idx += 1
@@ -508,8 +513,8 @@ class CachedTensorDatasetExtended(utils.Dataset):
                 idx += 1
                 full_img = img
 
-            if self.context_zeroed:
-                context_zeroed = self.tensors[idx][index]
+            if self.trial_positions:
+                trial_positions = self.tensors[idx][index]
                 idx += 1
                 full_img = img
 
@@ -526,8 +531,8 @@ class CachedTensorDatasetExtended(utils.Dataset):
             if self.other_resps:
                 tensors_expanded.append(other_resps)
 
-            if self.context_zeroed:
-                tensors_expanded.append(context_zeroed)
+            if self.trial_positions:
+                tensors_expanded.append(trial_positions)
 
             if self.bools:
                 tensors_expanded.append(bools)
@@ -617,7 +622,7 @@ def get_cached_loader_extended(
     include_bools=False,
     include_n_neurons=False,
     include_session_ids=False,
-    include_context_zeroed=False,
+    include_trial_positions=False,
 ):
     """
 
@@ -629,9 +634,14 @@ def get_cached_loader_extended(
         image_cache: a cache object which stores the images
         include_prev_image: Boolean- whether one or several previous images should be included in dataloader
         num_prev_images: int - how many prev images should be included
+        include_trial_id: Boolean- whether to include the trial id for each image as a second channel into the core
+        include_prev_responses: Boolean - whether to include the responses to the previous images for the readout
         include_next_image:Boolean-  whether the next image should be included
         include_other_resps: Boolean- include context responses from a different showing of the same image for the testing set for the readout
-
+        include_bools: Boolean- whether to include bools that mark whether a neuron was recorded while viewing a certain image or not
+        include_n_neurons: Boolean- whether to include a variable n_neurons that records how many neurons were from each session
+        include_session_ids: Boolean- whether to include a variable session_ids that has the IDs for each neuron
+        include_trial_positions: Boolean- whether to include the positions at which each image was shown within a 15-image trial
     Returns: a PyTorch DataLoader object
     """
 
@@ -693,7 +703,7 @@ def get_cached_loader_extended(
             tensors.append(torch.from_numpy(args[idx]).to(torch.float))
             idx += 1
 
-        if include_context_zeroed:
+        if include_trial_positions:
             tensors.append(torch.from_numpy(args[idx]).to(torch.float))
 
     if len(args) > 2 and "eye_position" in names:
@@ -714,7 +724,7 @@ def get_cached_loader_extended(
         bools=include_bools,
         n_neurons=n_neurons,
         session_ids=session_ids,
-        context_zeroed=include_context_zeroed,
+        trial_positions=include_trial_positions,
     )
     sampler = (
         RepeatsBatchSampler(repeat_condition) if repeat_condition is not None else None
