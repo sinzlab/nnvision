@@ -57,6 +57,7 @@ class EncoderShifter(nn.Module):
         readout,
         shifter,
         elu_offset,
+        final_elu=True,
         stack_prev_image=False,
     ):
         super().__init__()
@@ -64,6 +65,7 @@ class EncoderShifter(nn.Module):
         self.readout = readout
         self.offset = elu_offset
         self.shifter = shifter
+        self.final_elu = final_elu
 
     def forward(self, *args, data_key=None, eye_position=None, shift=None, **kwargs):
         x = self.core(args[0])
@@ -73,7 +75,7 @@ class EncoderShifter(nn.Module):
 
         sample = kwargs["sample"] if "sample" in kwargs else None
         x = self.readout(x, data_key=data_key, sample=sample, shift=shift, **kwargs)
-        return F.elu(x + self.offset) + 1
+        return F.elu(x + self.offset) + 1 if self.final_elu else x
 
     def regularizer(self, data_key):
         return self.core.regularizer() + self.readout.regularizer(data_key=data_key)
