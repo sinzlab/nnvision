@@ -1,6 +1,5 @@
 import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
-from nnvision.tables.legacy.main import MonkeyExperiment
 
 from ..utility.dj_helpers import get_default_args
 from ..utility.measures import (
@@ -42,26 +41,6 @@ class AvgFiringTest(MeasuresBaseNeuronType):
     measure_function = staticmethod(get_avg_firing)
     measure_dataset = "test"
     measure_attribute = "test_avg_firing"
-    data_cache = DataCache
-
-
-@schema
-class OracleScore(MeasuresBaseNeuronType):
-    dataset_table = Dataset
-    unit_table = Recording.Units
-    measure_function = staticmethod(get_oracles)
-    measure_dataset = "test"
-    measure_attribute = "oracle_score"
-    data_cache = DataCache
-
-
-@schema
-class OracleScoreCorrected(MeasuresBaseNeuronType):
-    dataset_table = Dataset
-    unit_table = Recording.Units
-    measure_function = staticmethod(get_oracles_corrected)
-    measure_dataset = "test"
-    measure_attribute = "oracle_score_corrected"
     data_cache = DataCache
 
 
