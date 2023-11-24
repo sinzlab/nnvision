@@ -1,34 +1,31 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 
-# DJ and utils imports
-import datajoint as dj
-import time
-import tarfile
-from shutil import copyfile
+import numpy as np
+from time import sleep
+sleep(np.random.rand()*10)
+
 import os
-
+import datajoint as dj
+dj.config["database.host"] = '134.76.19.44'
+os.environ["MINIO_ACCESS_KEY"] = "OOZ67ZZ3IC594HVU39MM"
+os.environ["MINIO_SECRET_KEY"] = "IbjiNZdvODrzgzM4J3wBcutgCnBkI2CGt4KFpHxL"
 
 dj.config["enable_python_native_blobs"] = True
-dj.config["nnfabrik.schema_name"]= 'nnfabrik_toy_V4'
-schema = dj.schema('nnfabrik_toy_V4')
+dj.config['nnfabrik.schema_name'] = "nnfabrik_toy_V4"
+schema = dj.schema("nnfabrik_toy_V4")
 
 
-# copy data from QB to $SCRATCH volume
-os.makedirs('/data/monkey/toliaslab/')
-os.mkdir('/data/torch/')
+from nnvision.tables.from_mei import MEI, MEISeed
+from nnvision.tables.ensemble_scores import CorrelationToAverageEnsembleScore
 
-source = '/sinz_shared/monkey/toliaslab/monkey_data.tar.gz'
-destination = '/data/monkey/toliaslab/monkey_data.tar.gz'
-copyfile(source, destination)
+# 50 seeds
+mei_seeds = MEISeed().fetch("KEY", order_by="mei_seed", limit=50)
+# 1100 units
+unit_key = (CorrelationToAverageEnsembleScore.Units & dict(ensemble_hash="b2fb11d8f9206374f0fcb9bf6f1569cb")).fetch("KEY", order_by="unit_avg_correlation DESC", limit=1100)
 
-tf = tarfile.open('/data/monkey/toliaslab/monkey_data.tar.gz')
-tf.extractall('/data/monkey/toliaslab/')
+mei_key = dj.AndList([unit_key,
+                      mei_seeds,
+                      dict(method_hash="3bb4e453e0f368d436803d8bac68b22d")
+                      ])
 
-# project specific imports
-from nnvision.tables.from_nnfabrik import TrainedModel
-from nnvision.tables.from_mei import MEI, Method
-
-unit_key = dict(unit_type=1, mei_seed=10, ensemble_hash='ce92f09b67d6e154676af577bb9488d5')
-method_hashes = (Method & "method_ts > '2021-02-15'" & "method_ts < '2021-02-17'").fetch("method_hash", as_dict=True)
-mei_keys = dj.AndList([unit_key,method_hashes])
-MEI.populate(mei_keys, display_progress=True, reserve_jobs=True, order="random")
+MEI().populate(mei_key, display_progress=True, reserve_jobs=True, order="random",)

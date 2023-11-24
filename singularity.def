@@ -1,22 +1,20 @@
-BootStrap: docker
-From: sinzlab/pytorch:v3.9-torch1.13.1-cuda11.7.0-dj0.12.9
+BootStrap: shub
+From: sinzlab/pytorch-singularity:v3.8-torch1.7.0-dj0.12.7
 
 %labels
 MAINTAINER Arne Nix <arnenix@gmail.com>
 %post
     # install third-party libraries
-    python3.9 -m pip install --upgrade pip
     git clone -b inception_loop https://github.com/sinzlab/mei
     git clone -b slot_attention https://github.com/konstantinwilleke/nnvision
     git clone -b simplify https://github.com/KonstantinWilleke/t-simcne
-    python3.9 -m pip install git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7 --no-cache-dir
-    python3.9 -m pip install --no-use-pep517 -e ./nnvision --no-cache-dir
-    python3.9 -m pip install --no-use-pep517 -e ./mei --no-cache-dir
-    python3.9 -m pip install --no-use-pep517 -e ./t-simcne --no-cache-dir
+    python3.8 -m pip install --upgrade pip
+    python3.8 -m pip install git+https://github.com/sacadena/ptrnets.git@6f459a130ff2fb1a73f29d933e6bea5b435341e7
+    python3.8 -m pip install --no-use-pep517 -e ./nnvision --no-cache-dir
+    python3.8 -m pip install --no-use-pep517 -e ./mei --no-cache-dir
+    python3.8 -m pip install -U torch torchvision --no-cache-dir
+    python3.8 -m pip install --no-use-pep517 -e ./t-simcne --no-cache-dir
 %environment
-    export PIP_CACHE_DIR=/mnt/qb/work/sinz/kwilleke50/.cache/pip
-    export SINGULARITY_CACHEDIR=/mnt/qb/work/sinz/kwilleke50/
-    export APPTAINER_CACHEDIR=/mnt/qb/work/sinz/kwilleke50/
 %startscript
     exec "$@"
 %runscript
