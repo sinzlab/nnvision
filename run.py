@@ -2,7 +2,7 @@
 
 import numpy as np
 from time import sleep
-sleep(np.random.rand()*10)
+sleep(np.random.rand()*5)
 
 import os
 import datajoint as dj
@@ -12,20 +12,20 @@ os.environ["MINIO_SECRET_KEY"] = "IbjiNZdvODrzgzM4J3wBcutgCnBkI2CGt4KFpHxL"
 
 dj.config["enable_python_native_blobs"] = True
 dj.config['nnfabrik.schema_name'] = "nnfabrik_toy_V4"
-schema = dj.schema("nnfabrik_toy_V4")
 
+from nnfabrik.main import *
+from nnvision.tables.from_nnfabrik import TrainedModel
 
-from nnvision.tables.from_mei import MEI, MEISeed
-from nnvision.tables.ensemble_scores import CorrelationToAverageEnsembleScore
+dataset_keys = [dict(dataset_hash="9ef1991a6c99e7d5af6e2a51c3a537a6"),
+                dict(dataset_hash="7214ff189a2fb06af589d9a96e2cf140"),
+                dict(dataset_hash="bc288bef8512a5e1b87acb5c6f4de99a"),
+               ]
+trainer_keys = dict(trainer_hash="e67767f0f592b14b0bebe7d4a96c442d")
+model_keys = (Model & "model_ts > '2023-11-10'").fetch("KEY")
+pop_key = dj.AndList([dataset_keys, trainer_keys, model_keys, dict(seed=1000)])
 
-# 50 seeds
-mei_seeds = MEISeed().fetch("KEY", order_by="mei_seed", limit=50)
-# 1100 units
-unit_key = (CorrelationToAverageEnsembleScore.Units & dict(ensemble_hash="b2fb11d8f9206374f0fcb9bf6f1569cb")).fetch("KEY", order_by="unit_avg_correlation DESC", limit=1100)
-
-mei_key = dj.AndList([unit_key,
-                      mei_seeds,
-                      dict(method_hash="3bb4e453e0f368d436803d8bac68b22d")
-                      ])
-
-MEI().populate(mei_key, display_progress=True, reserve_jobs=True, order="random",)
+TrainedModel().populate(pop_key,
+                        display_progress=True,
+                        reserve_jobs=True,
+                        order="random",
+                        suppress_errors=True)
