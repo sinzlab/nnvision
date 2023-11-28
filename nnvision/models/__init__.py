@@ -17,7 +17,7 @@ try:
         task_core_gauss_readout,
         task_core_point_readout,
         custom_task_core_shared_multihead_attention,
+        convnext_core_shared_multihead_attention,
     )
 except:
     pass
-

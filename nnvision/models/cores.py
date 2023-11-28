@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 from collections import OrderedDict, Iterable
 import warnings
@@ -23,6 +24,7 @@ except:
     pass
 
 from .convnext_v2 import ConvNextV2
+
 
 class TransferLearningCore(Core2d, nn.Module):
     """
@@ -487,7 +489,8 @@ class TaskDrivenCore3(Core2d, nn.Module):
             self.apply(self.init_conv)
         self.put_to_cuda(cuda=cuda)
 
-#TODO: extend this class to add final_nonlineartiy, batchnorm, layernorm
+
+# TODO: extend this class to add final_nonlineartiy, batchnorm, layernorm
 class ConvNextCore(Core2d, nn.Module):
     def __init__(
         self,
@@ -497,6 +500,10 @@ class ConvNextCore(Core2d, nn.Module):
         cut_classification_head=True,
         pretrained=True,
         fine_tune=False,
+        in_shapes_dict=None,
+        final_norm=None,
+        final_nonlinearity=None,
+        momentum=0.9,
         **kwargs
     ):
         """
@@ -517,29 +524,79 @@ class ConvNextCore(Core2d, nn.Module):
             )
         super().__init__()
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        self.model = ConvNextV2(model_name=model_name,
-                                cutoff_layer=layer_name,
-                                patch_embedding_stride=patch_embedding_stride,
-                                cut_classification_head=cut_classification_head)
-        self.model.to(self.device)
-        self.pretrained=pretrained
-        self.outchannels = self.get_out_channels()
+        backbone = ConvNextV2(
+            model_name=model_name,
+            cutoff_layer=layer_name,
+            patch_embedding_stride=patch_embedding_stride,
+            cut_classification_head=cut_classification_head,
+        )
+        self.features = nn.Sequential()
+        self.features.add_module("backbone", backbone)
+        self.features.to(self.device)
+
+        self.pretrained = pretrained
+        self.in_shapes_dict = in_shapes_dict
+        if in_shapes_dict is not None:
+            self.in_shape = self.get_input_shape_from_dict()
+            self.out_dim = self.get_out_dims()
+            self.outchannels = self.out_dim[0]
+        else:
+            self.outchannels = self.get_out_channels()
+        self.momentum = momentum
 
         # Fix pretrained parameters during training
         if not fine_tune:
-            for param in self.model.parameters():
+            for param in self.features.parameters():
                 param.requires_grad = False
+
+        # add batchnorm / layernorm
+        # Stack model modules
+        if final_norm == "BatchNorm":
+            self.features.add_module(
+                "OutBatchNorm",
+                nn.BatchNorm2d(self.outchannels, momentum=self.momentum),
+            )
+        elif final_norm == "LayerNorm":
+            self.features.add_module(
+                "OutBatchNorm",
+                nn.LayerNorm(self.out_dim),
+            )
+        elif final_norm is not None:
+            raise ValueError("final normalization can only be BatchNorm or LayerNorm")
+
+        if final_nonlinearity:
+            nonlinearity = getattr(torch.nn, final_nonlinearity)()
+            nonlinearity.inplace = True if hasattr(nonlinearity, "inplace") else None
+            self.features.add_module("OutNonlin", nonlinearity)
+
+
+    def get_input_shape_from_dict(self):
+        all_shapes = []
+        for v in self.in_shapes_dict.values():
+            all_shapes.append(v[1:])
+        assert np.all(
+            [all_shapes[0] == i for i in all_shapes[1:]]
+        ), "Sessions in dataloader dict have different shapes"
+        return all_shapes[0]
+
+    def get_out_dims(self):
+        input_ = torch.ones(1, *self.in_shape)
+        with torch.no_grad():
+            out_dim = self(input_.to(self.device)).shape
+        return out_dim[1:]
 
     def get_out_channels(self):
         x = torch.randn(1, 3, 224, 224).to(self.device)
         with torch.no_grad():
-            outch = self.model(x).shape[1]
+            outch = self.features(x).shape[1]
         return outch
 
     def regularizer(self):
         return 0  # useful for final loss
 
-    def initialize(self,):
+    def initialize(
+        self,
+    ):
         # Overwrite parent class's initialize function
         if not self.pretrained:
             self.apply(self.init_conv)
@@ -558,7 +615,7 @@ class ConvNextCore(Core2d, nn.Module):
             input_ = rearrange(input_, "i (c cp) w h -> (i cp) c w h", c=1, cp=2)
             input_ = input_.repeat(1, 3, 1, 1)
 
-        input_ = self.model(input_)
+        input_ = self.features(input_)
         if input_.shape[1] == 2:
             input_ = rearrange(input_, "(i cp) c w h -> i (cp c) w h", cp=2)
         return input_

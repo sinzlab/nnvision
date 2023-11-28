@@ -252,7 +252,7 @@ def model_predictions_shuffled(
     return target.numpy(), output.numpy()
 
 
-def model_predictions(model, dataloader, data_key, device="cpu"):
+def model_predictions(model, dataloader, data_key, device="cuda"):
     """
     computes model predictions for a given dataloader and a model
     Returns:
@@ -260,7 +260,7 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
         output: responses as predicted by the network
     """
 
-    target, output = torch.empty(0), torch.empty(0)
+    target, output = torch.empty(0), torch.empty(0).to(device)
     batch = next(iter(dataloader))
     batch_keys = (
         batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
@@ -295,28 +295,22 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
                                 model(
                                     images.to(device), data_key=data_key, **data_kwargs
                                 )
-                                .detach()
-                                .cpu()
                             ),
                         ),
                         dim=0,
                     )
-            target = torch.cat((target, responses.detach().cpu()), dim=0)
+            target = torch.cat((target, responses), dim=0)
             if mask_flag:
                 masks = torch.cat((masks, mask))
-
+    output = output.cpu()
     if mask_flag:
-        target = np.ma.masked_array(target, mask=~masks)
-        output = np.ma.masked_array(output, mask=~masks)
-    else:
-        target = target.numpy()
-        output = output.numpy()
-
+        target = np.ma.masked_array(target.numpy(), mask=~masks.numpy())
+        output = np.ma.masked_array(output.numpy(), mask=~masks.numpy())
     return target, output
 
 
 def get_avg_correlations(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, **kwargs
 ):
     """
     Returns correlation between model outputs and average responses over repeated trials
@@ -360,7 +354,7 @@ def get_avg_correlations(
 
 
 def get_correlations(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, **kwargs
 ):
     if "test" in dataloaders:
         dataloaders = dataloaders["test"]
@@ -394,7 +388,7 @@ def get_correlations(
 def get_correlations_shuffled(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     per_neuron=True,
     zeroed_out=False,
@@ -437,7 +431,7 @@ def get_correlations_shuffled(
 def get_poisson_loss(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     avg=False,
     per_neuron=True,
@@ -498,7 +492,6 @@ def get_repeats(dataloader, min_repeats=2):
             outputs = np.ma.masked_array(outputs, mask=~mask)
         repeated_inputs.append(inputs)
         repeated_outputs.append(outputs)
-
 
     return np.array(repeated_inputs), repeated_outputs
 
@@ -590,7 +583,7 @@ def compute_oracle_corr(repeated_outputs):
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
 
 
-def get_fraction_oracles(model, dataloaders, device="cpu", corrected=False):
+def get_fraction_oracles(model, dataloaders, device="cuda", corrected=False):
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     if corrected:
         oracles = get_oracles_corrected(
@@ -659,7 +652,7 @@ def compute_explainable_var(outputs, eps=1e-9):
 
 
 def get_FEV(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, threshold=None
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, threshold=None
 ):
     """
     Computes the fraction of explainable variance explained (FEVe) per Neuron, given a model and a dictionary of dataloaders.
@@ -772,7 +765,7 @@ def get_model_rf_size(model_config):
 def get_predictions(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     per_neuron=True,
     test_data=True,
@@ -801,7 +794,7 @@ def get_predictions(
 def get_targets(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=True,
     per_neuron=True,
     test_data=True,
