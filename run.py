@@ -28,5 +28,4 @@ pop_key = dj.AndList([dataset_keys, trainer_keys, model_keys, dict(seed=1000)])
 TrainedModel().populate(pop_key,
                         display_progress=True,
                         reserve_jobs=True,
-                        order="random",
-                        suppress_errors=True)
+                        order="random",)
