@@ -56,6 +56,17 @@ def natural_image_initial(*args, key, img_tier="train", top_index=0, device="cud
         )
     return initial_image
 
+class RandomNormalRGB(InitialGuessCreator):
+    """Used to create an initial guess tensor filled with values distributed according to a normal distribution."""
+
+    _create_random_tensor = randn
+
+    def __call__(self, *shape):
+        """Creates a random initial guess from which to start the MEI optimization process given a shape."""
+        return self._create_random_tensor(*[1,3,100,100])
+
+    def __repr__(self):
+        return f"{self.__class__.__qualname__}()"
 
 class BestNaturalImageInitial(InitialGuessCreator):
     """Used to create an initial guess tensor filled with values distributed according to a normal distribution."""
