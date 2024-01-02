@@ -570,14 +570,18 @@ def monkey_static_loader_combined(
         # go through all train ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
         for k, train_id in enumerate(all_train_ids):
             if train_id in training_image_ids:
-                j = np.where(train_id == training_image_ids)
+                j = np.where(train_id == training_image_ids)[0]
+                if len(j) > 1: # to account for training images shown more than once for long sessions
+                    j = j[0]
                 all_responses_train[k][n_start:n_end] = responses_train[j]
                 all_train_bools[k][n_start:n_end] = True
 
         # go through all validation ids, check whether they were shown in this session and if yes, add the responses in the appropriate space
         for k, val_id in enumerate(all_validation_ids):
             if val_id in training_image_ids:
-                j = np.where(val_id == training_image_ids)
+                j = np.where(val_id == training_image_ids)[0]
+                if len(j) > 1:
+                    j = j[0]
                 all_responses_val[k][n_start:n_end] = responses_train[j]
                 all_val_bools[k][n_start:n_end] = True
 
@@ -1370,7 +1374,7 @@ def monkey_mua_sua_loader(
                 image_cache=cache,
             )
             val_loader = get_cached_loader(
-                validation_image_ids,
+                    validation_image_ids,
                 responses_val,
                 batch_size=batch_size,
                 image_cache=cache,
