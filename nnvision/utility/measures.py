@@ -306,6 +306,9 @@ def model_predictions(model, dataloader, data_key, device="cuda"):
     if mask_flag:
         target = np.ma.masked_array(target.numpy(), mask=~masks.numpy())
         output = np.ma.masked_array(output.numpy(), mask=~masks.numpy())
+    else:
+        target = target.numpy()
+        output = output.numpy()
     return target, output
 
 
@@ -446,7 +449,8 @@ def get_poisson_loss(
                 dataloader=v, model=model, data_key=k, device=device
             )
             loss = output - target * np.log(output + eps)
-            poisson_loss[k] = np.mean(loss, axis=0) if avg else np.sum(loss, axis=0)
+            loss = torch.tensor(loss)
+            poisson_loss[k] = torch.mean(loss, axis=0) if avg else torch.sum(loss, axis=0)
     if as_dict:
         return poisson_loss
     else:
