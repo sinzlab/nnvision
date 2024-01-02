@@ -17,7 +17,12 @@ from neuralpredictors.training import (
     LongCycler,
 )
 from nnfabrik.utility.nn_helpers import set_random_seed
-#from cnexp.lrschedule import CosineAnnealingSchedule, LinearAnnealingSchedule
+
+
+try:
+    from cnexp.lrschedule import CosineAnnealingSchedule, LinearAnnealingSchedule
+except:
+    pass
 
 from ..utility import measures
 from ..utility.measures import get_correlations, get_poisson_loss
@@ -204,9 +209,12 @@ def nnvision_trainer(
             total=n_iterations,
             desc="Epoch {}".format(epoch),
         ):
-
+            if "deeplake" in str(type(data)):
+                data_kwargs = data
+            else:
+                data_kwargs = data._asdict()
             loss = full_objective(
-                model, dataloaders["train"], data_key, *data[:2], **data._asdict()
+                model, dataloaders["train"], data_key, *list(data)[:2], **data_kwargs
             )
             loss.backward()
             if (batch_no + 1) % optim_step_count == 0:

@@ -44,7 +44,7 @@ data_info = {
 }
 
 current_dir = os.path.dirname(__file__)
-filename = os.path.join(current_dir, '../../data/model_weights/task_driven/task_driven_ensemble_model_01.pth.tar')
+filename = os.path.join(current_dir, '../../data/model_weights/v4_task_driven/task_driven_ensemble_model_01.pth.tar')
 state_dict = torch.load(filename)
 
 # load single model
