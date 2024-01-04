@@ -497,10 +497,10 @@ def monkey_static_loader_combined(
     )
 
     n_neurons = np.zeros(
-        len(neuronal_data_files), dtype=np.uint8
+        len(neuronal_data_files), dtype=np.uint32
     )  # save number of neurons for easier access
     max_repeats = 0  # save number of max repeats in test dataset
-    all_testing_ids = np.array([], dtype=np.uint16)  # unique testing
+    all_testing_ids = np.array([], dtype=np.uint32)  # unique testing
 
     # cycle through all datafiles to get the total number of neurons accross all sessions, the unique testing image ids and the maximum number of repeats for them
     for i, datapath in enumerate(neuronal_data_files):

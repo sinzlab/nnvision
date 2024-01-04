@@ -112,7 +112,6 @@ def nnvision_trainer(
         resps = args[1].to(device)
         return loss_scale * criterion(preds, resps) + model.regularizer(data_key)
 
-
     ##### Model training ####################################################################################################
     model.to(device)
     set_random_seed(seed)
@@ -542,18 +541,18 @@ def multistep_trainer(
 
     # train over epochs
     for epoch, val_obj in early_stopping(
-            model,
-            stop_closure,
-            interval=interval,
-            patience=patience,
-            start=0,
-            max_iter=n2,
-            maximize=maximize,
-            tolerance=tolerance,
-            restore_best=restore_best,
-            tracker=tracker,
-            scheduler=scheduler,
-            lr_decay_steps=lr_decay_steps,
+        model,
+        stop_closure,
+        interval=interval,
+        patience=patience,
+        start=0,
+        max_iter=n2,
+        maximize=maximize,
+        tolerance=tolerance,
+        restore_best=restore_best,
+        tracker=tracker,
+        scheduler=scheduler,
+        lr_decay_steps=lr_decay_steps,
     ):
         # executes callback function if passed in keyword args
         if cb is not None:
@@ -561,10 +560,10 @@ def multistep_trainer(
         # train over batches
         optimizer.zero_grad()
         for batch_no, (data_key, data) in tqdm(
-                enumerate(LongCycler(dataloaders["train"])),
-                total=n_iterations,
-                desc="Epoch {}".format(epoch),
-                disable=disable_tqdm,
+            enumerate(LongCycler(dataloaders["train"])),
+            total=n_iterations,
+            desc="Epoch {}".format(epoch),
+            disable=disable_tqdm,
         ):
 
             loss = full_objective(model, dataloaders["train"], data_key, *data)

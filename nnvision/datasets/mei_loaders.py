@@ -454,16 +454,15 @@ def get_transforms(
     initial_center_crop=None,
 ):
     crop_scale = crop_scale_lo, crop_scale_hi
-
     transform_list = []
-    if initial_center_crop is not None:
-        transform_list.append(transforms.CenterCrop(initial_center_crop))
-
+    # add rotations
     if rotation is not None:
         transform_list.append(transforms.RandomRotation(rotation))
-
+    # add center crop
+    if initial_center_crop is not None:
+        transform_list.append(transforms.CenterCrop(initial_center_crop))
+    # add random crop
     transform_list.append(
         transforms.RandomResizedCrop(size=size, scale=crop_scale, ratio=crop_ratio)
     )
-
     return transforms.Compose(transform_list)

@@ -221,5 +221,10 @@ class Recording(dj.Computed):
                 key["electrode"] = session_dict[k]["electrode"][i]
                 key["relative_depth"] = session_dict[k]["relative_depth"][i]
                 self.Units().insert1(key, ignore_extra_fields=True)
-                combined_neuron_counter += 1
+                if combined_neuron_counter is not None:
+                    combined_neuron_counter += (
+                        1 if combined_neuron_counter is not None else 0
+                    )
+
+
 

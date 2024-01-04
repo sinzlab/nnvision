@@ -1,6 +1,5 @@
 import datajoint as dj
 from nnfabrik.main import Model, Dataset, Trainer, Seed, Fabrikant
-from nnvision.tables.legacy.main import MonkeyExperiment
 
 from ..utility.dj_helpers import get_default_args
 from ..utility.measures import (
@@ -43,5 +42,3 @@ class AvgFiringTest(MeasuresBaseNeuronType):
     measure_dataset = "test"
     measure_attribute = "test_avg_firing"
     data_cache = DataCache
-
-

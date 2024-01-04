@@ -28,6 +28,11 @@ def model_predictions_repeats(
     """
     target, output = [], []
     unique_images = torch.empty(0).to(device)
+
+    batch = next(iter(dataloader))
+    batch_keys = (
+        batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
+    )
     for batch in dataloader:
         images, responses = list(batch)[:2]
         if "deeplake" in str(type(batch)):
@@ -38,6 +43,7 @@ def model_predictions_repeats(
         if len(images.shape) == 5:
             images = images.squeeze(dim=0)
             responses = responses.squeeze(dim=0)
+        mask = batch.bools.detach().cpu().numpy() if "bools" in batch_keys else None
 
         assert torch.all(
             torch.eq(
@@ -55,7 +61,13 @@ def model_predictions_repeats(
             ),
             dim=0,
         )
-        target.append(responses.detach().cpu().numpy())
+
+        if "bools" in batch_keys:
+            target.append(
+                np.ma.masked_array(responses.detach().cpu().numpy(), mask=~mask)
+            )
+        else:
+            target.append(responses.detach().cpu().numpy())
 
         if images.shape[0] > 1:
             with eval_state(model) if not is_ensemble_function(
@@ -65,7 +77,7 @@ def model_predictions_repeats(
                     model
                 ) else contextlib.nullcontext():
                     with torch.no_grad():
-                        output.append(
+                        predictions = (
                             model(
                                 images.to(device),
                                 data_key=data_key,
@@ -76,6 +88,10 @@ def model_predictions_repeats(
                             .cpu()
                             .numpy()
                         )
+                        if "bools" in batch_keys:
+                            output.append(np.ma.masked_array(predictions, mask=~mask))
+                        else:
+                            output.append(predictions)
 
     # Forward unique images once
     if len(output) == 0:
@@ -157,9 +173,7 @@ def model_predictions_repeats_legacy(
         ) else contextlib.nullcontext():
             with torch.no_grad():
                 output = (
-                    model(
-                        unique_images.to(device), data_key=data_key, **data_kwargs
-                    )
+                    model(unique_images.to(device), data_key=data_key, **data_kwargs)
                     .detach()
                     .cpu()
                 )
@@ -202,13 +216,12 @@ def model_predictions_shuffled(
             )
         ), "All images in the batch should be equal"
         # shuffle responses as input for context responses
-        
-        
+
         if "deeplake" in str(type(batch)):
             data_kwargs = batch
         else:
             data_kwargs = batch._asdict()
-        
+
         for i in np.arange(data_kwargs["targets"].shape[0] - 1):
             with device_state(model, device) if not is_ensemble_function(
                 model
@@ -227,7 +240,6 @@ def model_predictions_shuffled(
                             (
                                 model(
                                     images.to(device), data_key=data_key, **data_kwargs
-
                                 )
                                 .detach()
                                 .cpu()
@@ -240,7 +252,7 @@ def model_predictions_shuffled(
     return target.numpy(), output.numpy()
 
 
-def model_predictions(model, dataloader, data_key, device="cpu"):
+def model_predictions(model, dataloader, data_key, device="cuda"):
     """
     computes model predictions for a given dataloader and a model
     Returns:
@@ -248,9 +260,11 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
         output: responses as predicted by the network
     """
 
-    target, output = torch.empty(0), torch.empty(0)
+    target, output = torch.empty(0), torch.empty(0).to(device)
     batch = next(iter(dataloader))
-    batch_keys = batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
+    batch_keys = (
+        batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
+    )
     if "bools" in batch_keys:
         mask_flag = True
         masks = torch.empty(0, dtype=np.bool)
@@ -279,33 +293,27 @@ def model_predictions(model, dataloader, data_key, device="cpu"):
                             output,
                             (
                                 model(
-                                    images.to(device),
-                                    data_key=data_key,
-                                    **data_kwargs
+                                    images.to(device), data_key=data_key, **data_kwargs
                                 )
-                                .detach()
-                                .cpu()
                             ),
                         ),
                         dim=0,
                     )
-            target = torch.cat((target, responses.detach().cpu()), dim=0)
+            target = torch.cat((target, responses), dim=0)
             if mask_flag:
                 masks = torch.cat((masks, mask))
-
+    output = output.cpu()
     if mask_flag:
-        target = np.ma.masked_array(target, mask=~masks)
-        output = np.ma.masked_array(output, mask=~masks)
+        target = np.ma.masked_array(target.numpy(), mask=~masks.numpy())
+        output = np.ma.masked_array(output.numpy(), mask=~masks.numpy())
     else:
         target = target.numpy()
         output = output.numpy()
-
     return target, output
 
 
-
 def get_avg_correlations(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, **kwargs
 ):
     """
     Returns correlation between model outputs and average responses over repeated trials
@@ -349,7 +357,7 @@ def get_avg_correlations(
 
 
 def get_correlations(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, **kwargs
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, **kwargs
 ):
     if "test" in dataloaders:
         dataloaders = dataloaders["test"]
@@ -383,7 +391,7 @@ def get_correlations(
 def get_correlations_shuffled(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     per_neuron=True,
     zeroed_out=False,
@@ -426,7 +434,7 @@ def get_correlations_shuffled(
 def get_poisson_loss(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     avg=False,
     per_neuron=True,
@@ -441,7 +449,8 @@ def get_poisson_loss(
                 dataloader=v, model=model, data_key=k, device=device
             )
             loss = output - target * np.log(output + eps)
-            poisson_loss[k] = np.mean(loss, axis=0) if avg else np.sum(loss, axis=0)
+            loss = torch.tensor(loss)
+            poisson_loss[k] = torch.mean(loss, axis=0) if avg else torch.sum(loss, axis=0)
     if as_dict:
         return poisson_loss
     else:
@@ -459,13 +468,21 @@ def get_repeats(dataloader, min_repeats=2):
     # save the responses of all neuron to the repeats of an image as an element in a list
     repeated_inputs = []
     repeated_outputs = []
-    for inputs, outputs in dataloader:
+
+    batch = next(iter(dataloader))
+    batch_keys = (
+        batch._fields if "deeplake" not in str(type(batch)) else list(batch.keys())
+    )
+
+    for batch in dataloader:
+        inputs, outputs = list(batch)[:2]
         if len(inputs.shape) == 5:
             inputs = np.squeeze(inputs.cpu().numpy(), axis=0)
             outputs = np.squeeze(outputs.cpu().numpy(), axis=0)
         else:
             inputs = inputs.cpu().numpy()
             outputs = outputs.cpu().numpy()
+        mask = batch.bools.detach().cpu().numpy() if "bools" in batch_keys else None
         r, n = outputs.shape  # number of frame repeats, number of neurons
         if (
             r < min_repeats
@@ -474,9 +491,13 @@ def get_repeats(dataloader, min_repeats=2):
         assert np.all(
             np.abs(np.diff(inputs, axis=0)) == 0
         ), "Images of oracle trials do not match"
+
+        if "bools" in batch_keys:
+            outputs = np.ma.masked_array(outputs, mask=~mask)
         repeated_inputs.append(inputs)
         repeated_outputs.append(outputs)
-    return np.array(repeated_inputs), np.array(repeated_outputs)
+
+    return np.array(repeated_inputs), repeated_outputs
 
 
 def get_oracles(dataloaders, as_dict=False, per_neuron=True):
@@ -566,7 +587,7 @@ def compute_oracle_corr(repeated_outputs):
         return corr(np.vstack(repeated_outputs), np.vstack(oracles), axis=0)
 
 
-def get_fraction_oracles(model, dataloaders, device="cpu", corrected=False):
+def get_fraction_oracles(model, dataloaders, device="cuda", corrected=False):
     dataloaders = dataloaders["test"] if "test" in dataloaders else dataloaders
     if corrected:
         oracles = get_oracles_corrected(
@@ -625,17 +646,17 @@ def compute_explainable_var(outputs, eps=1e-9):
 
     """
     ImgVariance = []
-    TotalVar = np.var(np.vstack(outputs), axis=0, ddof=1)
+    TotalVar = np.var(np.ma.vstack(outputs), axis=0, ddof=1)
     for out in outputs:
         ImgVariance.append(np.var(out, axis=0, ddof=1))
     ImgVariance = np.vstack(ImgVariance)
     NoiseVar = np.mean(ImgVariance, axis=0)
     explainable_var = (TotalVar - NoiseVar) / (TotalVar + eps)
-    return explainable_var
+    return np.array(explainable_var)
 
 
 def get_FEV(
-    model, dataloaders, device="cpu", as_dict=False, per_neuron=True, threshold=None
+    model, dataloaders, device="cuda", as_dict=False, per_neuron=True, threshold=None
 ):
     """
     Computes the fraction of explainable variance explained (FEVe) per Neuron, given a model and a dictionary of dataloaders.
@@ -748,7 +769,7 @@ def get_model_rf_size(model_config):
 def get_predictions(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=False,
     per_neuron=True,
     test_data=True,
@@ -777,7 +798,7 @@ def get_predictions(
 def get_targets(
     model,
     dataloaders,
-    device="cpu",
+    device="cuda",
     as_dict=True,
     per_neuron=True,
     test_data=True,
