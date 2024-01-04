@@ -3,13 +3,15 @@ from setuptools import setup, find_packages
 from os import path
 
 here = path.abspath(path.dirname(__file__))
+
 setup(
     name="nnvision",
     version="0.1",
     description="Envisioning the biological visual system with DNN",
     author="Konstantin Willeke",
     author_email="konstantin.willeke@gmail.com",
-    packages=["nnvision",],
+    packages=find_packages(exclude=[]),
+    package_dir={'nnvision': 'nnvision'},
     install_requires=[
         "setuptools>=50.3.2",
         "einops",
@@ -21,6 +23,7 @@ setup(
         "scipy>=1.5.4",
         "torch>=1.7.0",
         "torchvision>=0.8.1",
+        "transformers==4.35.2",
         "tqdm>=4.51.0",
         "nnfabrik",
         "neuralpredictors @ git+https://github.com/KonstantinWilleke/neuralpredictors.git@transformer_readout",

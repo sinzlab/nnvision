@@ -1,8 +1,22 @@
 import torch
 import copy
-import neuralpredictors
-from neuralpredictors.layers.readouts import PointPooled2d, FullGaussian2d
-from neuralpredictors.layers.legacy import Gaussian2d
+import functools
+import numpy as np
+
+
+def rsetattr(obj, attr, val):
+    pre, _, post = attr.rpartition(".")
+    return setattr(rgetattr(obj, pre) if pre else obj, post, val)
+
+
+# using wonder's beautiful simplification: https://stackoverflow.com/questions/31174295/getattr-and-setattr-on-nested-objects/31174427?noredirect=1#comment86638618_31174427
+
+
+def rgetattr(obj, attr, *args):
+    def _getattr(obj, attr):
+        return getattr(obj, attr, *args)
+
+    return functools.reduce(_getattr, [obj] + attr.split("."))
 
 
 def unpack_data_info(data_info):
@@ -46,3 +60,17 @@ def get_readout_key_names(model):
         bias_name = "bias"
 
     return feature_name, grid_name, bias_name
+
+
+def clip_convnext_layers(model, layer_name):
+    indices, names = [], []
+    for n, (i, j) in enumerate(model.named_modules()):
+        names.append(i)
+        indices.append(n)
+    names = np.array(names)
+    cut_layer_index = np.where(names == layer_name)[0].item()
+
+    for n in names[cut_layer_index:]:
+        rsetattr(model, n, torch.nn.Identity())
+
+    return model

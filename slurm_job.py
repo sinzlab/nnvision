@@ -72,7 +72,7 @@ singularity run \
 --no-home  \
 --bind /mnt/qb/work/sinz/_shared:/data,/mnt/qb/work/sinz/kwilleke50:$HOME  \
 singularity_img.sif  \
-$HOME/projects/nnfabrik/nnvision/nnvision/run.py
+python $HOME/projects/nnfabrik/nnvision/nnvision/run.py
         """
         return cmd_string
 
