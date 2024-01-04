@@ -154,8 +154,8 @@ class Recording(dj.Computed):
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
             y_grid = raw_data["y_grid_location"] if "y_grid_location" in raw_data else 0
             relative_depth = (
-                raw_data["relative_micron_depth"]
-                if "relative_micron_depth" in raw_data
+                raw_data["relative_depth_microns"]
+                if "relative_depth_microns" in raw_data
                 else np.zeros_like(unit_ids, dtype=np.double)
             )
             if not isinstance(unit_ids, Iterable):
@@ -196,7 +196,7 @@ class Recording(dj.Computed):
 
         self.insert1(key, ignore_extra_fields=True)
 
-        combined_neuron_counter = None if combined_data_key is None else 0
+        combined_neuron_counter = 0
         for k, v in session_dict.items():
             key["data_key"] = k if combined_data_key is None else combined_data_key
             key["animal_id"] = str(v["animal_id"])
@@ -209,11 +209,11 @@ class Recording(dj.Computed):
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
                 key["unit_id"] = (
                     int(neuron_id)
-                    if combined_neuron_counter is None
+                    if combined_data_key is None
                     else combined_neuron_counter
                 )
                 key["unit_index"] = (
-                    i if combined_neuron_counter is None else combined_neuron_counter
+                    i if combined_data_key is None else combined_neuron_counter
                 )
                 key["unit_type"] = int(
                     (session_dict[k]["unit_type"][i]).astype(np.float)
@@ -225,4 +225,6 @@ class Recording(dj.Computed):
                     combined_neuron_counter += (
                         1 if combined_neuron_counter is not None else 0
                     )
+
+
 

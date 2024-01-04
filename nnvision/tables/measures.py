@@ -42,20 +42,3 @@ class AvgFiringTest(MeasuresBaseNeuronType):
     measure_dataset = "test"
     measure_attribute = "test_avg_firing"
     data_cache = DataCache
-
-
-@schema
-class ModelRFSize(SummaryMeasuresBase):
-    dataset_table = Model
-    unit_table = None
-    measure_function = staticmethod(get_model_rf_size)
-    measure_attribute = "model_rf_size"
-
-    def make(self, key):
-        model_config = (self.dataset_table & key).fetch1("model_config")
-        default_args = get_default_args(
-            resolve_model((self.dataset_table & key).fetch1("model_fn"))
-        )
-        default_args.update(model_config)
-        key[self.measure_attribute] = self.measure_function(default_args)
-        self.insert1(key, ignore_extra_fields=True)

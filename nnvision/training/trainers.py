@@ -18,6 +18,7 @@ from neuralpredictors.training import (
 )
 from nnfabrik.utility.nn_helpers import set_random_seed
 
+
 try:
     from cnexp.lrschedule import CosineAnnealingSchedule, LinearAnnealingSchedule
 except:
