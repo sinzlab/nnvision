@@ -552,16 +552,22 @@ def monkey_static_loader_combined(
         training_image_ids = raw_data["training_image_ids"] - image_id_offset
         testing_image_ids = raw_data["testing_image_ids"] - image_id_offset
 
-        responses_test = responses_test.transpose((2, 0, 1))
-        responses_train = responses_train.transpose((2, 0, 1))
+        if len(responses_test.shape) == 3:
+            responses_test = responses_test.transpose((2, 0, 1))
+            responses_train = responses_train.transpose((2, 0, 1))
 
-        if time_bins_sum is not None:  # then average over given time bins
-            responses_train = (np.mean if avg else np.sum)(
-                responses_train[:, :, time_bins_sum], axis=-1
-            )
-            responses_test = (np.mean if avg else np.sum)(
-                responses_test[:, :, time_bins_sum], axis=-1
-            )
+
+            if time_bins_sum is not None:  # then average over given time bins
+                responses_train = (np.mean if avg else np.sum)(
+                    responses_train[:, :, time_bins_sum], axis=-1
+                )
+                responses_test = (np.mean if avg else np.sum)(
+                    responses_test[:, :, time_bins_sum], axis=-1
+                )
+        # ignore time_bin_sum for BISC data where there is no time dimension
+        elif len(responses_test.shape) == 2:
+            responses_test = responses_test.transpose((1, 0))
+            responses_train = responses_train.transpose((1, 0))
 
         # neuron indices for this session
         n_start = np.sum(n_neurons[0:i])

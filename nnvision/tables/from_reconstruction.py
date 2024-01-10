@@ -351,7 +351,16 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
         img_index = int(c[11:])
         for k, batch in enumerate(dl["test"]["all_sessions"]):
             if k == img_index:
-                neuronal_responses = torch.stack([batch.targets[bools, i].mean() for i, bools in enumerate(batch.bools.T)]).unsqueeze(0).cuda()
+                neuronal_responses = (
+                    torch.stack(
+                        [
+                            batch.targets[bools, i].mean()
+                            for i, bools in enumerate(batch.bools.T)
+                        ]
+                    )
+                    .unsqueeze(0)
+                    .cuda()
+                )
                 break
         return neuronal_responses
 
@@ -360,7 +369,13 @@ class Reconstruction(mixins.MEITemplateMixin, dj.Computed):
         key,
     ):
         image = (self.base_image_table & key).fetch1("image")
-        image = torch.from_numpy(image[None, None]).cuda()
+        if len(image.shape) == 2:
+            image = torch.from_numpy(image[None, None]).cuda()
+        elif len(image.shape) == 3:
+            image = torch.from_numpy(image[None, ]).cuda()
+        else:
+            raise ValueError("ReconImage shape unknown.")
+
         return image
 
     def _insert_responses(self, response_entity: Dict[str, Any]) -> None:
