@@ -16,48 +16,50 @@ import numpy as np
 import datajoint as dj
 from nnfabrik.main import Dataset
 from nnfabrik.utility.dj_helpers import CustomSchema
-from ..datasets.conventions import unit_type_conventions
+from nnvision.datasets.conventions import unit_type_conventions
 
 schema = CustomSchema(dj.config.get("nnfabrik.schema_name", "nnfabrik_core"))
 
 
 @schema
-class Recording(dj.Computed):
-    definition = """
-    # Overview table that summarizes the experiment, session, and unit data of table entry in nnfabrik's Dataset.
-    
-    -> Dataset
-    ---
-    brain_area:            varchar(64)   # some string
-    experiment_name:       varchar(64)   # another string
+class RecordingInterfaceFP(dj.Computed):
+    definition = """	
+    # Overview table that summarizes the experiment, session, and unit data of table entry in nnfabrik's Dataset.	
+    -> Dataset	
+    ---	
+    brain_area:            varchar(64)   # some string	
+    experiment_name:       varchar(64)   # another string	
     n_sessions:            int
-    total_n_neurons:       int
+    total_n_neurons:       int	
     """
 
     class Sessions(dj.Part):
-        definition = """
-        # This table stores something.
-
-        -> master
-        data_key:              varchar(64)
-        ---
-        animal_id:             varchar(64)
-        n_neurons:             int
-        x_grid:                float
-        y_grid:                float
+        definition = """	
+        # This table stores something.	
+        -> master	
+        data_key_original:     varchar(64)	
+        data_key:              varchar(64)	
+        ---	
+        animal_id:             varchar(64)	
+        n_neurons:             int	
+        x_grid:                float	
+        y_grid:                float	
+        fp_proc_method:        int
         """
 
     class Units(dj.Part):
-        definition = """
-        # All Units
-
-        -> master
-        unit_id:            int     
-        unit_type:          int
-        ---
-        unit_index:         int
-        electrode:          int
-        relative_depth:     float
+        definition = """	
+        # All Units	
+        -> master.Sessions	
+        unit_id_original:       int     	
+        unit_id:                int	
+        unit_type:              int	
+        ---	
+        unit_index_original:             int	
+        unit_index:    int	
+        electrode:              int	
+        relative_depth:         float	
+        fp_proc_method:         int
         """
         constrained_output_model = ConstrainedOutputModel
 
@@ -156,8 +158,8 @@ class Recording(dj.Computed):
             x_grid = raw_data["x_grid_location"] if "x_grid_location" in raw_data else 0
             y_grid = raw_data["y_grid_location"] if "y_grid_location" in raw_data else 0
             relative_depth = (
-                raw_data["relative_depth_microns"]
-                if "relative_depth_microns" in raw_data
+                raw_data["relative_micron_depth"]
+                if "relative_micron_depth" in raw_data
                 else np.zeros_like(unit_ids, dtype=np.double)
             )
             if not isinstance(unit_ids, Iterable):
@@ -189,6 +191,7 @@ class Recording(dj.Computed):
             session_dict[file_num]["y_grid"] = y_grid
             session_dict[file_num]["data_key"] = data_key
             session_dict[file_num]["relative_depth"] = relative_depth
+            session_dict[file_num]["fp_proc_method"] = raw_data["fp_proc_method"]
 
         key["brain_area"] = brain_area
         key["experiment_name"] = experiment_name
@@ -199,32 +202,32 @@ class Recording(dj.Computed):
 
         self.insert1(key, ignore_extra_fields=True)
 
-        combined_neuron_counter = 0
+        combined_neuron_counter = None if combined_data_key is None else 0
         for k, v in session_dict.items():
-            key["data_key"] = v["data_key"] if combined_data_key is None else combined_data_key
+            key["data_key"] = (
+                v["data_key"] if combined_data_key is None else combined_data_key
+            )
+            key["data_key_original"] = v["data_key"]
             key["animal_id"] = str(v["animal_id"])
             key["n_neurons"] = v["n_neurons"]
             key["x_grid"] = v["x_grid"]
             key["y_grid"] = v["y_grid"]
+            key["fp_proc_method"] = v["fp_proc_method"]
 
             self.Sessions().insert1(key, ignore_extra_fields=True, skip_duplicates=True)
 
             for i, neuron_id in enumerate(session_dict[k]["unit_id"]):
-                key["unit_id"] = (
-                    int(neuron_id)
-                    if combined_data_key is None
-                    else combined_neuron_counter
-                )
-                key["unit_index"] = (
-                    i if combined_data_key is None else combined_neuron_counter
-                )
+                key["unit_id_original"] = int(neuron_id)
+                key["unit_id"] = combined_neuron_counter
+                key["unit_index_original"] = i
+                key["unit_index"] = combined_neuron_counter
                 key["unit_type"] = int(
                     (session_dict[k]["unit_type"][i]).astype(np.float)
                 )
                 key["electrode"] = session_dict[k]["electrode"][i]
                 key["relative_depth"] = session_dict[k]["relative_depth"][i]
+                key["fp_proc_method"] = session_dict[k]["fp_proc_method"]
                 self.Units().insert1(key, ignore_extra_fields=True)
+
                 if combined_neuron_counter is not None:
-                    combined_neuron_counter += (
-                        1 if combined_neuron_counter is not None else 0
-                    )
+                    combined_neuron_counter += 1
