@@ -1,4 +1,7 @@
-from transformers import AutoImageProcessor, ConvNextV2ForImageClassification
+try:
+    from transformers import AutoImageProcessor, ConvNextV2ForImageClassification
+except:
+    pass
 from torch import nn
 from .utility import clip_convnext_layers
 

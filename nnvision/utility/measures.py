@@ -334,8 +334,8 @@ def get_avg_correlations(
             broadcast_to_target=False,
         )
         if target[0].shape[0] == output[0].shape[0]:
-            output = np.array([t.mean(axis=0) for t in output])
-        target = np.array([t.mean(axis=0) for t in target])
+            output = np.ma.array([t.mean(axis=0) for t in output])
+        target = np.ma.array([t.mean(axis=0) for t in target])
         correlations[k] = corr(target, output, axis=0)
 
         # Check for nans
@@ -649,10 +649,10 @@ def compute_explainable_var(outputs, eps=1e-9):
     TotalVar = np.var(np.ma.vstack(outputs), axis=0, ddof=1)
     for out in outputs:
         ImgVariance.append(np.var(out, axis=0, ddof=1))
-    ImgVariance = np.vstack(ImgVariance)
+    ImgVariance = np.ma.vstack(ImgVariance)
     NoiseVar = np.mean(ImgVariance, axis=0)
     explainable_var = (TotalVar - NoiseVar) / (TotalVar + eps)
-    return np.array(explainable_var)
+    return np.ma.array(explainable_var)
 
 
 def get_FEV(
