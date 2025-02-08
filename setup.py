@@ -6,7 +6,7 @@ here = path.abspath(path.dirname(__file__))
 
 setup(
     name='nnvision',
-    version='0.1',
+    version='0.1.2',
     description='Envisioning the biological visual system with DNN',
     author='Konstantin Willeke',
     author_email='konstantin.willeke@gmail.com',
