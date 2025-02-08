@@ -14,6 +14,6 @@ setup(
     install_requires=[
         "einops",
         "scikit-image==0.19.1",
-        "numpy==1.22.0",
+        "numpy==1.26.4",
     ],
 )
